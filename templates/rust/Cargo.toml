@@ -1,0 +1,46 @@
+# The workspace manifest's shared sections. Copy them into the project's root Cargo.toml; add the project's own
+# entries only below the marked lines, so the shared part can be compared with the latest template.
+
+[workspace]
+members = [
+    # project-specific: the workspace's crates, each in a directory named after its crate
+    "crates/example",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+# project-specific: the project's licence; a crate with another licence sets its own
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+# project-specific: every dependency declared once here, as major.minor ("1.0"); an exact "=" pin only with a
+# comment saying what a newer release breaks. The workspace's own crates first, then a blank line, then external crates.
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+# project-specific rustc lints below this line
+
+[workspace.lints.clippy]
+mod_module_files = "deny"
+pedantic = { level = "warn", priority = -1 }
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+dbg_macro = "warn"
+panic = "warn"
+partial_pub_fields = "warn"
+print_stderr = "warn"
+print_stdout = "warn"
+todo = "warn"
+unimplemented = "warn"
+unreachable = "warn"
+unwrap_used = "warn"
+use_self = "warn"
+# project-specific Clippy lints below this line

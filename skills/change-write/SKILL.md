@@ -1,0 +1,64 @@
+---
+name: change-write
+description: "Write one change from a brief in a zucchero✿café project. Work in a scratch clone with one concept per commit. Run quick checks per commit and full checks at the tip. Keep evidence and list every moved refusal. Finish with a DONE or QUESTION report. Use when given a brief to implement or when resuming to fix findings on your own change."
+---
+
+# Write a change from its brief
+
+Each change has a brief based on the standards' `templates/BRIEF.md`. You build the change. Someone else reviews and lands it. The project's `AGENTS.md` supplies checks, the development shell, resource limits, and matters this skill leaves to the project. Where the brief disagrees with `AGENTS.md` or this skill, the brief wins for that change.
+
+## Before you write code
+
+1. Read the entire brief. Then read everything under "Read first": the standards sections, decisions to implement, and earlier review findings to preserve.
+2. Read the project's `AGENTS.md` and its standards: `general.md`, the language standard, and `review.md`.
+3. Open every site the brief names. Find each by its symbol, not its line, since other changes land while you work.
+4. Do not reopen a decision under "Decided". If the brief leaves a required question of intent unanswered, stop. Report `QUESTION:` rather than guess.
+
+## Work in a scratch clone
+
+1. Clone the repository into a new folder outside the project's checkout, on disk rather than in a RAM-backed `/tmp`. Create the branch named by the brief.
+2. If the brief names a base revision, use it. Otherwise, base the branch on the current `main`.
+3. Prepare the clone as the project's `AGENTS.md` requires, including one-off commands and machine-local inputs. Copy those inputs into the clone. Never write to the main checkout's caches, build outputs, or ignored folders.
+4. Run every command inside the project's development shell with `nix develop -c <command>`. Use the lowered priority and job counts set by `AGENTS.md`.
+
+## Commit one concept at a time
+
+1. Follow the brief's "Do" list. Make one commit per concept in an order that keeps every commit's quick checks passing.
+2. Run the quick checks before every commit. Run the full checks at the change's tip after its last commit, and again after every rebase.
+3. Stage files by explicit path. Modify only files assigned to the change. In a shared file such as `AGENTS.md` or a README, change only your lines.
+4. Write each message as lowercase `scope: what changed`, with no attribution trailer.
+5. Without maintainer approval recorded in the brief, never add or widen a check above a unit test. Never pin today's value or a count in a check. No approval allows it. Unit tests state a promise on made-up inputs, with hand-written expected values.
+6. Give every property test a fixed seed and disable failure persistence. Rerunning must reproduce a failure, and no test action may leave a file in the repository.
+
+## Keep the evidence
+
+Write the requested evidence into the folder named by the brief's "Evidence" section. Include at least the following:
+
+- The quick checks' result for each commit and the full checks' log at the tip.
+- Include a report of differences from the base, using the project's change report where available. Every written file remains equal except where the brief permits a difference.
+- The public API before and after, for a change to a library crate's public items.
+- For a change to a hot path, the cost before and after, measured as the project's AGENTS.md says.
+- Where a binary's behaviour must not change, a comparison of the base and tip binaries on the same inputs.
+- In `refusals.txt`, list every added, removed, changed, or moved refusal with its reason. A refusal may move earlier or later to where it is cheapest and clearest for the author. Never let a fault pass unrefused. Never make a refusal unreachable. Never write a test that fixes the order of independent faults.
+- Production and test line counts per commit.
+
+## Fix a review's findings
+
+When asked to resume work on review findings, fix only those findings. Fix each cause with the smallest required change. Keep production code the same size or smaller where possible. If growth is unavoidable, explain why in the report. Run the full checks at the new tip. Refresh the evidence.
+
+## Clean up
+
+1. Stop every process you started, using its process ID. Never match processes by name or pattern.
+2. Fetch the branch back into the project's main repository. Never modify its `main`. Never push. Never create a remote.
+3. Copy the evidence out. Then delete the scratch clone. Leave nothing running.
+
+## Report
+
+End with a short report following the technical-writing and unslop skills, with the answer first. Include the following information:
+
+- The commits, each with one line on what it changes.
+- The full checks' result and time at the tip, and the evidence paths.
+- Every measure that moved the wrong way, and anything you did not verify.
+- Each departure from the brief, with its reason, and how you settled each of the brief's open questions.
+
+When the change is complete, end with `DONE: <one line>`. When stopping to ask a question, end with `QUESTION: <the question>`.

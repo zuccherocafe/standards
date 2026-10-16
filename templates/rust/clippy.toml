@@ -1,0 +1,5 @@
+# No size thresholds: too_many_arguments stays at Clippy's default and too_many_lines is not set.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+# project-specific settings below this line

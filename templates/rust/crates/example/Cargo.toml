@@ -1,0 +1,19 @@
+[package]
+name = "example"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+# One sentence saying what the crate is for, agreeing with the first line of its `//!` documentation.
+description = "Reading and checking the project's settings file into typed values, with no input or output of its own"
+
+[dependencies]
+serde = { workspace = true, optional = true }
+thiserror.workspace = true
+
+[features]
+# Impls for the report types only: what the crates that write records enable.
+serde = ["dep:serde"]
+
+[lints]
+workspace = true

@@ -1,0 +1,9 @@
+# GDScript-formatter's settings, at the project root; the formatter is pinned to an exact release like the engine.
+# Merge the [*.gd] section into an existing .editorconfig rather than replacing it.
+root = true
+
+[*.gd]
+indent_style = tab
+max_line_length = 120
+gdscript_formatter_quote_style = double
+# project-specific settings below this line

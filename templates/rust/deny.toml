@@ -1,0 +1,20 @@
+[advisories]
+# project-specific: where the advisory database lives, if the project pins a reviewed revision. The staleness limit
+# keeps cargo-deny's default: an old snapshot is refreshed, never allowed to age.
+# db-path = "..."
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "Unicode-3.0", "MPL-2.0"]
+# project-specific licences or per-crate exceptions below this line
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+# project-specific bans (such as network clients a project forbids) below this line
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,0 +1,93 @@
+# Engineering rules
+
+These rules apply to every zucchero✿café project, whatever its language. A language standard, such as [rust.md](languages/rust.md), applies these rules to that language and adds language-specific rules. A project's `AGENTS.md` may depart from either standard. It records each departure with its reason.
+
+## Design
+
+**Make invalid states unrepresentable.** Make a value the domain forbids impossible to construct, rather than checking for it later. Prefer a type, enumeration, or structure that cannot hold an invalid value over a run-time check. When a check is needed, run it once where the value is made. Return the checked value, not a yes or no.
+
+**One home per concept.** Each concept has one authoritative definition for each genuinely different representation. Never add a copy, a differently structured duplicate, or a parallel table of names. A conversion between two representations is explicit, named, and checked where it can fail.
+
+**Simplify, never at the cost of correctness.** Remove validation, refusals, and tests for inputs that no real user, file, or author produces. Keep refusals of mistakes a person can make at the boundary where they make them. Keep tests of promises real data relies on. Reject a simpler design that is wrong for some correct input.
+
+**Parse at the boundary.** Parse authored data, files read back, process output, and values from other programs into domain types once, where they enter. Every refusal there names the file, line, and field. Past the boundary, nothing re-checks what a type already holds, and nothing takes the raw form. Three checks are not redundant. The first checks a newly computed result. The second checks a fact that can change after parsing, such as whether a file still exists with its digest. The third parses bytes a user supplies to another program.
+
+**Knowledge is data.** Facts specific to one input belong in that input's files and their generated output, never in general code or host branches. Such facts include a name, a mapping, or a set of cases one model or file uses. Infer what the files already say by a method that works for any input. Put facts that hold only for one family of inputs in a named preset.
+
+**Generated output is typed and trusted.** Build and tool output has typed fields. Parse it once more where it is loaded, as with any other input. Past that point, the program trusts it. Never edit a generated file by hand. Each generated file has exactly one writer.
+
+**Fix the cause.** Recommend the fix where the fault is. Make the fix there. Label a workaround as a workaround and state what the real fix would be. Never present the workaround as the recommendation.
+
+## Checks
+
+A project's checks exist to catch what is broken, not what is different.
+
+**Checks fail only on broken results.** A check fails when the result is wrong for a correct input, whatever a change intended. Failures include a crash, a script error, an input that does not load or run, a non-finite value, a missing part, or a violated contract. Set each threshold where a person watching would see something wrong, never at today's value. Explain the threshold in one line.
+
+**Report differences without failing checks.** Report changed outputs, measurements, and before-and-after images for a person to read. Nothing is pinned to today's output, so no expectation is derived from that output.
+
+**Expected values are authored.** A check compares with values written by hand from the input's source, a specification, or a law, never copied from a run. Exact text or structured output whose shape is the promise may use snapshots. Examples include help text, a rendered error, or a listing. A snapshot counts as authored when a reviewer reads and accepts it in the diff. Numbers and behaviour keep hand-written expectations.
+
+**Wrong code is caught where it is written.** Unit tests state what a function promises, on small made-up inputs. "The output equals what it was last time" is not a unit test. Do not write checks of the checks.
+
+**Test the common scenario first.** Each component lists its uses, most common first. Each use has an obvious test through the boundary where the component is used. Use the smallest input that reaches that boundary, so scenarios in the checks cost seconds. Unit tests of each function's promises come next, followed by properties of invariants the types cannot express. A review asks which scenario a change touches and whether a test reaches the changed code.
+
+**Keep a test for a promise.** Keep a test when it states a promise real data relies on, regardless of who or what found the case. Name the test for that promise. Remove tests of inputs nothing real produces. When a type makes a failure impossible, remove its run-time test. Keep a test of the static promise, such as a compile-fail test.
+
+**A check above a unit test needs the maintainer's approval.** Beyond a unit test, anything that can fail the project's checks or adds a process to them needs approval before addition or widening. The request says what broken thing the check catches, why a unit test cannot catch it, and how much running time it adds.
+
+**Explain a failure before fixing it.** Say what a person would see, which system part produces the failure, and which design decision the failure reveals. Until the cause is explained, never fix the failure with an exemption, a threshold change, or a per-case patch. A new check states in one line what broken thing a person would see without it. If the check cannot state that failure, do not add it.
+
+**Describe each check at its real strength.** Prefer the compiler and established linters where their meaning matches a rule. A text scan is a review aid and reports only until the maintainer approves it as a check. Set no custom size thresholds, such as a limit on function length or argument count. A linter's default threshold stays, and a function whose required inputs exceed it takes them under a lint exception. Required inputs stay inputs, never packed into a tuple or one-off structure to satisfy a count. Put a lint exception on the narrowest item. Its reason names a constraint the code cannot show. A reason that describes states or modes indicates a missing type.
+
+## Toolchain
+
+**Every public project has a development shell.** A Lix flake at the repository root provides every tool the project's checks run, at the project's pinned versions. Track both `flake.nix` and `flake.lock` in git, since a flake sees only tracked files. Use [templates/nix/flake.nix](templates/nix/flake.nix) as the starting point. The command `nix develop` gives a new machine or an agent's clone what the checks need. The project's checks pass inside that shell. Keep manual installation steps in the project's `AGENTS.md` as the fallback.
+
+**Pins live in the flake.** Each tool is pinned to an exact version and hash. Read a language toolchain from its own pin file, such as `rust-toolchain.toml`, so it has one pin. Fetch a tool built from source by version with fixed hashes. Move a pin only in the same change as the file that checks it. That file may be an `AGENTS.md` version line or a script that refuses another version. The shell and checks must agree.
+
+**Copy tool configuration, pin shared tools.** Cargo, Clippy, rustfmt, cargo-deny, Godot, and the GDScript formatter read only files inside the project, and a clean clone must build alone. So a project copies the files in [templates/](templates/) it uses and adds its own entries only below the lines marked "project-specific", which keeps the shared part comparable with the latest template. A difference from the template is reported, never a failed check. A tool in [tools/](tools/) reads the project's files and takes project details as arguments, so one copy serves every project. The development shell takes this repository as a flake input pinned in `flake.lock` and puts the tools on `PATH`. The pin moves with the project's other pins.
+
+**GPU programs are official binaries.** A program that draws or plays sound uses the publisher's binary. Examples include a game engine or a 3D suite. Fetch that binary by the publisher's digest and install it unchanged. It then loads the host's graphics and audio libraries and GPU drivers as its publisher built it to. GPU drivers, compositors, and sound servers stay on the host.
+
+**Lix is the supported implementation.** Write the flake so other Nix implementations can evaluate it. Fetch inputs as tarballs. Use nothing specific to one implementation. Projects test only with Lix.
+
+## Performance
+
+**Know the hot paths and their budgets.** Each project names code that runs per frame, per request, or per item of a large input. It names each path's budget in terms a person notices. Examples include frame time on the slowest supported device, build or install time, and response time. Record the budget beside the design it constrains, with the device used to measure it.
+
+**Measure before claiming.** A claim that a change is faster, slower, or free says what was measured and how. It names the machine and input, the number of runs, and their spread. To compare revisions, prefer a measure unaffected by other machine activity, such as instructions retired, allocations, or bytes read. To compare against a budget, prefer time. Label an estimate as an estimate and state what would replace it.
+
+**Report performance differences without failing checks.** Every change that touches a hot path reports its cost before and after, beside the report of other changes. Raise a failure only for a broken budget that a person would notice. Send that failure and its evidence to the maintainer. A timed check enters the project's checks only with the maintainer's approval. It must fail on broken results, not on a busy machine.
+
+**Write clear code first and optimise measured costs.** Write the clear version. Measure the hot path. Optimise what the measurement identifies. First remove values that nothing reads, because a value carried and never used costs every call.
+
+## Writing
+
+**Write with the two skills.** Prose, documentation, commit messages, and reports follow [skills/unslop](skills/unslop/SKILL.md) and [skills/technical-writing](skills/technical-writing/SKILL.md). The first removes patterns of machine-written text. The second governs sentences and document structure. Where either skill disagrees with this file, this file wins. Use British spelling and one paragraph per Markdown line. Use the project's formatter rather than the skill's tab-indented code snippets.
+
+**Use British English** in code, comments, and documentation, as in analyse, colour, organisation, and centre. Use American spelling only where an external library or API requires it.
+
+**Comments state constraints.** A comment states something the code cannot show, such as a reason, constraint, or invariant the types cannot express. An invariant that a type could enforce instead indicates that the type admits invalid values. Examples include "never empty", "left first", and "zero when absent".
+
+**Documentation lives beside what it documents.** A module's or crate's documentation states its job, what it never knows, its design, and the reasons for that design. Use whatever length the design needs, so a reader can understand the component from the component itself. Every public item's documentation states its purpose, invariants, and failure modes. Include a runnable example where it helps. A separate specification holds material that spans components and material a user of the project reads. It indexes component documentation rather than repeating it.
+
+**Comments inside code stay short.** A comment inside a function body or a script's code is at most six lines. Blank lines and region markers neither count towards the limit nor end a block. Put a longer explanation in the module's documentation.
+
+**Documentation describes current state only.** Do not narrate history, retain descriptions of removed behaviour, or reconstruct the history of TODOs. Avoid historical descriptions such as "removed", "previously", and "no longer". A change's history lives in version control.
+
+**Markdown prose is one paragraph per line.** Never hard-wrap prose at a column width. Editors soft-wrap. Lists, tables, and code blocks are unaffected.
+
+**Line length.** Where a formatter governs a language, it decides. Elsewhere, lines are at most 120 columns. A tab counts as four columns.
+
+## Skills
+
+**The standards' skills folder is the one source.** Every skill a zucchero✿café project's agents use lives in the standards' [skills/](skills/) folder, never copied into a project. A role's changes then reach every project at once. A tool that loads skills reads links the development shell creates to the pinned `standards` input ([templates/nix/flake.nix](templates/nix/flake.nix)). For other tools, the Skills section of the project's `AGENTS.md` names the skill each role reads ([templates/AGENTS.md](templates/AGENTS.md)).
+
+## Commits
+
+**Message.** Use lowercase `scope: what changed`, describing the result of the change. The scope names the part of the project that changed.
+
+**One coherent piece per commit.** Each commit passes the quick checks that the project's `AGENTS.md` names for every commit. The full checks pass at the change's tip and again after every rebase.
+
+**No attribution.** Commit messages carry no `Co-Authored-By` line or other co-author, tool, or session trailer. Code comments and documentation name no author or tool either.
