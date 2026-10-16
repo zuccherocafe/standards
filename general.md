@@ -84,10 +84,19 @@ A project's checks exist to catch what is broken, not what is different.
 
 **The standards' skills folder is the one source.** Every skill a zucchero✿café project's agents use lives in the standards' [skills/](skills/) folder, never copied into a project. A role's changes then reach every project at once. A tool that loads skills reads links the development shell creates to the pinned `standards` input ([templates/nix/flake.nix](templates/nix/flake.nix)). For other tools, the Skills section of the project's `AGENTS.md` names the skill each role reads ([templates/AGENTS.md](templates/AGENTS.md)).
 
-## Commits
+## Version control
+
+**jj, colocated with git.** Every repository uses jj colocated with git, so jj and git see the same commits and tools that need git still work. A person or an agent uses jj for history. A scratch clone an agent makes for one change may use git.
+
+**A change lands as few, self-standing commits.** Each commit is one coherent piece. Fold a review fix into the commit it fixes rather than adding a commit after it, so the history reads as the change was meant, not as it was made.
+
+**Landing is a fast-forward of `main`.** A change is rebased onto `main` if `main` moved, its full checks pass at the new tip, and `main` then moves to it. Nothing is merged with a merge commit.
+
+**Nothing is pushed without the owner's word.** An agent never pushes, never creates a remote, and never rewrites a published `main`.
+
 
 **Message.** Use lowercase `scope: what changed`, describing the result of the change. The scope names the part of the project that changed.
 
-**One coherent piece per commit.** Each commit passes the quick checks that the project's `AGENTS.md` names for every commit. The full checks pass at the change's tip and again after every rebase.
+**Each commit passes its checks.** Each commit passes the quick checks that the project's `AGENTS.md` names for every commit. The full checks pass at the change's tip and again after every rebase.
 
 **No attribution.** Commit messages carry no `Co-Authored-By` line or other co-author, tool, or session trailer. Code comments and documentation name no author or tool either.

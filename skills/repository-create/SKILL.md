@@ -1,11 +1,11 @@
 ---
-name: setup-repository
-description: "Set up a new zucchero✿café repository with jj colocated with git. Copy the `AGENTS.md` template and configure the Nix development shell with the standards flake input. Apply Rust and Godot templates where used, choose licences, and make standards skills available to agents. Use when asked to create, start, or set up a zucchero✿café repository or project."
+name: repository-create
+description: "Set up a new zucchero✿café repository with jj colocated with git. Copy the `AGENTS.md` template and configure the Nix development shell with the standards flake input. Apply Rust and Godot templates where used, choose licences, and make standards skills available to agents. Use when asked to create or start a new zucchero✿café repository or project. For a checkout of an existing one, use repository-clone."
 ---
 
-# Set up a zucchero✿café repository
+# Create a zucchero✿café repository
 
-First pull the standards checkout to the latest `main`. Paths below are relative to that checkout. Before starting, read its `README.md` section "How a project follows it". Read every template before copying it. Copy templates rather than reconstructing them from memory.
+First pull the standards checkout to the latest `main`. Paths below are relative to that checkout. Before starting, read `general.md`'s Toolchain section, which says why a project copies tool configuration but pins shared tools. Read every template before copying it. Copy templates rather than reconstructing them from memory.
 
 ## Create the repository
 
