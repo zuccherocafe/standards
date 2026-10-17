@@ -32,6 +32,10 @@ A project's checks exist to catch what is broken, not what is different.
 
 **Test the common scenario first.** Each component lists its uses, most common first. Each use has an obvious test through the boundary where the component is used. Use the smallest input that reaches that boundary, so scenarios in the checks cost seconds. Unit tests of each function's promises come next, followed by properties of invariants the types cannot express. A review asks which scenario a change touches and whether a test reaches the changed code.
 
+**A test can fail when the code is wrong.** Never compute a test's expected value the way the code computes it, call the code under test to produce it, or assert only that the code ran or returned what it returned. Such a test passes whatever the code does. Each test states a promise from the input's source, a specification, or a law that a wrong implementation would break. Delete a test that cannot fail, rather than keeping it as coverage.
+
+**Code is not shaped for its tests.** Never widen visibility, add an accessor, a parameter, a hook, or a trait only so a test can reach or replace something. Test through the public entry point or the plain function over values the production code already calls. When a promise cannot be tested without such a change, the design is wrong: separate the logic from its inputs and outputs instead.
+
 **Keep a test for a promise.** Keep a test when it states a promise real data relies on, regardless of who or what found the case. Name the test for that promise. Remove tests of inputs nothing real produces. When a type makes a failure impossible, remove its run-time test. Keep a test of the static promise, such as a compile-fail test.
 
 **A check above a unit test needs the maintainer's approval.** Beyond a unit test, anything that can fail the project's checks or adds a process to them needs approval before addition or widening. The request says what broken thing the check catches, why a unit test cannot catch it, and how much running time it adds.
