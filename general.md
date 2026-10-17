@@ -46,9 +46,11 @@ A project's checks exist to catch what is broken, not what is different.
 
 **Pins live in the flake.** Each tool is pinned to an exact version and hash. Read a language toolchain from its own pin file, such as `rust-toolchain.toml`, so it has one pin. Fetch a tool built from source by version with fixed hashes. Move a pin only in the same change as the file that checks it. That file may be an `AGENTS.md` version line or a script that refuses another version. The shell and checks must agree.
 
-**Copy tool configuration, pin shared tools.** Cargo, Clippy, rustfmt, cargo-deny, Godot, and the GDScript formatter read only files inside the project, and a clean clone must build alone. So a project copies the files in [templates/](templates/) it uses and adds its own entries only below the lines marked "project-specific", which keeps the shared part comparable with the latest template. A difference from the template is reported, never a failed check. A tool in [tools/](tools/) reads the project's files and takes project details as arguments, so one copy serves every project. The development shell takes this repository as a flake input pinned in `flake.lock` and puts the tools on `PATH`. The pin moves with the project's other pins.
+**Copy tool configuration, pin shared tools.** Cargo, Clippy, rustfmt, cargo-deny, Godot, and the GDScript formatter read only files inside the project, and a clean clone must build alone. So a project copies the files in [templates/](templates/) it uses and adds its own entries only below the lines marked "project-specific", which keeps the shared part comparable with the latest template. A difference from the template is reported, never a failed check. A tool in [tools/](tools/) reads the project's files and takes project details as arguments, so one copy serves every project. The development shell takes this repository as a flake input pinned in `flake.lock` and puts the tools on `PATH`. Whenever this repository's `main` moves, each project moves its pin to it in a change of its own, so every project reads the latest standards.
 
 **GPU programs are official binaries.** A program that draws or plays sound uses the publisher's binary. Examples include a game engine or a 3D suite. Fetch that binary by the publisher's digest and install it unchanged. It then loads the host's graphics and audio libraries and GPU drivers as its publisher built it to. GPU drivers, compositors, and sound servers stay on the host.
+
+**Development state stays in the repository.** Caches, scratch folders, generated files, and tool data that a project's commands write go in a git-ignored folder inside the repository, such as `.cache/`, outside any folder an engine or build tool imports. Commands never write development state to the home directory or to system-wide places such as `~/.cache` or `~/.local/share`. Where a tool chooses such a place itself, the development shell points it into the repository. A package manager's own store and home, such as Nix's store or Cargo's home, stay where the tool keeps them.
 
 **Lix is the supported implementation.** Write the flake so other Nix implementations can evaluate it. Fetch inputs as tarballs. Use nothing specific to one implementation. Projects test only with Lix.
 
@@ -93,7 +95,6 @@ A project's checks exist to catch what is broken, not what is different.
 **Landing is a fast-forward of `main`.** A change is rebased onto `main` if `main` moved, its full checks pass at the new tip, and `main` then moves to it. Nothing is merged with a merge commit.
 
 **Nothing is pushed without the owner's word.** An agent never pushes, never creates a remote, and never rewrites a published `main`.
-
 
 **Message.** Use lowercase `scope: what changed`, describing the result of the change. The scope names the part of the project that changed.
 
