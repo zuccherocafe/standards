@@ -43,6 +43,7 @@ The sections below break each into the questions a reviewer answers line by line
 10. **Rule-shaped code.** Does a rule force a trait, type, or module that a strong Rust engineer would reject as unnecessary for the domain?
 11. **The better shape.** What design would a strong Rust engineer choose here? Why does the proposed design differ? Answer in prose.
 12. **Hot paths.** Does per-frame or per-item code allocate once prepared for repeated use? Does it clone to satisfy the borrow checker? Does it grow collections incrementally despite a known size? Does a type added to a hot path have before-and-after instruction counts? ([Performance](languages/rust.md#performance))
+13. **Idiom.** Read the change as an experienced Rust reviewer would. Name each place, by file and line, where they would write it differently: tests in a separate file that belong beside their subject, an index loop an iterator states more plainly, a needless clone or allocation, a hand-written loop or helper the standard library or a dependency already provides, `Option` and `Result` handled by matching where a combinator or `?` reads better, a module split or name that hides what the code does. Each is a finding, fixed in the change.
 
 ## GDScript
 
@@ -56,5 +57,6 @@ The sections below break each into the questions a reviewer answers line by line
 8. **Lifetime.** Who frees each new node? Does the code free it with `queue_free`? After `await`, does a coroutine check the objects it uses? Does it await only objects that outlive it? Does a detached coroutine name its owner? Does a worker access the tree or finish without being joined? Does a static variable have an owner that resets it? Does a static initialiser require the running game? Does opening a `@tool` script cause writes? ([Lifetime, concurrency, and the editor](languages/gdscript.md#lifetime-concurrency-and-the-editor))
 9. **Hot paths.** Does per-frame code allocate, look up nodes by path, or read dictionaries? ([Performance](languages/gdscript.md#performance))
 10. **The better shape.** What would a strong Godot engineer write here? Why does the proposed design differ? Answer in prose.
+11. **Idiom.** Read the change as an experienced Godot engineer would. Name each place, by file and line, where they would write it differently: a loop a built-in or a typed array method states more plainly, a signal or node lookup done by hand where the engine provides it, a helper that duplicates one elsewhere in the project, a name that hides what the code does. Each is a finding, fixed in the change.
 
 How an agent runs a review, and how fixes are checked and landed, is in the [change-review](skills/change-review/SKILL.md) and [change-land](skills/change-land/SKILL.md) skills.

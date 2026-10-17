@@ -74,6 +74,8 @@ A project's checks exist to catch what is broken, not what is different.
 
 **Documentation lives beside what it documents.** A module's or crate's documentation states its job, what it never knows, its design, and the reasons for that design. Use whatever length the design needs, so a reader can understand the component from the component itself. Every public item's documentation states its purpose, invariants, and failure modes. Include a runnable example where it helps. A separate specification holds material that spans components and material a user of the project reads. It indexes component documentation rather than repeating it.
 
+**Comments cite no sources.** A comment never names the paper, author, talk or repository an idea came from. Where it came from is history, not something a reader of the code needs; it goes in the change's report or the project's documentation.
+
 **Comments inside code stay short.** A comment inside a function body or a script's code is at most six lines. Blank lines and region markers neither count towards the limit nor end a block. Put a longer explanation in the module's documentation.
 
 **Documentation describes current state only.** Do not narrate history, retain descriptions of removed behaviour, or reconstruct the history of TODOs. Avoid historical descriptions such as "removed", "previously", and "no longer". A change's history lives in version control.

@@ -36,7 +36,7 @@ Number findings in descending severity order. Include the following for each fin
 - The rule it rests on in `general.md` or the language standard.
 - Give the smallest fix. Add no validation, test, or type the finding does not need. Never add a run-time check where a type would suffice.
 
-Mark findings that real data would expose or that block the next change. Call other findings notes. Exclude notes from the requested fixes.
+Every finding is a requested fix in this change: faults, simplifications, idiom, structure, naming and test placement alike. Never defer one to a later pass. The one exception is a finding that asks for new validation, a refusal or a test against an input nothing real produces: call it a note, give the reason, and exclude it from the requested fixes.
 
 Give a short answer to each point in the review brief, stating what you checked and how.
 
