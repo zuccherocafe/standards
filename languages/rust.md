@@ -466,6 +466,10 @@ This section applies `general.md`'s rule to Rust. Name a test for its promise, n
 
 Ref: ripgrep ties regression tests to issues (`tests/regression.rs`); nextest loops over identifier cases (`nextest-runner/src/config/core/identifier.rs`).
 
+### Mutation report
+
+[tools/rust_mutants.py](../tools/rust_mutants.py) runs [cargo-mutants](https://mutants.rs/) over the Rust a change touched. It makes one edit at a time, such as `>` to `>=`, `-` to `+`, or a function returning a default, and runs the crate's tests against each. It lists each edit the tests miss. A missed edit is a candidate, not proof of a weak test: judgement decides whether it breaks a promise. Every change to Rust runs the report against the change's base and keeps it with its evidence. The writer judges each missed mutant as one of three kinds. A real gap is a wrong result no test notices, and the change adds the test that does. An equivalent mutant changes no behaviour, and the writer says why in one line. An unstated edge is a boundary the code never promised, such as which side an exact tie falls on. The writer states the rule in the code's documentation, then tests it as a real gap. The maintainer decides a rule the writer cannot. A mutant that times out is listed separately: it usually makes a loop run forever, which the tests already notice by stopping, so the writer checks the time allowance and adds no test for it. Never write a test only to catch a mutant, without a promise behind it. The report causes no check failures, since judging a miss needs a reviewer and its cost grows with the change. A run over a whole crate is a manual report, useful before trusting a crate's tests. The project pins cargo-mutants in its development shell.
+
 ## Lints and documentation
 
 ### Lint exceptions

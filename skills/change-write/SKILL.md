@@ -37,6 +37,7 @@ Write the requested evidence into the folder named by the brief's "Evidence" sec
 - The quick checks' result for each commit and the full checks' log at the tip.
 - Include a report of differences from the base, using the project's change report where available. Every written file remains equal except where the brief permits a difference.
 - The public API before and after, for a change to a library crate's public items.
+- For a change to Rust, the mutation report against the base, with each listed mutant judged ([Mutation report](../../languages/rust.md#mutation-report)).
 - For a change to a hot path, the cost before and after, measured as the project's AGENTS.md says.
 - Where a binary's behaviour must not change, a comparison of the base and tip binaries on the same inputs.
 - In `refusals.txt`, list every added, removed, changed, or moved refusal with its reason. A refusal may move earlier or later to where it is cheapest and clearest for the author. Never let a fault pass unrefused. Never make a refusal unreachable. Never write a test that fixes the order of independent faults.

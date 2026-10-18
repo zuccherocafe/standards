@@ -6,6 +6,7 @@
 # its exact version and its hash, and add it to `packages`. To learn a hash, write `lib.fakeHash`, enter the shell
 # and copy the hash the error reports; for a published binary, prefer the digest its publisher prints. A pin moves
 # in the same change as the file that checks it (the project's AGENTS.md, a script that refuses another version).
+# A Rust project pins cargo-mutants with `crate`, as `rust-mutants` runs it (rust.md, Mutation report).
 {
   description = "<project> development shell";
 
@@ -63,7 +64,12 @@
         exec ${pkgs.python3}/bin/python3 -I ${standards}/tools/rust_scans.py "$@"
       '';
 
-      # project-specific: the project's tools, each by exact version and hash. For example:
+      # The standards' mutation report as `rust-mutants`, over the cargo-mutants the project pins below.
+      rustMutants = pkgs.writeShellScriptBin "rust-mutants" ''
+        exec ${pkgs.python3}/bin/python3 -I ${standards}/tools/rust_mutants.py "$@"
+      '';
+
+      # project-specific: the project's tools, each by exact version and hash, cargo-mutants among them. For example:
       #
       # cargoDeny = crate {
       #   pname = "cargo-deny";
@@ -89,6 +95,7 @@
         packages = [
           rust
           rustScans
+          rustMutants
           # project-specific: the project's tools
         ];
 
