@@ -91,9 +91,9 @@ A subprocess takes an argument list and never `shell=True`, and its failure is e
 
 ## Tests
 
-### Tests beside the tool
+### Tests in a tests folder
 
-A tool's tests live in `test_<tool>.py` beside it and use `unittest`, the names Python's own test discovery and other projects' readers look for. `python3 -I -m unittest discover -s <folder>` runs every test in a folder with no configuration, and adds the folder to the import path, so a test file needs no import-path line of its own. Expected values are written by hand from the input ([Checks](../../general.md#checks)). A standalone tool's tests include at least one test through `main` with a made-up input, so the common path is tested. A test replaces only a process, clock, or network boundary, by patching the module's own `subprocess` call, never by adding a parameter or hook to production code for the test. A test writes only inside a temporary folder it removes.
+A folder's tests live in its `tests/` folder, one `test_<tool>.py` per tool, with an empty `__init__.py`, and use `unittest`. Python's test discovery finds `test*.py` files by default, and CPython (`Lib/test/`), NumPy (`numpy/_core/tests/`), and pandas (`pandas/tests/`) also keep `test_*.py` files in separate test directories. A separate folder keeps tests from splitting the tools into groups in a sorted listing. `python3 -I -m unittest discover -s <folder>/tests -t <folder>` runs every test with no configuration and puts the tools' folder on the import path, so a test file needs no import-path line of its own. Expected values are written by hand from the input ([Checks](../../general.md#checks)). A standalone tool's tests include at least one test through `main` with a made-up input, so the common path is tested. A test replaces only a process, clock, or network boundary, by patching the module's own `subprocess` call, never by adding a parameter or hook to production code for the test. A test writes only inside a temporary folder it removes.
 
 **Checked by:** review.
 
