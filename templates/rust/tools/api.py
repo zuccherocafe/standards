@@ -28,16 +28,13 @@ sys.dont_write_bytecode = True
 # The repository root: this file lives in its tools/.
 ROOT = Path(__file__).resolve().parents[1]
 
-# project-specific: the workspace's folder under the repository root ('.' when Cargo.toml is at the root), and the
-# cargo-public-api release that reads the pinned nightly's rustdoc JSON, which moves with the nightly; 0.52.0 reads
-# the template's nightly-2026-09-24.
+# cargo-public-api moves with the pinned nightly, whose rustdoc JSON it reads.
 WORKSPACE = "."
 CARGO_PUBLIC_API = "0.52.0"
 
 
 def unbuildable(workspace: Path) -> str | None:
-    """Why a revision's workspace cannot be documented with the toolchain this shell runs; none when it can.
-    project-specific: a project that records its nightly's `rustc --version` compares it here."""
+    """Why a revision's workspace cannot be documented with the toolchain this shell runs; none when it can."""
     return None
 
 

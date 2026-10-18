@@ -1,10 +1,5 @@
-; The [debug] section of a Godot project's project.godot: every GDScript warning at Error or off, for the engine release
-; rules/languages/gdscript/README.md names. Merge it into the project's own [debug] section. The editor drops comments and
-; values equal to the engine's default when it saves, so the reasons live in rules/languages/gdscript/warnings.md, not here.
-
 [debug]
 
-; project-specific: one include per addon of the project's own; anything else under addons stays excluded.
 gdscript/warnings/directory_rules={
 "res://addons": 0,
 "res://addons/example": 1
@@ -44,15 +39,8 @@ gdscript/warnings/confusable_local_declaration=2
 gdscript/warnings/confusable_local_usage=2
 gdscript/warnings/confusable_capture_reassignment=2
 gdscript/warnings/confusable_temporary_modification=2
-; The typing warnings. A project not yet clean of one leaves its line out, lists it as a departure in AGENTS.md with
-; its count, and brings the lines in one at a time in this order, each with its sites fixed: untyped_declaration;
-; then unsafe_property_access and unsafe_cast; then unsafe_method_access and unsafe_call_argument, once record
-; classes have replaced the dictionaries that feed them.
 gdscript/warnings/untyped_declaration=2
 gdscript/warnings/unsafe_property_access=2
 gdscript/warnings/unsafe_cast=2
 gdscript/warnings/unsafe_method_access=2
 gdscript/warnings/unsafe_call_argument=2
-; Left at the engine's default: inference_on_variant, native_method_override, get_node_default_without_onready and
-; onready_with_export are Error already; inferred_declaration and return_value_discarded are off.
-; project-specific settings below this line

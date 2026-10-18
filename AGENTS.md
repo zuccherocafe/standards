@@ -13,7 +13,7 @@ This repository contains rules for contributors to every zucchero✿café projec
 - **Describe the current state only.** Include no history or phrases such as "previously" or "changed from".
 - **Keep examples short.** Show a before-and-after example in a few lines. Cite its public repository by path. Introduce an example from a zucchero✿café project with "for example, in <project>:". Keep the example only where it teaches something the references do not.
 - **Update related documents together.** When adding or removing a rule in [rules/general.md](rules/general.md), [rules/languages/rust/](rules/languages/rust/), [rules/languages/gdscript/](rules/languages/gdscript/), or [rules/languages/python/](rules/languages/python/), update [rules/review.md](rules/review.md) where a reviewer would ask about it. In the same commit, apply a lint change in `rules/languages/rust/` to [templates/rust/](templates/rust/). Apply a warning or formatter change in `rules/languages/gdscript/` to [templates/godot/](templates/godot/), and a linter, checker, or formatter change in `rules/languages/python/` to [templates/python/](templates/python/). Apply a change to `rules/general.md`'s Toolchain section to [templates/nix/](templates/nix/).
-- **Keep templates general.** Include no project's names, crates, or paths. Mark where project-specific entries go.
+- **Keep templates general.** Include no project's names, crates, or paths. Instructions for filling a configuration template live in the skill that copies it, not in the template; document templates such as BRIEF.md keep their placeholders.
 
 The standards apply to this repository too. Use British English and one paragraph per Markdown line. Keep template comments within the comment budget.
 

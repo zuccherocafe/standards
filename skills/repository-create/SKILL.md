@@ -22,10 +22,10 @@ First pull the standards checkout to the latest `main`. Paths below are relative
 
 ## Add the development shell
 
-1. Copy `templates/nix/flake.nix` to the repository root. Replace `<project>` in `description`.
+1. Copy `templates/nix/flake.nix` to the repository root. Replace `<project>` in `description`. Fetch inputs as tarballs (`github:` or a tarball URL), never `git+https`. The flake and its lock are tracked by git, since a flake sees only tracked files; the shell is written for Lix and kept to what other Nix implementations also evaluate.
 2. Keep the `standards` input, `github:zuccherocafe/standards`, as a flake. Keep `rustScans`, the standards' `rust-scans` package, which puts `rust-scans` on `PATH`, and the `rustMutants` wrapper around the standards' `tools/rust_mutants.py`. Keep the `shellHook` that links skills. For each other shared tool, use the standards' package where the standards export one, and otherwise add a wrapper around its script in the same way as `rustMutants`.
 3. If the project uses Rust, point `rust` at its `rust-toolchain.toml`. Otherwise, remove `rust-overlay`, `rust`, and `rustScans`. Keep the `standards` input.
-4. Add each tool used by checks with the `crate` or `official` helper. Use an exact version and hash, as the file header specifies.
+4. Add each tool used by checks with the `crate` helper (a cargo tool from crates.io) or the `official` helper (a published binary, such as an engine, fetched by its publisher's digest and installed unchanged), with an exact version and hash, and add it to `packages`. To learn a hash, write `lib.fakeHash`, enter the shell and copy the hash the error reports; for a published binary, prefer the digest its publisher prints. A Rust project pins cargo-mutants this way, for `rust-mutants`. A Python project pins its interpreter, Ruff and Pyrefly, through the lock or these helpers. Give each program the project's scripts find by a variable, such as `ENGINE_BIN`, that variable in the shell. A pin moves in the same change as the file that checks it.
 5. Track `flake.nix`, create the lock, and then track `flake.lock` by running `git add flake.nix && nix flake lock && git add flake.lock`. A flake sees only tracked files.
 6. Run `nix develop -c true` to show the shell builds.
 
@@ -35,23 +35,23 @@ For a project without Rust, skip this section.
 
 1. Use the repository root as the Rust workspace, or `rust/` if the repository also contains other languages. Copy everything from `templates/rust/` except `tools/` into that workspace.
 2. Rename `crates/example` to the first real crate. Update `members` and that crate's `description`.
-3. Copy `templates/rust/tools/api.py` into the repository's `tools/` and `templates/rust/tools/tests/` into `tools/tests/`. Set `WORKSPACE` in `api.py` to the workspace folder.
-4. Add the project's own entries only below the lines marked "project-specific".
+3. Copy `templates/rust/tools/api.py` into the repository's `tools/` and `templates/rust/tools/tests/` into `tools/tests/`. Set `WORKSPACE` in `api.py` to the workspace folder under the repository root (`"."` when `Cargo.toml` is at the root), and `CARGO_PUBLIC_API` to the cargo-public-api release that reads the pinned nightly's rustdoc JSON. A project that records its nightly's `rustc --version` compares it in `unbuildable`.
+4. Fill in the project's values: its crates in `members`, each crate's one-sentence `description` agreeing with the first line of its `//!` documentation, its licence, each dependency once in `[workspace.dependencies]` as `major.minor`, and any lints of its own after the shared ones.
 5. Inside the shell, run `cargo build`, `cargo fmt --check`, and `cargo clippy --all-targets -- -D warnings` in the workspace.
 
 ## Merge the Godot template
 
 For a project without Godot, skip this section.
 
-1. Merge `templates/godot/project.godot`'s `[debug]` section into the project's `project.godot`. Include each project-owned addon once in `directory_rules`.
-2. Merge the `[*.gd]` section of `templates/godot/.editorconfig` into the root `.editorconfig`.
+1. Merge `templates/godot/project.godot`'s `[debug]` section into the project's `project.godot`. Include each project-owned addon once in `directory_rules`; anything else under addons stays excluded. A project not yet clean of a typing warning leaves its line out, lists it as a departure in `AGENTS.md` with its count, and brings them in one at a time, each with its sites fixed: `untyped_declaration`; then `unsafe_property_access` and `unsafe_cast`; then `unsafe_method_access` and `unsafe_call_argument`.
+2. Merge the `[*.gd]` section of `templates/godot/.editorconfig` into the root `.editorconfig`, rather than replacing an existing one.
 3. Pin the engine and the GDScript formatter in the flake with the `official` helper, by their publishers' digests.
 
 ## Add the Python configuration
 
 For a project without Python, skip this section.
 
-1. Copy `templates/python/ruff.toml` and `pyrefly.toml` to the repository root. Set the target Python, the folders the checker reads, and its `search-path` below the lines marked "project-specific".
+1. Copy `templates/python/ruff.toml` and `pyrefly.toml` to the repository root. Set the target Python (the latest stable release the shell pins), the folders the checker reads (`project-includes`), and its `search-path` (each folder a script adds to its import path, and any host's type stubs). A folder of scripts that run inside a host gets its own `pyrefly.toml` with the host's Python, and Ruff's `per-file-target-version` sets it there too.
 2. Pin the interpreter, Ruff and Pyrefly in the flake by exact version, through the lock or the `crate` or `official` helper.
 3. Inside the shell, run `ruff format --check`, `ruff check`, and `pyrefly check`, and name all three in `AGENTS.md`'s checks.
 
@@ -68,6 +68,10 @@ For a project without Python, skip this section.
 2. The same hook links `.claude/skills` to `.agents/skills` because Claude Code reads only `.claude/skills/`. None of these links is committed. `.claude` is usually git-ignored, and the links follow the pin. Before starting a skill-loading tool in a new checkout, enter the shell once.
 3. When you set up, check both paths against each tool's own documentation. The vendors' documentation is the authority, and a path can move.
 4. Keep `AGENTS.md`'s Skills section for tools that load no skills, such as pi. It names the file each role reads.
+
+## Remove the template's instructions
+
+A copied file keeps only what applies to the project. Delete any instruction or placeholder the copy still carries, and keep a comment only where a value needs a reason a reader couldn't guess.
 
 ## Make the first commit
 

@@ -1,6 +1,4 @@
-# An example: pin an exact release or a dated nightly, never a moving channel. This one is a dated nightly because the
-# public API report (tools/api.py) needs rustdoc's unstable JSON output; its cargo-public-api pin is the release that
-# reads this nightly's format, and the two move together. A project on a stable release pins a nightly for the report.
+# A dated nightly: the public API report needs rustdoc's JSON output, and cargo-public-api moves with it.
 [toolchain]
 channel = "nightly-2026-09-24"
 profile = "minimal"

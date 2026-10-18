@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
-# One sentence saying what the crate is for, agreeing with the first line of its `//!` documentation.
 description = "Reading and checking the project's settings file into typed values, with no input or output of its own"
 
 [dependencies]
