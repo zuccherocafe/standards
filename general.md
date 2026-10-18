@@ -102,7 +102,23 @@ A project's checks exist to catch what is broken, not what is different.
 
 **Nothing is pushed without the owner's word.** An agent never pushes, never creates a remote, and never rewrites a published `main`.
 
-**Message.** Use lowercase `scope: what changed`, describing the result of the change. The scope names the part of the project that changed.
+**Message.** A reader scanning the log looks first for which part of the project changed, then for what the commit does. The subject is lowercase `scope: what the commit does`, in at most about 72 characters. The scope is the one most specific area the commit belongs to, such as a crate, an addon, or a folder, named the way the project's `AGENTS.md` lists them. A sub-area follows its area, as in `body: gaze: read the declared eye bones`. A commit that touches several areas takes the scope of the area its change belongs to, never a list. The description is in the imperative, as in `add`, `fix`, or `remove`, so it reads as what applying the commit does. A version or pin change is the one exception: it states the old and new versions instead of a verb, as in `flake: standards 1b43e835 -> ba256dbd`. Every commit that is not trivial has a body, one line per paragraph. The body says why the change was made, what a reader of the diff might miss, such as a moved refusal or a changed format, and what was deliberately left out. It stands on its own and never points to a private document or a review. A type prefix such as `feat:` or `fix:` is not used, since the description already says what kind of change it is.
+
+A subject that lists areas and summarises the whole change:
+
+```text
+parser, cli, docs: the config file's new include directive, resolved relative to the including file, with cycles refused and the help text updated
+```
+
+becomes a scoped subject and a body:
+
+```text
+config: add an include directive
+
+Large configurations repeat the same blocks across files. An include line now reads another file in place, resolved relative to the file that includes it.
+
+An include cycle is refused, naming every file in the cycle. The help text documents the directive. Nothing else in the format changes.
+```
 
 **Each commit passes its checks.** Each commit passes the quick checks that the project's `AGENTS.md` names for every commit. The full checks pass at the change's tip and again after every rebase.
 

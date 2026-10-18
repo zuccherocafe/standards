@@ -19,4 +19,4 @@ The standards apply to this repository too. Use British English and one paragrap
 
 ## Commits
 
-Use a lowercase `scope: what changed` commit message. The scope names the changed file or folder: `general`, `rust`, `gdscript`, `review`, `templates`, `tools`, `skills`, `readme`, or `agents`. Make one coherent change per commit. Include no attribution of any kind, including `Co-Authored-By`, tool trailers, or session trailers.
+Write messages as [general.md](general.md#version-control) says. The scope is the changed file or folder: `general`, `rust`, `gdscript`, `review`, `templates`, `tools`, `skills`, `readme`, or `agents`. Make one coherent change per commit. Include no attribution of any kind, including `Co-Authored-By`, tool trailers, or session trailers.

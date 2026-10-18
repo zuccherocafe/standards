@@ -28,6 +28,7 @@ The sections below break each into the questions a reviewer answers line by line
 10. **Comments and documentation.** Does a comment state what a type could enforce? Does any text narrate history or describe a former state? Does each module explain its design in its own documentation? Is every public item documented, rather than explained only in a distant specification? ([Writing](general.md#writing))
 11. **Performance.** Does the change touch a hot path? If so, does it report before-and-after cost using a measure unaffected by unrelated machine activity? Is any budget exceeded? Does a claim of faster or free state what was measured? ([Performance](general.md#performance))
 12. **Toolchain.** Is a new tool or changed version added to the development shell in the same change as its version check? Is it pinned by exact version and hash? Is a GPU program the publisher's unchanged binary? ([Toolchain](general.md#toolchain))
+13. **Commit messages.** Does each subject name one scope and say what the commit does in the imperative, within about 72 characters, or state old and new versions for a pin? Does each commit that is not trivial have a body that says why, what the diff hides, and what was left out, standing on its own? ([Version control](general.md#version-control))
 
 ## Rust
 

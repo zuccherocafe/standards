@@ -63,5 +63,5 @@ For a project without Godot, skip this section.
 
 ## Make the first commit
 
-1. Commit with a lowercase `scope: what changed` message and no attribution trailer.
+1. Commit with a message as `general.md` says, such as `repository: add the starting layout`, and no attribution trailer.
 2. Report what you created, which template sections still say "none yet", and the licence you set.

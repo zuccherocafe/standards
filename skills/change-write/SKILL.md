@@ -26,7 +26,7 @@ Each change has a brief based on the standards' `templates/BRIEF.md`. You build 
 1. Follow the brief's "Do" list. Make one commit per concept in an order that keeps every commit's quick checks passing.
 2. Run the quick checks before every commit. Run the full checks at the change's tip after its last commit, and again after every rebase.
 3. Stage files by explicit path. Modify only files assigned to the change. In a shared file such as `AGENTS.md` or a README, change only your lines.
-4. Write each message as lowercase `scope: what changed`, with no attribution trailer.
+4. Write each message as [general.md's Version control](../../general.md#version-control) says, with no attribution trailer.
 5. Without maintainer approval recorded in the brief, never add or widen a check above a unit test. Never pin today's value or a count in a check. No approval allows it. Unit tests state a promise on made-up inputs, with hand-written expected values.
 6. Give every property test a fixed seed and disable failure persistence. Rerunning must reproduce a failure, and no test action may leave a file in the repository.
 
