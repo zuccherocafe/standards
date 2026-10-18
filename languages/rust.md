@@ -2,13 +2,15 @@
 
 This standard governs Rust in zucchero✿café projects. It applies [general.md](../general.md) to Rust and adds Rust-specific rules. [review.md](../review.md) turns both standards into review questions. [templates/rust/](../templates/rust/) contains the configuration for rules that tools can enforce.
 
-References name paths in public repositories: [nextest](https://github.com/nextest-rs/nextest), [guppy](https://github.com/guppy-rs/guppy), [jiff](https://github.com/BurntSushi/jiff), [ripgrep](https://github.com/BurntSushi/ripgrep), and [rust-analyzer](https://github.com/rust-lang/rust-analyzer). When a rule is unclear, consult those codebases and the reasons for their designs. Examples from [tdollhouse](https://github.com/zuccherocafe/tdollhouse) appear where they teach something the references do not.
+References name paths in public repositories: [nextest](https://github.com/nextest-rs/nextest), [guppy](https://github.com/guppy-rs/guppy), [jiff](https://github.com/BurntSushi/jiff), [ripgrep](https://github.com/BurntSushi/ripgrep), and [rust-analyzer](https://github.com/rust-lang/rust-analyzer). When a rule is unclear, consult those codebases and the reasons for their designs. Each rule ends with a Checked by entry naming the compiler, a lint, a project check, a report, or review. Where a tool checks only part of a rule, the entry names that part. Examples from [tdollhouse](https://github.com/zuccherocafe/tdollhouse) appear where they teach something the references do not.
 
 ## Toolchain and lints
 
 Use edition 2024 and resolver 3. Each project pins a release or dated nightly in `rust-toolchain.toml`, with rustfmt and Clippy. The public API report needs rustdoc's unstable JSON output. Run it on a dated nightly with a `cargo-public-api` release that reads that nightly's format. Pin both together. The template uses that nightly as its toolchain. Lints live in `[workspace.lints]`, and every workspace member inherits them with `[lints] workspace = true`. The canonical table is [templates/rust/Cargo.toml](../templates/rust/Cargo.toml). Run Clippy as `cargo clippy --all-targets -- -D warnings`, so warnings fail the check. Forbid `unsafe_code` except in a crate whose job needs it, such as an engine binding's entry point. That crate documents the exception. rustfmt governs formatting. `cargo-deny` checks advisories, licences, duplicate versions, and dependency sources. Its advisory database may use a pinned, reviewed revision for reproducible offline checks. Keep the default `maximum-db-staleness`, so a snapshot older than ninety days fails. A vulnerability check needs new advisories to remain useful. Refresh the pin rather than raise the limit.
 
 Declare every dependency once in `[workspace.dependencies]` as `major.minor`, such as `"0.23"` or `"2.14"`. Never specify a patch number or exact version, except for the exact-version exception below. Cargo treats a bare version as a caret requirement that accepts every compatible release. The committed `Cargo.lock` fixes the exact build version, and builds use `--locked`. A patch number in `Cargo.toml` therefore pins no build version and becomes stale. An exact requirement, such as `"=0.5.5"`, is allowed only when a release within the caret range is known to break the project. A comment above the requirement states what breaks. An engine binding whose generated API must match one engine release is the usual case. List the workspace's own crates first, by path, followed by a blank line and external crates. Members use `workspace = true` for workspace dependencies and add only features. Use the same grouping in members: workspace crates, a blank line, and external crates.
+
+**Checked by:** rustc, rustfmt, and Clippy with `-D warnings` over the template's lint table, and `cargo-deny`, in the project's checks; `--locked` builds for the lockfile; review for how dependencies are declared.
 
 ## Types and invariants
 
@@ -43,6 +45,8 @@ pub choices: IndexMap<ChoiceId, Choice>,
 
 Ref: nextest `RustBinaryId` (`nextest-metadata/src/test_list.rs`); guppy `PackageId` (`guppy/src/package_id.rs`).
 
+**Checked by:** review. Once an identity has its type, the compiler keeps it out of the wrong map.
+
 ### Quantities
 
 A quantity has a type. A unit is never merely a name. A length, angle, time, or rate in a crate-level interface uses a unit type. Examples include `Length`, `Radians`, `Seconds`, and `Rate`. Use one explicit conversion where another unit enters from an authored file. A unitless type is only for a dimensionless value. A compound dimension read by one consumer keeps its unit in its name rather than gaining a one-use type. A record keeps its wire spelling with `#[serde(rename = "margin_metres")]`.
@@ -50,6 +54,8 @@ A quantity has a type. A unit is never merely a name. A length, angle, time, or 
 Type crate-level interfaces and stored state, not arithmetic. A numerical kernel is a private module with one caller in its crate. Its functions may take and return primitive types and slices, unwrapped once at entry and wrapped once at exit. A unit type has only operations its callers use. Every `impl Mul<Seconds> for Rate` is a dimensional claim. The exception is temporary numerical arithmetic. A local or intermediate calculation result, and a kernel argument, remain the primitive types the arithmetic uses. Stored state and values protected by private invariants keep their types wherever they occur. [Identities](#identities) defines a crate-level interface.
 
 Ref: jiff `SignedDuration` (`crates/jiff/src/signed_duration.rs`); nextest stores time only as `Duration` (`nextest-runner/src/config/elements/slow_timeout.rs`); jiff moved ranged integers out of its internals and kept them at the public boundary (`CHANGELOG.md`, 0.2.20).
+
+**Checked by:** the report scans' unit scan for unit-named primitive fields and parameters; review for the rest.
 
 ### Invariants
 
@@ -78,6 +84,8 @@ impl RuntimeId {
 
 Ref: nextest `TestPriority::new` and its `Deserialize` (`nextest-runner/src/config/elements/priority.rs`); nextest `ErrorList::new` returns `Option`, so no empty list exists (`nextest-runner/src/errors.rs`).
 
+**Checked by:** review; the compiler keeps private fields private once they are; Clippy's pedantic `unsafe_derive_deserialize` only for a derived `Deserialize` on a type with `unsafe` methods.
+
 ### The numerical contract
 
 Valid inputs do not guarantee a valid result.
@@ -92,11 +100,15 @@ Valid inputs do not guarantee a valid result.
 
 Ref: jiff checks its arithmetic before using its unchecked constructor (`crates/jiff/src/signed_duration.rs`).
 
+**Checked by:** Clippy's pedantic `cast_*` lints for `as` casts, and `allow_attributes_without_reason` for their reasons; review for the rest.
+
 ### Closed sets
 
 A closed set is an enum. Match a crate's own enums exhaustively. Put case-dependent behaviour in a method on the enum. Where a new variant would need a decision, use neither an `_` arm nor `matches!` on the crate's own enum. Adding that variant then fails to compile at the relevant use.
 
 Ref: guppy `DependencyDirection::opposite` (`guppy/src/graph/mod.rs`); nextest `ExecutionResult::as_static_str` (`nextest-runner/src/reporter/events.rs`).
+
+**Checked by:** the compiler's exhaustive `match`, and Clippy's `match_wildcard_for_single_variants`; review for `_` arms and `matches!` on the crate's own enums.
 
 ### Sum types
 
@@ -125,6 +137,8 @@ pub(crate) enum Cell {
 
 Ref: nextest `MaxFail::from_fail_fast(bool)` turning a flag into its enum (`nextest-runner/src/config/elements/max_fail.rs`); `RetryPolicy::{Fixed, Exponential}` (`retry_policy.rs`); `terminate_after: Option<NonZeroUsize>` (`slow_timeout.rs`).
 
+**Checked by:** Clippy's pedantic `struct_excessive_bools` and `fn_params_excessive_bools` flag many booleans together, a count rather than proof that they depend on each other; review.
+
 ### Tuples
 
 A domain value or interface value with its own meaning is a named type, not a bare tuple. In a crate-level interface or a stored field, same-typed values whose order carries meaning use named struct fields or a [small key set](#small-key-sets). Examples include low and high values or left and right values. A tuple would allow a caller to swap them. A numerical kernel's working pairs remain tuples under the [Quantities](#quantities) exception, such as bracket endpoints passed between its functions. Different-typed pairs that the caller unpacks at once also remain tuples. Their types already distinguish the values, so a one-use struct adds no useful name.
@@ -145,6 +159,8 @@ fn ends(&self) -> Ends
 let (clip, notices): (Clip, Vec<Notice>) = read(&take)?;
 ```
 
+**Checked by:** review.
+
 ### Small key sets
 
 Represent one value per member of a small closed key set with a structure indexed by the key's enum. Never use an array with an order convention or an integer key. For example, in tdollhouse: `PerSide<T>`, indexed by `Side`, stores one value per body side. Never use `[T; 2]` with a "left first" convention or a `usize` side. With an invalid integer side, `1 - side` underflows.
@@ -159,11 +175,15 @@ impl<T> Index<Side> for PerSide<T> { /* match side */ }
 
 `PerSide` proves that there are exactly two values and that a side is one of two enum values. It does not prove that the stored values belong to the right owner.
 
+**Checked by:** review.
+
 ### Index spaces
 
 Each index space has its own index type, issued by its collection. Only the collection's crate can construct an index from an offset, through a sealed trait or crate-private constructor. The collection issues indices through operations such as `push` or iteration. A typed index proves its index space, not its originating instance. An index from one solver is a valid index for another. Where a handle might come from another instance, bind it to its source or check it once at entry.
 
 Ref: guppy's private `PackageIx(u32)` (`guppy/src/graph/mod.rs`); rust-analyzer's `la-arena` `Idx<T>`.
+
+**Checked by:** review; the compiler keeps one space's index out of another once each has its type.
 
 ### Checked against a source
 
@@ -191,9 +211,13 @@ pub fn solve(clip: &CheckedClip<'_>, settings: &Settings) -> Fit;
 
 Ref: guppy `PackageMetadata<'g>` borrowing its graph (`guppy/src/graph/graph_impl.rs`); nextest `EarlyProfile` consumed into `EvaluatableProfile` (`nextest-runner/src/config/core/imp.rs`).
 
+**Checked by:** review; the borrow checker keeps a checked value from outliving its source.
+
 ### Lifetimes
 
 A type carries a lifetime only when it represents a borrowed view. The borrow either binds the value to its source or avoids copying large data the caller still needs. Merely bundling borrowed arguments does not justify a struct. Pass the arguments or make the operation a method on the data's owner.
+
+**Checked by:** review.
 
 ## Parsing at boundaries
 
@@ -203,11 +227,15 @@ This section applies `general.md`'s boundary rule to Rust. Parse an authored fil
 
 Ref: Alexis King, ["Parse, don't validate"](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/); rust-analyzer builds `CrateGraph` through constructing functions (`docs/book/src/contributing/architecture.md`).
 
+**Checked by:** review.
+
 ### Deserialising
 
 Deserialisation calls the constructor. An invariant type uses `#[serde(try_from = "Raw")]` or a hand-written `Deserialize` that calls `new`. Its error has its own type, not `String`. Never use `#[serde(untagged)]`. Write a visitor with an `expecting` message. Records read back use `deny_unknown_fields`.
 
 Ref: nextest `ConfigIdentifier`'s `Deserialize`, tested through both entry paths (`nextest-runner/src/config/core/identifier.rs`).
+
+**Checked by:** Clippy's pedantic `unsafe_derive_deserialize` in its narrow case; review for the rest.
 
 ## Where behaviour lives
 
@@ -215,11 +243,15 @@ Ref: nextest `ConfigIdentifier`'s `Deserialize`, tested through both entry paths
 
 Behaviour that reads one type's data is a method on that type. Pure maths over plain values remains a free function. A free function implements an algorithm over peer inputs with no owner, such as distance between shapes or a spline, or is a private helper.
 
+**Checked by:** review.
+
 ### Standard traits
 
 Use the standard trait that fits the operation. Use `Display` for human-readable values and `FromStr` for stored text syntax. Use `From` and `TryFrom` for boundary conversions, and `Index` for keyed access. Use `IntoIterator` and `Iterator` for traversal. Use `Deref` only for a collection newtype.
 
 Ref: nextest `TestThreads` with `FromStr`, `Display`, and a visitor (`nextest-runner/src/config/elements/test_threads.rs`).
+
+**Checked by:** Clippy's `should_implement_trait`, `inherent_to_string`, `inherent_to_string_shadow_display`, `from_over_into`, and `to_string_trait_impl`, and the pedantic `iter_without_into_iter` and `iter_not_returning_iterator`, each for its own case; review.
 
 ### Traits
 
@@ -227,11 +259,15 @@ Do not introduce a trait merely for one implementation. A trait exists where sev
 
 Ref: nextest `StoreReader` with two implementations (`nextest-runner/src/record/reader.rs`); guppy's `IntoMietteDiagnostic` adapting foreign errors (`target-spec-miette/src/imp.rs`).
 
+**Checked by:** review.
+
 ## Visibility
 
 The public API is what other crates use. An item is `pub` only when another crate names it. A module is `pub` only to group such items. Everything else is `pub(crate)` or narrower, enforced by rustc's `unreachable_pub`. A field is public only when every value of its type is valid there. A struct has either all public fields or none, enforced by Clippy's `partial_pub_fields`. A crate exports types and operations, not internal tuning. Caller-variable settings are fields of a settings type with a `const DEFAULT`. Tuning that another crate must read is exported read-only and accepted by no function. A sealed trait may hide a constructor. `#[non_exhaustive]` follows a compatibility promise. A workspace whose crates are not published makes no such promise. The public API report, [templates/rust/tools/api.py](../templates/rust/tools/api.py), lists each library crate's public items before and after a change. Reviewers read these promises before the implementation. The report causes no check failures.
 
 Ref: nextest's `AGENTS.md` ("Use `pub(crate)` and `pub(super)` liberally"); nextest's raw serde shapes are `pub(in crate::config)` (`nextest-runner/src/config/overrides/imp.rs`).
+
+**Checked by:** rustc's `unreachable_pub` and Clippy's `partial_pub_fields`; the public API report and review for what is public and why.
 
 ## Records and serialisation
 
@@ -241,11 +277,15 @@ A concept has one type for each genuinely different representation, such as a pe
 
 Ref: nextest-filtering imports `RustBinaryId` from nextest-metadata (`nextest-filtering/src/expression.rs`); rust-analyzer chooses boundary counterparts deliberately (`docs/book/src/contributing/architecture.md`).
 
+**Checked by:** review.
+
 ### Records
 
 A record serialises the core's report type or one wire type with one conversion. Core report types derive `Serialize` and `Deserialize` behind an optional `serde` feature enabled by the writing crate. Working inputs never do. A separate wire type exists only when the wire form differs, such as names instead of indices, a projection, or a legacy shape. It has exactly one conversion and a round-trip test against a hand-written fixture file. A change to a written file's bytes states the change and names the file and format tag. It updates every reader in the same commit. Disk collections are ordered, using `BTreeMap` or `IndexMap`. `HashMap` and `HashSet` serve lookups only.
 
 Ref: guppy serialises `guppy-summaries`, not `PackageGraph`; nextest serialises `nextest-metadata` summaries, not its test list; ripgrep's `grep-printer` keeps serde behind a feature (`crates/printer/Cargo.toml`).
+
+**Checked by:** a wire type's round-trip test against its hand-written fixture; review.
 
 ### Debug
 
@@ -258,6 +298,8 @@ Before, renaming a variant silently invalidates every cache:
 ```
 
 After: the role's serde spelling, or an `as_str` with one arm per variant.
+
+**Checked by:** review.
 
 ## Errors
 
@@ -287,6 +329,8 @@ impl Curve {
 }
 ```
 
+**Checked by:** review.
+
 ### Panics by crate kind
 
 | Crate | A broken internal promise | Lints |
@@ -299,6 +343,8 @@ impl Curve {
 Test what the host does with a panic inside a binding call rather than assume the behaviour. State the result in the binding's crate documentation.
 
 Ref: nextest's two-tier error model (`AGENTS.md`) and its many `expect` calls in nextest-runner; Andrew Gallant, ["Using unwrap() in Rust is Okay"](https://burntsushi.net/unwrap/).
+
+**Checked by:** Clippy's `unwrap_used`, `expect_used`, `panic`, and `indexing_slicing` at the levels the table gives, and `todo`, `unimplemented`, and `unreachable`, for the constructs they recognise; `clippy.toml` exempts `unwrap_used`, `expect_used`, and `panic` in tests; `missing_panics_doc`; the binding's test of what the host does with a panic; review for the rest of the policy, including each `expect`'s reason, calls into functions that panic, and a `const` twin called only during constant evaluation.
 
 ### One error per operation
 
@@ -326,9 +372,13 @@ pub enum FindError {
 
 Ref: nextest's per-operation errors and `ConfigParseError { config_file, tool, kind }` (`nextest-runner/src/errors.rs`); ripgrep `ignore::Error::WithPath` (`crates/ignore/src/lib.rs`).
 
+**Checked by:** Clippy's `result_large_err`; review.
+
 ### Where a refusal sits
 
 Place a refusal where it is cheapest and clearest for the author. Refuse as soon as the needed facts are known, before expensive work the refusal would waste. The order of independent refusals is not a promise. A change may move a refusal earlier or later to make it cheaper or clearer. Its description lists every move. No test fixes which independent fault is reported first. Never let a fault pass unrefused or make a refusal unreachable. A refusal's wording may improve for its reader, and the change lists that improvement too. Where a project has codes, a code stays stable unless the change explains why it changes.
+
+**Checked by:** review of the change's list of moved refusals.
 
 ### Messages and codes
 
@@ -354,6 +404,8 @@ while let Some(error) = cause {
 
 Ref: nextest's `AGENTS.md` on error messages and its `DisplayErrorChain` (`nextest-runner/src/errors.rs`); ripgrep prints the chain once (`crates/core/main.rs`).
 
+**Checked by:** the report scans' code scan for codes in `#[error(...)]`; review.
+
 ## Modules, crates, and purity
 
 ### Modules
@@ -362,17 +414,23 @@ Keep one cohesive concept per module. Cooperating types may share a file, and a 
 
 Ref: nextest `config/elements/`, one element per file with its impls and tests; guppy's `graph_impl.rs` holds several cooperating types.
 
+**Checked by:** Clippy's `mod_module_files`; review.
+
 ### Crates
 
 A crate exists for a reason the compiler or build can check. Such reasons include a different licence or artefact, a confined heavy or platform dependency, an absence checked by the crate graph, or independent use by another crate. An artefact may be a host library, a binary, or a binary that nothing may link. Size, a pipeline stage, or a group of helpers does not justify a crate. Use modules for those. A crate directory takes its crate's name. Each package's `Cargo.toml` has a one-sentence `description` of the crate's purpose, agreeing with its first `//!` line.
 
 Ref: matklad, ["Fast Rust Builds"](https://matklad.github.io/2021/09/04/fast-rust-builds.html); ripgrep's `grep-matcher` depends only on `memchr`.
 
+**Checked by:** the project's dependency-edge check where it has one; review.
+
 ### Purity
 
 Cores compute. The shell does input and output. An engine-independent core reads no file, clock, environment variable, or process and spawns nothing. Purity applies at crate level, and the dependency list is the cheapest proof. Purity alone does not justify a crate because `std::fs` is in every crate's graph. Inside an input-output crate, purity applies at function level. Each stage's logic is a named function over values, tested on values. Named modules perform input and output at the boundaries. Document a clock read that only reports timings and changes no output in the crate's documentation.
 
 Ref: rust-analyzer's core "never does any IO" (`docs/book/src/contributing/architecture.md`); nextest-runner does IO throughout and keeps pure functions such as `compute_outstanding_pure` (`nextest-runner/src/record/rerun.rs`).
+
+**Checked by:** the dependency list, the project's dependency-edge check where it has one, and the report scans' purity scan; review.
 
 ## Performance
 
@@ -382,23 +440,33 @@ A crate that runs per frame or per item states that fact, its budget, and its me
 
 Ref: rust-analyzer's "Avoid Allocations", "Push Allocations to the Call Site" and "Avoid Intermediate Collections" (`docs/book/src/contributing/style.md`).
 
+**Checked by:** the counting-allocator test; Clippy's `vec_init_then_push` for some incremental growth; review.
+
 ### Zero-cost abstractions, verified
 
 Check rather than assume that newtypes, small `Copy` types, and checked constructors cost nothing in release builds. A scalar newtype is a single-field `Copy` struct. Add `#[repr(transparent)]` only for a layout promise, such as FFI, `bytemuck`, or transmutes, never for speed. Small cross-crate accessors and conversions rely on Rust's inlining of tiny functions. Add `#[inline]` when a profile or `nm` on the release binary shows a hot function left out of line. Include the measurement in the commit message. A change that adds types to a hot path reports its instruction count before and after.
+
+**Checked by:** rustc's `missing_copy_implementations` for public types that could be `Copy`; review of the reported measurements.
 
 ### Copies and data layout
 
 Pass large values by reference and small `Copy` values by value. Never clone merely to satisfy the borrow checker in a hot path. Use contiguous per-item vectors with typed indices ([Index spaces](#index-spaces)), rather than maps or pointer graphs. In a core's inner loop, prefer `f64` arithmetic on plain values. Convert to unit types at the function boundary, checking each value once ([Quantities](#quantities)). Avoid generic code over many types at crate boundaries, as rust-analyzer's "Avoid Monomorphization" advises. Monomorphised copies cost compile time and instruction cache.
 
+**Checked by:** Clippy's pedantic `needless_pass_by_value`, `trivially_copy_pass_by_ref`, and `large_types_passed_by_value`; review.
+
 ### Parallelism
 
 Parallelise independent items in the largest groups that keep every core busy. Return results in item order, regardless of thread execution order. Use `std::thread::scope` and an atomic cursor, without a runtime. Document the group size and the wall-time bound, which is the largest item, in the crate documentation. Core results never depend on thread count. Obtain the thread count from `available_parallelism`. It honours CPU affinity, so a pinned run measures the selected CPUs.
+
+**Checked by:** review; the result-order promise by a test.
 
 ### Measuring
 
 Measure only release builds with the workspace's own profile. To compare revisions, report instructions retired with `perf stat -e instructions:u`. For budgets, report CPU and wall time with the median, range, and run count. For builds, report peak memory. Profiles use frame pointers (`-C force-frame-pointers=yes`) and line tables in a separate target directory, leaving the measured binary unchanged. Benchmark harnesses are development dependencies of the measured crate, admitted like other test-only dependencies. Prefer divan, or criterion where the project already uses it. Benchmark harnesses are never part of the project's checks.
 
 Ref: jiff keeps its Criterion suite in a separate `bench/` crate; ripgrep's `benchsuite/` records runs per machine and date; rust-analyzer's `xtask metrics` records build and analysis times rather than failing on them.
+
+**Checked by:** review of the reported measurements.
 
 ## Tests
 
@@ -411,6 +479,8 @@ A crate's tests come in three layers, written in this order, and a review reads 
 3. **Properties.** Test invariants that types cannot express, using values generated from the valid domain or malformed input at a boundary.
 
 Write expected values from the input's source, a specification, or a law, never from a run. A reviewer-accepted snapshot of exact text or structured output whose shape is the promise also counts as authored ([Expected values and snapshots](#expected-values-and-snapshots)). Keep a test that replays a review finding only when real data produces its input. Name it for its promise. For an input nothing real produces, answer the finding with the type or reasoning rather than a test. A scenario in the checks costs seconds. Use the smallest input that reaches the path, such as a code-built character or a fixture with a few files. A minutes-long run over real data belongs in the change report, not the checks. The report shows what changed.
+
+**Checked by:** review; the mutation report lists mutations the tests miss, and review decides whether each breaks a promise.
 
 ### Scenarios first
 
@@ -430,6 +500,8 @@ fn a_chain_trails_a_turning_parent_then_settles_where_the_clip_points_it() {
 
 Ref: nextest's integration tests drive the real binary on a fixture project; ripgrep's first tests are the commands people type (`tests/misc.rs`).
 
+**Checked by:** review.
+
 ### Expected values and snapshots
 
 Expected numbers and behaviour are written by hand from the fixture's source, a specification, or a law, never copied from a run. Snapshots with `insta` cover exact text or structured output whose shape is the promise, such as help text, a rendered error, or a listing. A reviewer-accepted snapshot in the diff (`cargo insta review`) is an authored expectation. Never snapshot numbers or behaviour. Keep hand-written expectations and properties for them. The project's change report shows differences.
@@ -443,6 +515,8 @@ insta::assert_snapshot!(render(&check(&fixture().with(r#"model "model.obj""#))))
 ```
 
 Ref: nextest's integration snapshots of help, errors, and diagnostics (`integration-tests/tests/integration/snapshots/`); nextest's hand-written fixture model (`fixture-data/src/fixture_project.rs`).
+
+**Checked by:** insta's snapshot assertions compare output with the saved snapshot; review for whether each expected value and snapshot is authored, right, and used only where its shape is the promise.
 
 ### Properties
 
@@ -460,15 +534,21 @@ proptest! {
 
 Ref: jiff's `Arbitrary for Date` through its constructor (`crates/jiff/src/civil/date.rs`); nextest's `sut_matches_oracle` (`nextest-runner/src/record/rerun.rs`); nextest's parser fuzz target (`nextest-filtering/fuzz/fuzz_targets/fuzz_parsing.rs`).
 
+**Checked by:** review.
+
 ### What a test is kept for
 
 This section applies `general.md`'s rule to Rust. Name a test for its promise, never for whoever or whatever found it. When a type makes a refusal unreachable, remove its run-time test and keep a `compile_fail` doctest of the static promise. A case table reports the failed input. Use separately named `test-case` rows when independent reporting helps, or a loop whose assertion names the input. Assert on variants. Compare rendered text only where wording is the promise, under the snapshot rule.
 
 Ref: ripgrep ties regression tests to issues (`tests/regression.rs`); nextest loops over identifier cases (`nextest-runner/src/config/core/identifier.rs`).
 
+**Checked by:** rustdoc for `compile_fail` doctests; review.
+
 ### Mutation report
 
 [tools/rust_mutants.py](../tools/rust_mutants.py) runs [cargo-mutants](https://mutants.rs/) over the Rust a change touched. It makes one edit at a time, such as `>` to `>=`, `-` to `+`, or a function returning a default, and runs the crate's tests against each. It lists each edit the tests miss. A missed edit is a candidate, not proof of a weak test: judgement decides whether it breaks a promise. Every change to Rust runs the report against the change's base and keeps it with its evidence. The writer judges each missed mutant as one of three kinds. A real gap is a wrong result no test notices, and the change adds the test that does. An equivalent mutant changes no behaviour, and the writer says why in one line. An unstated edge is a boundary the code never promised, such as which side an exact tie falls on. The writer states the rule in the code's documentation, then tests it as a real gap. The maintainer decides a rule the writer cannot. A mutant that times out is listed separately: it usually makes a loop run forever, which the tests already notice by stopping, so the writer checks the time allowance and adds no test for it. Never write a test only to catch a mutant, without a promise behind it. The report causes no check failures, since judging a miss needs a reviewer and its cost grows with the change. A run over a whole crate is a manual report, useful before trusting a crate's tests. The project pins cargo-mutants in its development shell.
+
+**Checked by:** review of the report and each judgement.
 
 ## Lints and documentation
 
@@ -490,9 +570,13 @@ fn ended(&mut self, met: &mut Met, problem: &Problem<'_>, outcome: &Solved, grip
 
 Ref: nextest `TestRunnerBuilder::build` takes its required inputs under `#[expect(clippy::too_many_arguments)]` (`nextest-runner/src/runner/imp.rs`).
 
+**Checked by:** Clippy's `allow_attributes` for outer `#[allow]` attributes and `allow_attributes_without_reason` for a missing reason, and rustc's `unfulfilled_lint_expectations` for an `expect` that no longer applies; review for an exception's scope, its reason's substance, inner `#![allow]` attributes, and the lint configuration itself.
+
 ### Report scans
 
 [tools/rust_scans.py](../tools/rust_scans.py) provides three text scans for cases the lints cannot detect. The first reports file, process, environment, and clock tokens in project-named core crates ([Purity](#purity)). The second reports a primitive field or parameter whose name contains a unit, outside named kernels and tests ([Quantities](#quantities)). The third reports codes in `#[error(...)]` messages ([Messages and codes](#messages-and-codes)). These scans recognise spelling only. An aliased import escapes the first scan, and a renamed field escapes the second. Run them from the development shell as review aids. They cause no check failures.
+
+**Checked by:** review, for whether the scans ran with the project's cores and kernels and stayed report-only.
 
 ### Documentation
 
@@ -506,6 +590,8 @@ This section applies `general.md`'s comment rule to Rust. Each crate's and modul
 Ref: ripgrep's `grep-matcher` crate doc (`crates/matcher/src/lib.rs`); jiff's doc examples, each the documented common use.
 
 Document the current design in the owning module's `//!`, its types, and their documentation. External documents contain what the code cannot: research behind a choice, an unbuilt plan, an externally read format, and user documentation. The project's `AGENTS.md` gives a short orientation with the system's data flow and each step's entry point. It helps readers find where to start. It repeats no type, invariant, or signature, since duplicate descriptions can become stale. Do not create a separate architecture document.
+
+**Checked by:** rustc's `missing_docs` and Clippy's `missing_errors_doc` and `missing_panics_doc`; rustdoc runs the examples; review for module documentation and whether examples show the common use.
 
 ## For a new project: not yet decided
 
