@@ -1,4 +1,4 @@
-# The Python standard's formatter and linter settings (languages/python/): explicit families and rules, never the
+# The Python standard's formatter and linter settings (rules/languages/python/): explicit families and rules, never the
 # defaults, which a Ruff release can change. The version is pinned in the development shell.
 line-length = 120
 # project-specific: the latest stable Python, which the development shell pins, such as "py315"; a host script's

@@ -8,7 +8,7 @@ Install [Lix](https://lix.systems/install/) with the `nix-command` and `flakes` 
 
 ## Reading them
 
-Start with [general.md](general.md), which applies to every project. Then read the standard for your language in [languages/](languages/). [review.md](review.md) lists the questions every review answers.
+Start with [general.md](rules/general.md), which applies to every project. Then read the standard for your language in [languages/](rules/languages/). [review.md](rules/review.md) lists the questions every review answers.
 
 ## Using them in a project
 

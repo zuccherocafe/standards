@@ -5,7 +5,7 @@ description: "Set up a new zucchero✿café repository with jj colocated with gi
 
 # Create a zucchero✿café repository
 
-First pull the standards checkout to the latest `main`. Paths below are relative to that checkout. Before starting, read `general.md`'s Toolchain section, which says why a project copies tool configuration but pins shared tools. Read every template before copying it. Copy templates rather than reconstructing them from memory.
+First pull the standards checkout to the latest `main`. Paths below are relative to that checkout. Before starting, read `rules/general.md`'s Toolchain section, which says why a project copies tool configuration but pins shared tools. Read every template before copying it. Copy templates rather than reconstructing them from memory.
 
 ## Create the repository
 

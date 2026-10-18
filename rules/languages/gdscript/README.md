@@ -1,6 +1,6 @@
 # The GDScript standard
 
-This standard governs GDScript in zucchero✿café projects using Godot 4.7. It applies [general.md](../../general.md) to GDScript and adds GDScript-specific rules. [review.md](../../review.md) turns both standards into review questions. [templates/godot/](../../templates/godot/) contains the engine-check configuration in `project.godot`'s `[debug]` block and the formatter configuration.
+This standard governs GDScript in zucchero✿café projects using Godot 4.7. It applies [general.md](../../general.md) to GDScript and adds GDScript-specific rules. [review.md](../../review.md) turns both standards into review questions. [templates/godot/](../../../templates/godot/) contains the engine-check configuration in `project.godot`'s `[debug]` block and the formatter configuration.
 
 GDScript is gradually typed, and the engine's analyser checks it. It has no generics, nullability, sum types, interfaces beyond abstract classes, exhaustive `match`, or exceptions. When a resource loads, its typed exports are converted rather than checked. The analyser's warnings cover much, but not all, of the type system. Some dynamic access compiles without a diagnostic and fails only at run time. This standard identifies those gaps and the alternatives: boundary parsers, record classes, review conventions, or an explicit lack of checks.
 

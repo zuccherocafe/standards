@@ -62,7 +62,7 @@ The sections below break each into the questions a reviewer answers line by line
 10. **The better shape.** What would a strong Godot engineer write here? Why does the proposed design differ? Answer in prose.
 11. **Idiom.** Read the change as an experienced Godot engineer would. Name each place, by file and line, where they would write it differently: a loop a built-in or a typed array method states more plainly, a signal or node lookup done by hand where the engine provides it, a helper that duplicates one elsewhere in the project, a name that hides what the code does. Each is a finding, fixed in the change.
 
-How an agent runs a review, and how fixes are checked and landed, is in the [change-review](skills/change-review/SKILL.md) and [change-land](skills/change-land/SKILL.md) skills.
+How an agent runs a review, and how fixes are checked and landed, is in the [change-review](../skills/change-review/SKILL.md) and [change-land](../skills/change-land/SKILL.md) skills.
 
 ## Python
 

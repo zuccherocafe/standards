@@ -4,7 +4,7 @@ This file gives instructions for contributors and coding agents. The README prov
 
 ## Standards
 
-This project follows [zuccherocafe/standards](https://github.com/zuccherocafe/standards) at the latest commit on `main`. Before changing code, read [general.md](https://github.com/zuccherocafe/standards/blob/main/general.md). Also read the standard for the changed language, [the Rust standard](https://github.com/zuccherocafe/standards/tree/main/languages/rust), [the GDScript standard](https://github.com/zuccherocafe/standards/tree/main/languages/gdscript) or [the Python standard](https://github.com/zuccherocafe/standards/tree/main/languages/python). Review against [review.md](https://github.com/zuccherocafe/standards/blob/main/review.md). For offline reading, use a sibling checkout at `../standards`. Pull it first.
+This project follows [zuccherocafe/standards](https://github.com/zuccherocafe/standards) at the latest commit on `main`. Before changing code, read [general.md](https://github.com/zuccherocafe/standards/blob/main/rules/general.md). Also read the standard for the changed language, [the Rust standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/rust), [the GDScript standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/gdscript) or [the Python standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/python). Review against [review.md](https://github.com/zuccherocafe/standards/blob/main/rules/review.md). For offline reading, use a sibling checkout at `../standards`. Pull it first.
 
 Where this file and the standards disagree, this file wins for this project. Each departure is listed here with its reason:
 

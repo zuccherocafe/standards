@@ -1,6 +1,6 @@
 # The Python standard
 
-This standard governs Python in zucchero✿café projects. It applies [general.md](../../general.md) to Python and adds Python-specific rules. [review.md](../../review.md) turns both standards into review questions. [templates/python/](../../templates/python/) contains the linter and type checker configuration.
+This standard governs Python in zucchero✿café projects. It applies [general.md](../../general.md) to Python and adds Python-specific rules. [review.md](../../review.md) turns both standards into review questions. [templates/python/](../../../templates/python/) contains the linter and type checker configuration.
 
 Python in these projects is tooling: reports, check helpers, small command-line tools, and scripts that run inside a host program such as Blender. It is never a shipped service. The rules keep that code as typed and as reviewable as the rest, without the packaging a library needs. Python's annotations are not enforced at run time, so the type checker is the compiler in `general.md`'s sense: code that it rejects does not land.
 

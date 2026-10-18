@@ -46,11 +46,11 @@ A project's checks exist to catch what is broken, not what is different.
 
 ## Toolchain
 
-**Every public project has a development shell.** A Lix flake at the repository root provides every tool the project's checks run, at the project's pinned versions. Track both `flake.nix` and `flake.lock` in git, since a flake sees only tracked files. Use [templates/nix/flake.nix](templates/nix/flake.nix) as the starting point. The command `nix develop` gives a new machine or an agent's clone what the checks need. The project's checks pass inside that shell. Keep manual installation steps in the project's `AGENTS.md` as the fallback.
+**Every public project has a development shell.** A Lix flake at the repository root provides every tool the project's checks run, at the project's pinned versions. Track both `flake.nix` and `flake.lock` in git, since a flake sees only tracked files. Use [templates/nix/flake.nix](../templates/nix/flake.nix) as the starting point. The command `nix develop` gives a new machine or an agent's clone what the checks need. The project's checks pass inside that shell. Keep manual installation steps in the project's `AGENTS.md` as the fallback.
 
 **Pins live in the flake.** Each tool is pinned to an exact version and hash. Read a language toolchain from its own pin file, such as `rust-toolchain.toml`, so it has one pin. Fetch a tool built from source by version with fixed hashes. Move a pin only in the same change as the file that checks it. That file may be an `AGENTS.md` version line or a script that refuses another version. The shell and checks must agree.
 
-**Copy tool configuration, pin shared tools.** Cargo, Clippy, rustfmt, cargo-deny, Godot, and the GDScript formatter read only files inside the project, and a clean clone must build alone. So a project copies the files in [templates/](templates/) it uses and adds its own entries only below the lines marked "project-specific", which keeps the shared part comparable with the latest template. A difference from the template is reported, never a failed check. A tool in [tools/](tools/) reads the project's files and takes project details as arguments, so one copy serves every project. The development shell takes this repository as a flake input pinned in `flake.lock` and puts the tools on `PATH`. Whenever this repository's `main` moves, each project moves its pin to it in a change of its own, so every project reads the latest standards.
+**Copy tool configuration, pin shared tools.** Cargo, Clippy, rustfmt, cargo-deny, Godot, and the GDScript formatter read only files inside the project, and a clean clone must build alone. So a project copies the files in [templates/](../templates/) it uses and adds its own entries only below the lines marked "project-specific", which keeps the shared part comparable with the latest template. A difference from the template is reported, never a failed check. A tool in [tools/](../tools/) reads the project's files and takes project details as arguments, so one copy serves every project. The development shell takes this repository as a flake input pinned in `flake.lock` and puts the tools on `PATH`. Whenever this repository's `main` moves, each project moves its pin to it in a change of its own, so every project reads the latest standards.
 
 **GPU programs are official binaries.** A program that draws or plays sound uses the publisher's binary. Examples include a game engine or a 3D suite. Fetch that binary by the publisher's digest and install it unchanged. It then loads the host's graphics and audio libraries and GPU drivers as its publisher built it to. GPU drivers, compositors, and sound servers stay on the host.
 
@@ -70,7 +70,7 @@ A project's checks exist to catch what is broken, not what is different.
 
 ## Writing
 
-**Write with the two skills.** Prose, documentation, commit messages, and reports follow [skills/unslop](skills/unslop/SKILL.md) and [skills/technical-writing](skills/technical-writing/SKILL.md). The first removes patterns of machine-written text. The second governs sentences and document structure. Where either skill disagrees with this file, this file wins. Use British spelling and one paragraph per Markdown line. Use the project's formatter rather than the skill's tab-indented code snippets.
+**Write with the two skills.** Prose, documentation, commit messages, and reports follow [skills/unslop](../skills/unslop/SKILL.md) and [skills/technical-writing](../skills/technical-writing/SKILL.md). The first removes patterns of machine-written text. The second governs sentences and document structure. Where either skill disagrees with this file, this file wins. Use British spelling and one paragraph per Markdown line. Use the project's formatter rather than the skill's tab-indented code snippets.
 
 **Use British English** in code, comments, and documentation, as in analyse, colour, organisation, and centre. Use American spelling only where an external library or API requires it.
 
@@ -90,7 +90,7 @@ A project's checks exist to catch what is broken, not what is different.
 
 ## Skills
 
-**The standards' skills folder is the one source.** Every skill a zucchero✿café project's agents use lives in the standards' [skills/](skills/) folder, never copied into a project. A role's changes then reach every project at once. A tool that loads skills reads links the development shell creates to the pinned `standards` input ([templates/nix/flake.nix](templates/nix/flake.nix)). For other tools, the Skills section of the project's `AGENTS.md` names the skill each role reads ([templates/AGENTS.md](templates/AGENTS.md)).
+**The standards' skills folder is the one source.** Every skill a zucchero✿café project's agents use lives in the standards' [skills/](../skills/) folder, never copied into a project. A role's changes then reach every project at once. A tool that loads skills reads links the development shell creates to the pinned `standards` input ([templates/nix/flake.nix](../templates/nix/flake.nix)). For other tools, the Skills section of the project's `AGENTS.md` names the skill each role reads ([templates/AGENTS.md](../templates/AGENTS.md)).
 
 ## Version control
 

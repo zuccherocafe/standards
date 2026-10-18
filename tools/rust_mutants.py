@@ -1,6 +1,6 @@
 """The Rust standard's mutation report: runs cargo-mutants over the Rust a change touched, or over a whole crate, and
 lists each mutant the tests missed for the writer to judge, and each that timed out for the writer to diagnose. Fails
-nothing: it is a review aid (languages/rust/tests.md, Mutation report).
+nothing: it is a review aid (rules/languages/rust/tests.md, Mutation report).
 
 Run from inside the repository; `--workspace` is the folder holding the workspace Cargo.toml:
 
