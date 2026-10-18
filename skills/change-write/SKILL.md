@@ -43,6 +43,10 @@ Write the requested evidence into the folder named by the brief's "Evidence" sec
 - In `refusals.txt`, list every added, removed, changed, or moved refusal with its reason. A refusal may move earlier or later to where it is cheapest and clearest for the author. Never let a fault pass unrefused. Never make a refusal unreachable. Never write a test that fixes the order of independent faults.
 - Production and test line counts per commit.
 
+## Review your own change
+
+Before reporting, read the whole change as its reviewer will: the full diff from the base and the tree of every folder it adds or changes. Go through `review.md`'s questions and the language standard's rules for each file, including module layout (a flat folder grouped by subject, `name/` beside `name.rs`), test placement and naming. Fix everything you find in the change, with the checks passing again. In the report, list what you found and fixed this way.
+
 ## Fix a review's findings
 
 When asked to resume work on review findings, fix only those findings. Fix each cause with the smallest required change. Keep production code the same size or smaller where possible. If growth is unavoidable, explain why in the report. Run the full checks at the new tip. Refresh the evidence.
@@ -61,5 +65,6 @@ End with a short report following the technical-writing and unslop skills, with 
 - The full checks' result and time at the tip, and the evidence paths.
 - Every measure that moved the wrong way, and anything you did not verify.
 - Each departure from the brief, with its reason, and how you settled each of the brief's open questions.
+- What your own review found and fixed.
 
 When the change is complete, end with `DONE: <one line>`. When stopping to ask a question, end with `QUESTION: <the question>`.
