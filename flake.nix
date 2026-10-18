@@ -20,20 +20,31 @@
       rust = pkgs.rust-bin.fromRustupToolchainFile ./tools/rust/rust-toolchain.toml;
       rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
 
-      # Built from this repository's own source and lockfile with the pinned toolchain; it runs `cargo metadata`
-      # from the PATH of the shell it is used in.
-      rustScans = rustPlatform.buildRustPackage {
-        pname = "rust-scans";
+      # A binary of the workspace, built from this repository's own source and lockfile with the pinned toolchain.
+      workspaceTool = pname: rustPlatform.buildRustPackage {
+        inherit pname;
         inherit ((builtins.fromTOML (builtins.readFile ./tools/rust/Cargo.toml)).workspace.package) version;
         src = pkgs.lib.fileset.toSource {
           root = ./tools/rust;
           fileset = pkgs.lib.fileset.unions [ ./tools/rust/Cargo.toml ./tools/rust/Cargo.lock ./tools/rust/crates ];
         };
         cargoLock.lockFile = ./tools/rust/Cargo.lock;
-        cargoBuildFlags = [ "--package" "rust-scans" ];
+        cargoBuildFlags = [ "--package" pname ];
         # The checks run its tests.
         doCheck = false;
       };
+
+      # Both run what they need from the PATH of the shell they are used in: rust-scans runs `cargo metadata`;
+      # dandegate runs `git` and `nix develop`.
+      rustScans = workspaceTool "rust-scans";
+      dandegate = workspaceTool "dandegate";
+
+      # It runs `cargo mutants` from the shell it is used in. `git`, `systemd-run` and `unshare` follow the shell's own
+      # tools, so a shell without them, as dandegate runs a step in, still has them.
+      rustMutants = pkgs.writeShellScriptBin "rust-mutants" ''
+        export PATH="$PATH:${pkgs.git}/bin:${pkgs.systemdMinimal}/bin:${pkgs.util-linux}/bin"
+        exec ${python}/bin/python3 -I ${./tools/rust_mutants.py} "$@"
+      '';
 
       # A new minor version moves the target in ruff.toml and pyrefly.toml with it.
       python = pkgs.python315;
@@ -102,7 +113,11 @@
       };
     in
     {
-      packages.${system}.rust-scans = rustScans;
+      packages.${system} = {
+        rust-scans = rustScans;
+        rust-mutants = rustMutants;
+        inherit dandegate;
+      };
 
       devShells.${system}.default = pkgs.mkShell {
         packages = [
@@ -113,6 +128,9 @@
           pkgs.lychee
           cargoMutants
           check
+          dandegate
+          rustScans
+          rustMutants
           pkgs.jujutsu
         ];
       };

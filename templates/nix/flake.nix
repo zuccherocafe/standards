@@ -42,10 +42,8 @@
         });
 
       rustScans = standards.packages.${system}.rust-scans;
-
-      rustMutants = pkgs.writeShellScriptBin "rust-mutants" ''
-        exec ${pkgs.python3}/bin/python3 -I ${standards}/tools/rust_mutants.py "$@"
-      '';
+      rustMutants = standards.packages.${system}.rust-mutants;
+      dandegate = standards.packages.${system}.dandegate;
 
     in
     {
@@ -54,6 +52,7 @@
           rust
           rustScans
           rustMutants
+          dandegate
         ];
 
         # Links the pinned standards' skills for agents; the links name store paths, so they are ignored and remade.

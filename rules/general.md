@@ -24,7 +24,7 @@ A project's checks exist to catch what is broken, not what is different.
 
 **Checks fail only on broken results.** A check fails when the result is wrong for a correct input, whatever a change intended. Failures include a crash, a script error, an input that does not load or run, a non-finite value, a missing part, or a violated contract. Set each threshold where a person watching would see something wrong, never at today's value. Explain the threshold in one line.
 
-**Report differences without failing checks.** Report changed outputs, measurements, and before-and-after images for a person to read. Nothing is pinned to today's output, so no expectation is derived from that output.
+**Report differences without failing checks.** Report changed outputs, measurements, and before-and-after images for a person to read. Nothing is pinned to today's output, so no expectation is derived from that output. The change report is [dandegate](../tools/rust/crates/dandegate/), which the development shell provides. A project declares the steps it runs in a root `dandegate.toml`, and its own scripts do the work particular to it.
 
 **Expected values are authored.** A check compares with values written by hand from the input's source, a specification, or a law, never copied from a run. Exact text or structured output whose shape is the promise may use snapshots. Examples include help text, a rendered error, or a listing. A snapshot counts as authored when a reviewer reads and accepts it in the diff. Numbers and behaviour keep hand-written expectations.
 
