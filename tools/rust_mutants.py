@@ -18,7 +18,18 @@ build in its copy. Each shard therefore gets its own copy of the whole repositor
 also overrides a target folder in Cargo's configuration): shards sharing a target folder test each other's builds. The
 shards run at once and their lists are merged; the copies are removed afterwards, and on any failure every started
 shard is stopped first. The tool owns only `--out`'s `rust-mutants` folder, emptied at the start so what is printed is
-this run's. Needs `git` and `cargo mutants` on PATH.
+this run's. Needs `git` and `cargo mutants` on PATH, `systemd-run` for the memory cap and `unshare` for the PID
+namespaces.
+
+Each shard runs in a systemd user scope holding an equal part of a 16 GiB memory cap, without swap, so a mutant that
+allocates without end is killed and counted while the run goes on. Where `systemd-run --user` cannot start a scope, the
+shards run without a cap and the report says so. The shards share the jobserver's tasks, one per CPU, and each test
+binary stops at its first failing test, since one failure is enough to catch a mutant.
+
+Every test binary runs as the first process of a PID namespace of its own, through Cargo's test runner for the host
+(`CARGO_TARGET_<HOST>_RUNNER`, wrapping any runner already set there), so a mutant in code that signals processes can
+reach only the processes its test started, and every one of them ends with the binary. Where an unprivileged PID
+namespace cannot be made, the test binaries run uncontained and the report says so.
 """
 
 import argparse
@@ -34,6 +45,10 @@ LISTS = ("caught", "missed", "timeout", "unviable")
 FINISHED = (0, 2, 3)
 # The one folder under `--out` this tool writes and empties.
 OWNED = "rust-mutants"
+# The memory every shard's scope may hold together: four times what a whole run over the standards' own tools needs.
+MEMORY = 16 * 1024**3
+# The test harness's arguments, through cargo test: stop each test binary at its first failure.
+FAIL_FAST = ("--", "-Zunstable-options", "--fail-fast")
 
 
 def changed_rust(diff: str) -> list[str]:
@@ -52,18 +67,90 @@ def outcome_lists(shards: list[Path]) -> dict[str, list[str]]:
     return lists
 
 
-def command(options: argparse.Namespace, diff_file: Path | None, shard: int, output: Path) -> list[str]:
-    """The cargo-mutants command for one shard, with the diff file in diff mode."""
-    scope = ["--in-diff", str(diff_file), "--workspace"] if diff_file else ["--package", options.package]
+def scope(shards: int) -> list[str]:
+    """The prefix that runs a shard in a user scope holding its part of the memory cap, with no swap; a process the
+    kernel kills there for memory leaves the rest of the shard running."""
     return [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--property",
+        f"MemoryMax={MEMORY // shards}",
+        "--property",
+        "MemorySwapMax=0",
+        "--property",
+        "OOMPolicy=continue",
+        "--",
+    ]
+
+
+def scopes_available() -> bool:
+    """Whether `systemd-run --user` can start a scope here."""
+    try:
+        probe = subprocess.run([*scope(1), "true"], stdin=subprocess.DEVNULL, capture_output=True, check=False)
+    except OSError:
+        return False
+    return probe.returncode == 0
+
+
+# Runs a program as the first process of a new PID namespace, as root of a user namespace mapped to the caller, with its
+# own /proc; killing `unshare` kills the program and so the whole namespace.
+NAMESPACE = ("unshare", "--user", "--map-root-user", "--pid", "--fork", "--mount-proc", "--kill-child")
+
+
+def namespaces_available() -> bool:
+    """Whether an unprivileged PID namespace can be made here."""
+    try:
+        probe = subprocess.run([*NAMESPACE, "true"], stdin=subprocess.DEVNULL, capture_output=True, check=False)
+    except OSError:
+        return False
+    return probe.returncode == 0
+
+
+def host(workspace: Path) -> str | None:
+    """The target triple the workspace's rustc builds for by default, or None when rustc cannot say."""
+    try:
+        version = subprocess.run(["rustc", "-vV"], cwd=workspace, capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    if version.returncode != 0:
+        return None
+    for line in version.stdout.splitlines():
+        if line.startswith("host: "):
+            return line.removeprefix("host: ").strip()
+    return None
+
+
+def contained(environment: dict[str, str], triple: str) -> dict[str, str]:
+    """`environment` with Cargo's test runner for `triple` running each test binary in its own PID namespace, around
+    any runner the environment already names."""
+    name = "CARGO_TARGET_" + triple.upper().replace("-", "_").replace(".", "_") + "_RUNNER"
+    runner = " ".join(NAMESPACE)
+    if environment.get(name):
+        runner = f"{runner} {environment[name]}"
+    return dict(environment, **{name: runner})
+
+
+def command(
+    options: argparse.Namespace, diff_file: Path | None, shard: int, output: Path, capped: bool, cpus: int
+) -> list[str]:
+    """The command for one shard, with the diff file in diff mode: cargo-mutants in a capped scope when `capped`, with
+    its share of `cpus` jobserver tasks."""
+    selected = ["--in-diff", str(diff_file), "--workspace"] if diff_file else ["--package", options.package]
+    return [
+        *(scope(options.shards) if capped else []),
         "cargo",
         "mutants",
-        *scope,
+        *selected,
         "--in-place",
         "--shard",
         f"{shard}/{options.shards}",
         "--output",
         str(output),
+        "--jobserver-tasks",
+        str(max(1, cpus // options.shards)),
+        *(f"--cargo-test-arg={argument}" for argument in FAIL_FAST),
         *options.passed,
     ]
 
@@ -150,6 +237,14 @@ def main(argv: list[str] | None = None) -> int:
     files = [name for name in listed.stdout.split("\0") if name and (root / name).exists()]
     relative = workspace.relative_to(root)
     shards = [work / f"shard-{index}" for index in range(options.shards)]
+    capped = scopes_available()
+    if not capped:
+        print("rust_mutants: systemd-run --user cannot start a scope here, so the shards run without a memory cap")
+    triple = host(workspace)
+    if triple is None or not namespaces_available():
+        triple = None
+        print("rust_mutants: a PID namespace cannot be made here, so the test binaries run uncontained")
+    cpus = os.cpu_count() or 1
     runs: list[subprocess.Popen[bytes]] = []
     codes: list[int] = []
     try:
@@ -157,9 +252,11 @@ def main(argv: list[str] | None = None) -> int:
             copy = work / f"copy-{index}"
             copy_repository(root, files, copy)
             environment = dict(os.environ, CARGO_TARGET_DIR=str(copy / relative / "target"))
+            if triple is not None:
+                environment = contained(environment, triple)
             runs.append(
                 subprocess.Popen(
-                    command(options, diff_file, index, shard),
+                    command(options, diff_file, index, shard, capped, cpus),
                     cwd=copy / relative,
                     env=environment,
                     start_new_session=True,
