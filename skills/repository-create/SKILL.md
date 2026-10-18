@@ -47,6 +47,14 @@ For a project without Godot, skip this section.
 2. Merge the `[*.gd]` section of `templates/godot/.editorconfig` into the root `.editorconfig`.
 3. Pin the engine and the GDScript formatter in the flake with the `official` helper, by their publishers' digests.
 
+## Add the Python configuration
+
+For a project without Python, skip this section.
+
+1. Copy `templates/python/ruff.toml` and `pyrefly.toml` to the repository root. Set the target Python, the folders the checker reads, and its `search-path` below the lines marked "project-specific".
+2. Pin the interpreter, Ruff and Pyrefly in the flake by exact version, through the lock or the `crate` or `official` helper.
+3. Inside the shell, run `ruff format --check`, `ruff check`, and `pyrefly check`, and name all three in `AGENTS.md`'s checks.
+
 ## Add the licences
 
 1. If the owner has not specified the licence, ask which licence the project uses.

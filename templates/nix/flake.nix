@@ -7,6 +7,7 @@
 # and copy the hash the error reports; for a published binary, prefer the digest its publisher prints. A pin moves
 # in the same change as the file that checks it (the project's AGENTS.md, a script that refuses another version).
 # A Rust project pins cargo-mutants with `crate`, as `rust-mutants` runs it (rust.md, Mutation report).
+# A project with Python pins its interpreter, Ruff and Pyrefly (python.md); nixpkgs' builds are fine if pinned by the lock.
 {
   description = "<project> development shell";
 

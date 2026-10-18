@@ -1,6 +1,6 @@
 # Review rubric
 
-Review every change to a zucchero✿café project with these questions, whoever wrote it. Tools cover the lints and project checks. These questions cover what the tools cannot answer. Answer each with **pass**, **not applicable**, or a **finding**. Each finding cites its supporting rule in [general.md](general.md) or the language standard, [rust.md](languages/rust.md) or [gdscript.md](languages/gdscript.md). Fix the finding in the change that introduced it. Never add a run-time check where a type would suffice.
+Review every change to a zucchero✿café project with these questions, whoever wrote it. Tools cover the lints and project checks. These questions cover what the tools cannot answer. Answer each with **pass**, **not applicable**, or a **finding**. Each finding cites its supporting rule in [general.md](general.md) or the language standard, [rust.md](languages/rust.md), [gdscript.md](languages/gdscript.md) or [python.md](languages/python.md). Fix the finding in the change that introduced it. Never add a run-time check where a type would suffice.
 
 ## First
 
@@ -62,3 +62,12 @@ The sections below break each into the questions a reviewer answers line by line
 11. **Idiom.** Read the change as an experienced Godot engineer would. Name each place, by file and line, where they would write it differently: a loop a built-in or a typed array method states more plainly, a signal or node lookup done by hand where the engine provides it, a helper that duplicates one elsewhere in the project, a name that hides what the code does. Each is a finding, fixed in the change.
 
 How an agent runs a review, and how fixes are checked and landed, is in the [change-review](skills/change-review/SKILL.md) and [change-land](skills/change-land/SKILL.md) skills.
+
+## Python
+
+1. **Types.** Is every function annotated? Does `Any` or an unchecked `object` reach past a parser or a host module's wrapper? Is a `dict` or tuple passed between functions where a dataclass belongs? Can a record with an invariant be constructed or changed without checking it? Is a closed set a string rather than an `Enum`, or a `match` over one missing `assert_never`? ([Types and records](languages/python.md#types-and-records))
+2. **Boundaries.** Is text from a file, argument, environment, or process parsed once where it is read, with refusals naming the file, line, and field? ([Parsing at boundaries](languages/python.md#parsing-at-boundaries))
+3. **Entry point and errors.** Does work run at import time, beyond the import-path line? Does anything catch `Exception` and carry on, or print and continue? Is `assert` used on input? Does a subprocess use `shell=True`, or does its failure go unhandled? Does a tool write outside the folder it was given? ([Errors and the entry point](languages/python.md#errors-and-the-entry-point))
+4. **Tests.** Are a tool's tests in `test_<tool>.py` beside it? Does a standalone tool's test go through `main` with a made-up input? Are expected values written by hand? Was a parameter or hook added to production code only for a test? Does code that needs a host keep its decisions testable without it? ([Tests](languages/python.md#tests))
+5. **Exceptions.** Does each `noqa` or ignore cover one rule on one line with its reason? ([Exceptions to a check](languages/python.md#exceptions-to-a-check))
+6. **Idiom.** Read the change as an experienced Python reviewer would, against [Idiom](languages/python.md#idiom). Name each place, by file and line, where they would write it differently: a loop a comprehension or the standard library states more plainly, `os.path` where `pathlib` fits, a hand-written helper the standard library provides, a name that hides what the code does. Each is a finding, fixed in the change.

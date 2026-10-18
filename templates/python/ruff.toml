@@ -1,0 +1,17 @@
+# The Python standard's formatter and linter settings (languages/python.md): explicit families and rules, never the
+# defaults, which a Ruff release can change. The version is pinned in the development shell.
+line-length = 120
+# project-specific: the Python the development shell pins, such as "py313"
+target-version = "py313"
+
+[format]
+quote-style = "double"
+
+[lint]
+preview = true
+explicit-preview-rules = true
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "BLE001", "PTH", "SIM", "C4", "RET", "PERF", "FURB", "RUF",
+    "ANN201", "ANN202", "ANN204", "ANN205", "ANN206",
+    "S602", "PLW1510", "PLW1514",
+]
