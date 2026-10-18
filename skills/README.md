@@ -4,7 +4,7 @@ These are the skills zucchero✿café projects' agents use. Each folder holds on
 
 ## Ours
 
-`repository-create`, `repository-clone`, `change-write`, `change-review`, and `change-land` are zucchero✿café's own, under the repository's [CC-BY-4.0](../LICENSE).
+`repository-create`, `repository-clone`, `change-write`, `change-review`, and `change-land` are zucchero✿café's own, under the repository's [MIT licence](../LICENSE).
 
 ## Copied from pstack
 

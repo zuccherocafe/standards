@@ -16,4 +16,4 @@ A project's `AGENTS.md` links to these files and lists any departure from them w
 
 ## Licence
 
-The prose is [CC-BY-4.0](LICENSE). The templates and tools are MIT-0. The skills copied from pstack keep their MIT licence ([skills/README.md](skills/README.md)).
+Everything here is under the [MIT licence](LICENSE). The skills copied from pstack keep their own MIT notice ([skills/README.md](skills/README.md)).
