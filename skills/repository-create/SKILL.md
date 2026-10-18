@@ -23,7 +23,7 @@ First pull the standards checkout to the latest `main`. Paths below are relative
 ## Add the development shell
 
 1. Copy `templates/nix/flake.nix` to the repository root. Replace `<project>` in `description`.
-2. Keep the `standards` input with `github:zuccherocafe/standards` and `flake = false`. Keep the `rustScans` wrapper, which puts `rust-scans` on `PATH`. Keep the `shellHook` that links skills. For each other shared tool used from the standards' `tools/`, add a wrapper in the same way.
+2. Keep the `standards` input, `github:zuccherocafe/standards`, as a flake. Keep `rustScans`, the standards' `rust-scans` package, which puts `rust-scans` on `PATH`, and the `rustMutants` wrapper around the standards' `tools/rust_mutants.py`. Keep the `shellHook` that links skills. For each other shared tool, use the standards' package where the standards export one, and otherwise add a wrapper around its script in the same way as `rustMutants`.
 3. If the project uses Rust, point `rust` at its `rust-toolchain.toml`. Otherwise, remove `rust-overlay`, `rust`, and `rustScans`. Keep the `standards` input.
 4. Add each tool used by checks with the `crate` or `official` helper. Use an exact version and hash, as the file header specifies.
 5. Track `flake.nix`, create the lock, and then track `flake.lock` by running `git add flake.nix && nix flake lock && git add flake.lock`. A flake sees only tracked files.

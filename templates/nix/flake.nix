@@ -18,11 +18,9 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # The standards' shared tools, pinned by flake.lock like every input and moved with the other pins.
-    standards = {
-      url = "github:zuccherocafe/standards";
-      flake = false;
-    };
+    # The standards' shared tools and skills, pinned by flake.lock like every input and moved with the other pins. It
+    # keeps its own nixpkgs, so its tools are built as the standards' own checks build them.
+    standards.url = "github:zuccherocafe/standards";
   };
 
   outputs = { self, nixpkgs, rust-overlay, standards }:
@@ -61,9 +59,7 @@
         });
 
       # The standards' report scans as `rust-scans`; the project passes its cores and kernels (its AGENTS.md).
-      rustScans = pkgs.writeShellScriptBin "rust-scans" ''
-        exec ${pkgs.python3}/bin/python3 -I ${standards}/tools/rust_scans.py "$@"
-      '';
+      rustScans = standards.packages.${system}.rust-scans;
 
       # The standards' mutation report as `rust-mutants`, over the cargo-mutants the project pins below.
       rustMutants = pkgs.writeShellScriptBin "rust-mutants" ''

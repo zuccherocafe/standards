@@ -19,7 +19,7 @@ The standards apply to this repository too. Use British English and one paragrap
 
 ## Checks
 
-Run every check from the repository root with `nix develop -c check`, before each commit; [flake.nix](flake.nix) defines the shell and the command. It checks every link and heading anchor between the Markdown files with lychee, offline, so a renamed file or heading that leaves a link behind fails. It runs `ruff format --check`, `ruff check`, and `pyrefly check` over every Python file git does not ignore, and each Python `tests/` folder's suite. Each check runs even when an earlier one fails, and prints its time. A link to another site is not checked, since an offline check cannot tell a moved page from a network failure.
+Run every check from the repository root with `nix develop -c check`, before each commit; [flake.nix](flake.nix) defines the shell and the command. It checks every link and heading anchor between the Markdown files with lychee, offline, so a renamed file or heading that leaves a link behind fails. It runs `ruff format --check`, `ruff check`, and `pyrefly check` over every Python file git does not ignore, and each Python `tests/` folder's suite. It runs `cargo fmt --check`, Clippy with `-D warnings`, and the tests of the Rust workspace in `tools/rust/`, whose crates the flake also exports as packages. Each check runs even when an earlier one fails, and prints its time. A link to another site is not checked, since an offline check cannot tell a moved page from a network failure.
 
 ## Commits
 

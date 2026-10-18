@@ -12,7 +12,7 @@ Cores take values and return values. They never await, import a runtime, read a 
 
 Ref: Matthias Endler, [async Rust in practice](https://corrode.dev/blog/async/), on a synchronous core and an async shell.
 
-**Checked by:** the dependency list and the project's dependency-edge check for runtime and network crates in cores; the report scans' purity scan for the file, process, environment, and clock spellings it recognises; review for async syntax, spawning, and indirect input, output, and blocking.
+**Checked by:** the dependency list and the project's dependency-edge check for runtime and network crates in cores; the report scans' purity scan for the file, process, environment, and clock paths it recognises, and their async scan for the runtime, network, and async I/O paths it names and for `async fn`, `async` blocks and closures, and `.await` in cores; review for what the scans miss, such as macro arguments and re-exports, and for spawning and indirect input, output, and blocking.
 
 ### Choose the scheduler in the binary
 

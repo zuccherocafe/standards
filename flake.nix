@@ -18,6 +18,22 @@
       };
 
       rust = pkgs.rust-bin.fromRustupToolchainFile ./tools/rust/rust-toolchain.toml;
+      rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
+
+      # Built from this repository's own source and lockfile with the pinned toolchain; it runs `cargo metadata`
+      # from the PATH of the shell it is used in.
+      rustScans = rustPlatform.buildRustPackage {
+        pname = "rust-scans";
+        inherit ((builtins.fromTOML (builtins.readFile ./tools/rust/Cargo.toml)).workspace.package) version;
+        src = pkgs.lib.fileset.toSource {
+          root = ./tools/rust;
+          fileset = pkgs.lib.fileset.unions [ ./tools/rust/Cargo.toml ./tools/rust/Cargo.lock ./tools/rust/crates ];
+        };
+        cargoLock.lockFile = ./tools/rust/Cargo.lock;
+        cargoBuildFlags = [ "--package" "rust-scans" ];
+        # The checks run its tests.
+        doCheck = false;
+      };
 
       # A new minor version moves the target in ruff.toml and pyrefly.toml with it.
       python = pkgs.python315;
@@ -40,7 +56,7 @@
         name = "check";
         # Each check is a function `step` calls by name, which ShellCheck cannot follow.
         excludeShellChecks = [ "SC2329" ];
-        runtimeInputs = [ python pkgs.ruff pkgs.pyrefly pkgs.lychee pkgs.git pkgs.findutils pkgs.coreutils ];
+        runtimeInputs = [ rust python pkgs.ruff pkgs.pyrefly pkgs.lychee pkgs.git pkgs.findutils pkgs.coreutils ];
         text = ''
           cd "$(git rev-parse --show-toplevel)"
           export PYTHONDONTWRITEBYTECODE=1
@@ -78,11 +94,16 @@
           step "python lint" lint
           step "python types" types
           step "python tests" tests
+          step "rust format" cargo fmt --manifest-path tools/rust/Cargo.toml --check
+          step "rust lint" cargo clippy --manifest-path tools/rust/Cargo.toml --locked --all-targets -- -D warnings
+          step "rust tests" cargo test --manifest-path tools/rust/Cargo.toml --locked
           exit "$failed"
         '';
       };
     in
     {
+      packages.${system}.rust-scans = rustScans;
+
       devShells.${system}.default = pkgs.mkShell {
         packages = [
           rust
