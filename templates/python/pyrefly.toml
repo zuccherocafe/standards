@@ -1,4 +1,4 @@
-# The Python standard's type checker settings (languages/python.md); the version is pinned in the development shell.
+# The Python standard's type checker settings (languages/python/); the version is pinned in the development shell.
 preset = "strict"
 # project-specific: the latest stable Python, which the development shell pins; a host script's folder has its own
 # pyrefly.toml with its host's version, since a sub-config cannot set one; run pyrefly check with the files as arguments

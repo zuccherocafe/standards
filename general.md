@@ -1,6 +1,6 @@
 # Engineering rules
 
-These rules apply to every zucchero✿café project, whatever its language. A language standard, such as [rust.md](languages/rust.md), applies these rules to that language and adds language-specific rules. A project's `AGENTS.md` may depart from either standard. It records each departure with its reason.
+These rules apply to every zucchero✿café project, whatever its language. A language standard, such as [languages/rust/](languages/rust/), applies these rules to that language and adds language-specific rules. A project's `AGENTS.md` may depart from either standard. It records each departure with its reason.
 
 ## Design
 

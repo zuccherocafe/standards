@@ -6,8 +6,8 @@
 # its exact version and its hash, and add it to `packages`. To learn a hash, write `lib.fakeHash`, enter the shell
 # and copy the hash the error reports; for a published binary, prefer the digest its publisher prints. A pin moves
 # in the same change as the file that checks it (the project's AGENTS.md, a script that refuses another version).
-# A Rust project pins cargo-mutants with `crate`, as `rust-mutants` runs it (rust.md, Mutation report).
-# A project with Python pins its interpreter, Ruff and Pyrefly (python.md); nixpkgs' builds are fine if pinned by the lock.
+# A Rust project pins cargo-mutants with `crate`, as `rust-mutants` runs it (languages/rust/tests.md, Mutation report).
+# A project with Python pins its interpreter, Ruff and Pyrefly (languages/python/README.md); nixpkgs' builds are fine if pinned by the lock.
 {
   description = "<project> development shell";
 

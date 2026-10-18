@@ -8,7 +8,7 @@ Run from the repository root; a project names its cores and kernels, which only 
   rust-scans --workspace rust --core <crate> --kernel <crate>=<module>[,<module>...]
 
 A kernel is a module path under the crate's `src/` without `.rs`, covering its file and its directory: a private
-numerical module whose functions may take primitives (rust.md, Quantities). Needs `cargo` on PATH.
+numerical module whose functions may take primitives (languages/rust/design.md, Quantities). Needs `cargo` on PATH.
 """
 
 import argparse

@@ -1,6 +1,6 @@
-; The [debug] section of a Godot project's project.godot: every GDScript warning at Error or off, for the engine
-; release gdscript.md names. Merge it into the project's own [debug] section. The editor drops comments and values
-; equal to the engine's default when it saves, so the reasons live in gdscript.md, not here.
+; The [debug] section of a Godot project's project.godot: every GDScript warning at Error or off, for the engine release
+; languages/gdscript/README.md names. Merge it into the project's own [debug] section. The editor drops comments and
+; values equal to the engine's default when it saves, so the reasons live in languages/gdscript/warnings.md, not here.
 
 [debug]
 
