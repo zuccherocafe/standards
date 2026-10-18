@@ -1,0 +1,5 @@
+# The nightly the Rust template pins, so the standards' own tools build as a project's crates do.
+[toolchain]
+channel = "nightly-2026-09-24"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

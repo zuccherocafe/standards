@@ -1,0 +1,14 @@
+line-length = 120
+target-version = "py315"
+
+[format]
+quote-style = "double"
+
+[lint]
+preview = true
+explicit-preview-rules = true
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "BLE001", "PTH", "SIM", "C4", "RET", "PERF", "FURB", "RUF",
+    "ANN201", "ANN202", "ANN204", "ANN205", "ANN206",
+    "S602", "PLW1510", "PLW1514",
+]

@@ -1,0 +1,4 @@
+# Build and check state, all regenerable.
+/tools/rust/target/
+__pycache__/
+/.ruff_cache/

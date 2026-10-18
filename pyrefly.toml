@@ -1,0 +1,5 @@
+preset = "strict"
+python-version = "3.15"
+project-includes = ["**/*.py"]
+# The folders holding tools, which their tests import.
+search-path = ["tools", "templates/rust/tools"]

@@ -35,7 +35,7 @@ For a project without Rust, skip this section.
 
 1. Use the repository root as the Rust workspace, or `rust/` if the repository also contains other languages. Copy everything from `templates/rust/` except `tools/` into that workspace.
 2. Rename `crates/example` to the first real crate. Update `members` and that crate's `description`.
-3. Copy `templates/rust/tools/api.py` and `api_units.py` into the repository's `tools/`. Set `WORKSPACE` in `api.py` to the workspace folder.
+3. Copy `templates/rust/tools/api.py` into the repository's `tools/` and `templates/rust/tools/tests/` into `tools/tests/`. Set `WORKSPACE` in `api.py` to the workspace folder.
 4. Add the project's own entries only below the lines marked "project-specific".
 5. Inside the shell, run `cargo build`, `cargo fmt --check`, and `cargo clippy --all-targets -- -D warnings` in the workspace.
 

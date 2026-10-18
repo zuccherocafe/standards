@@ -17,6 +17,10 @@ This repository contains rules for contributors to every zucchero✿café projec
 
 The standards apply to this repository too. Use British English and one paragraph per Markdown line. Keep template comments within the comment budget.
 
+## Checks
+
+Run every check from the repository root with `nix develop -c check`, before each commit; [flake.nix](flake.nix) defines the shell and the command. It checks every link and heading anchor between the Markdown files with lychee, offline, so a renamed file or heading that leaves a link behind fails. It runs `ruff format --check`, `ruff check`, and `pyrefly check` over every Python file git does not ignore, and each Python `tests/` folder's suite. Each check runs even when an earlier one fails, and prints its time. A link to another site is not checked, since an offline check cannot tell a moved page from a network failure.
+
 ## Commits
 
-Write messages as [general.md](general.md#version-control) says. The scope is the changed file or folder: `general`, `rust`, `gdscript`, `python`, `review`, `templates`, `tools`, `skills`, `readme`, or `agents`. Make one coherent change per commit. Include no attribution of any kind, including `Co-Authored-By`, tool trailers, or session trailers.
+Write messages as [general.md](general.md#version-control) says. The scope is the changed file or folder: `general`, `rust`, `gdscript`, `python`, `review`, `templates`, `tools`, `skills`, `readme`, `agents`, or `flake`. Make one coherent change per commit. Include no attribution of any kind, including `Co-Authored-By`, tool trailers, or session trailers.
