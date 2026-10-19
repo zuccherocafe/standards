@@ -50,6 +50,18 @@ A project's checks exist to catch what is broken, not what is different.
 
 **Pins live in the flake.** Each tool is pinned to an exact version and hash. Read a language toolchain from its own pin file, such as `rust-toolchain.toml`, so it has one pin. Fetch a tool built from source by version with fixed hashes. Move a pin only in the same change as the file that checks it. That file may be an `AGENTS.md` version line or a script that refuses another version. The shell and checks must agree.
 
+**Toolchains move often, in small steps.** Each project moves its toolchains to new releases soon after they ship: a dated Rust nightly at least monthly, the nixpkgs revision that provides Python and its tools at least monthly, and an engine at every stable release. No toolchain is more than three months behind. Small, frequent moves bring fixes while the affected code is familiar, and keep each move's new lints few.
+
+**Standards moves first.** This repository moves its own pins and its templates' first, so a project copies a version that has already built the shared tools. Each project then follows in a change of its own, as it does for its standards pin.
+
+**One upgrade is one change.** It moves one toolchain with everything coupled to it: a Rust nightly with `cargo-public-api`; an engine with its binary, export templates and binding; a Python minor release with the target version in every Ruff and Pyrefly configuration. Nothing else rides in the change. Updating the dependencies in `Cargo.lock` is a change of its own, on the same schedule.
+
+**A new lint is fixed, not allowed.** Where the new toolchain adds a lint, warning or type check, the upgrade change fixes every site it reports. If the check is wrong for our code, it is turned off in the shared template with its reason, here first. A new allow at one site needs the reason any exception needs. A workaround the release makes unnecessary is removed with its note.
+
+**The upgrade shows what moved.** The change carries the full checks and a dandegate report from the base to the upgrade, with the performance steps selected. A difference the toolchain caused is explained before later work depends on it.
+
+**Checked by:** review of the upgrade change against these rules; the project's checks, where [pin-age](../tools/pin_age.py) prints a line for each pin over a month old and fails on none.
+
 **Copy tool configuration, pin shared tools.** Cargo, Clippy, rustfmt, cargo-deny, Godot, and the GDScript formatter read only files inside the project, and a clean clone must build alone. So a project copies the files in [templates/](../templates/) it uses and adds its own entries after the shared ones, which keeps the shared part comparable with the latest template. A difference from the template is reported, never a failed check. A tool in [tools/](../tools/) reads the project's files and takes project details as arguments, so one copy serves every project. The development shell takes this repository as a flake input pinned in `flake.lock` and puts the tools on `PATH`. Whenever this repository's `main` moves, each project moves its pin to it in a change of its own, so every project reads the latest standards.
 
 **GPU programs are official binaries.** A program that draws or plays sound uses the publisher's binary. Examples include a game engine or a 3D suite. Fetch that binary by the publisher's digest and install it unchanged. It then loads the host's graphics and audio libraries and GPU drivers as its publisher built it to. GPU drivers, compositors, and sound servers stay on the host.

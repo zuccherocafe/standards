@@ -44,6 +44,7 @@
       rustScans = standards.packages.${system}.rust-scans;
       rustMutants = standards.packages.${system}.rust-mutants;
       dandegate = standards.packages.${system}.dandegate;
+      pinAge = standards.packages.${system}.pin-age;
 
     in
     {
@@ -53,6 +54,7 @@
           rustScans
           rustMutants
           dandegate
+          pinAge
         ];
 
         # Links the pinned standards' skills for agents; the links name store paths, so they are ignored and remade.

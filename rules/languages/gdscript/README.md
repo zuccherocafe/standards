@@ -28,7 +28,7 @@ Each project pins an exact engine build, such as `4.7.1.stable.official.a13da4fe
 
 ### Engine upgrades
 
-A project adopts every stable engine release, patch or minor, soon after release. Frequent upgrades stay small and deliver fixes while the affected code is familiar. They also keep the warning list and workarounds current. Each upgrade is one change that follows these steps:
+A project upgrades the engine as [Toolchain](../../general.md#toolchain) says. Each upgrade also follows these engine steps:
 
 1. Move the engine pin in the project's `AGENTS.md`, the engine binary, and the export templates together. Record their versions and digests in the development shell's flake ([Toolchain](../../general.md#toolchain)). The checks, editor, and exported program must use one build.
 2. When upgrading the engine, move any GDExtension binding, such as gdext, and its engine-API feature together. For a minor release, wait until the binding supports its API. Do not run a binding built against the previous API on the new engine.
@@ -36,7 +36,6 @@ A project adopts every stable engine release, patch or minor, soon after release
 4. Compare the release's warning list with the previous list. Set every new warning to Error or off ([An engine upgrade reviews the warning list](warnings.md#an-engine-upgrade-reviews-the-warning-list)).
 5. Re-check every recorded engine workaround. Remove each workaround fixed by the release, together with its note.
 6. Run the formatter's `--check`, since the formatter's pin may move with the engine's syntax.
-7. Land the change with the full checks, a report of what changed, and the performance report. Review engine-induced differences before further work depends on them.
 
 **Checked by:** review of the upgrade change against these steps; the project's checks.
 
