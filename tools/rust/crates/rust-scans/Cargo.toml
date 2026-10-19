@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
-description = "The Rust standard's report scans: input and output, units, error codes and async in a workspace's source"
+description = "Scans a Rust workspace for I/O in core crates, unit-suffixed names, codes in error messages and async code"
 
 [dependencies]
 camino.workspace = true

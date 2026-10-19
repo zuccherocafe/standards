@@ -1,5 +1,6 @@
-//! The Rust standard's report scans: four review aids that read a Cargo workspace's source as Rust syntax and print
-//! what they find, failing nothing (rules/languages/rust/documentation.md, Report scans).
+//! Scans a Rust workspace for I/O in core crates, unit-suffixed names, codes in error messages and async code.
+//! The four scans are review aids that read the source as Rust syntax and print what they find, failing nothing
+//! (rules/languages/rust/documentation.md, Report scans).
 //!
 //! - H1 reports file, process, environment and clock access (`std::fs`, `std::process`, `std::env`,
 //!   `std::time::Instant`, `std::time::SystemTime`) in the crates named as cores.
