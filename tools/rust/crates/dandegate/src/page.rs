@@ -1,8 +1,9 @@
 //! Writes the report's page, `index.html`. The page is plain HTML with its style inline. It loads nothing from outside,
 //! reads in light and dark themes, and links only to files inside the output folder.
 //!
-//! The page's sections, in order, are what makes the report incomplete, the measuring-code warning, the measures that
-//! got worse, every step's outcome, what dandegate reused or kept, the steps' sections, every measure, and the images.
+//! The page's sections, in order, are what makes the report incomplete, the host programs not found, the
+//! measuring-code warning, the measures that got worse, every step's outcome, what dandegate reused or kept, the steps'
+//! sections, every measure, and the images.
 
 use std::fmt::Write as _;
 
@@ -46,6 +47,8 @@ pub(crate) struct Images {
 pub(crate) struct Page<'a> {
     pub(crate) revisions: &'a PerSide<Revision>,
     pub(crate) incomplete: &'a [String],
+    /// One warning for each host program not found, or why none can be given.
+    pub(crate) host: &'a [String],
     pub(crate) measure_code: Option<&'a [String]>,
     pub(crate) measure_code_error: Option<&'a str>,
     pub(crate) affected: &'a [&'a MeasureRow],
@@ -153,6 +156,13 @@ pub(crate) fn render(page: &Page<'_>) -> String {
         escape(&title)
     );
     incomplete(&mut html, page.incomplete);
+    for warning in page.host {
+        let _ = writeln!(
+            html,
+            "<div class=\"warning host\"><p>{}</p></div>",
+            escape(warning)
+        );
+    }
     measure_code(&mut html, page);
     worse(&mut html, page.worse);
     steps(&mut html, page.steps);

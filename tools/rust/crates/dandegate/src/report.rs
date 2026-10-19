@@ -5,7 +5,7 @@
 //! A report runs in this order:
 //!
 //! 1. Check out both commits as detached worktrees in a folder of `.cache/dandegate/scratch/` that this run makes for
-//!    itself.
+//!    itself, and link the host programs the plan names into a folder beside them ([`step::host`]).
 //! 2. For each reusable step, work out its identity, running its collector, and look for a kept result.
 //! 3. Decide which steps run. A step that only other steps need runs only when one of them runs fresh.
 //! 4. Run the steps, and keep each complete success.
@@ -33,11 +33,11 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::compare::measure::Measures;
 use crate::plan::{
-    Arg, Expansion, PairArg, PairValues, Plan, Recipe, Report, Runs, Step, Template, TreeArg,
-    TreeValues, Work,
+    Arg, Expansion, HostProgram, PairArg, PairValues, Plan, Recipe, Report, Runs, Step, Template,
+    TreeArg, TreeValues, Work,
 };
 use crate::report::schedule::{Graph, Instance, InstanceId, PerInstance, Place, Start, run_all};
-use crate::report::step::{Launch, LaunchError, Outcome, Skip, check_outputs, launch, shown};
+use crate::report::step::{Launch, LaunchError, Outcome, Skip, check_outputs, host, launch, shown};
 use crate::report::store::{Identity, Lookup, Store};
 use crate::revision::git::Repository;
 use crate::revision::{PerSide, Revision, Side};
@@ -85,6 +85,10 @@ struct Session<'a> {
     adapters: Utf8PathBuf,
     adapter_files: Result<BTreeMap<String, String>, String>,
     env: Vec<(String, String)>,
+    /// The folder of host programs every command finds after its shell's own tools, when the plan names any.
+    host: Option<Utf8PathBuf>,
+    /// One warning for each host program not found, or why none can be given.
+    host_warnings: Vec<String>,
     log: Log,
     store: Store,
     identities: PerInstance<Option<Result<Identity, String>>>,
@@ -127,6 +131,10 @@ pub(crate) fn report(request: &Request) -> Finished {
     if let Some(file) = &request.measures_file {
         env.push(("DANDEGATE_MEASURES".to_owned(), file.to_string()));
     }
+    let (host, host_warnings) = host_programs(request.plan.host(), &scratch);
+    for warning in &host_warnings {
+        log.write(&format!("=== {warning}\n"));
+    }
     let graph = Graph::new(&request.plan);
     let identities = graph.each(|_| None);
     let mut session = Session {
@@ -140,6 +148,8 @@ pub(crate) fn report(request: &Request) -> Finished {
         scratch,
         adapters,
         env,
+        host,
+        host_warnings,
         log,
         store: Store::new(cache.join("results")),
         identities,
@@ -162,6 +172,40 @@ fn prepare_cache(cache: &Utf8Path) -> Result<Utf8PathBuf, String> {
         acquire(&cache.join("scratch"), "")
     })();
     made.map_err(|error| format!("no scratch folder could be made under {cache}: {error}"))
+}
+
+/// The run's folder of host programs, none when the plan names none or the run has no scratch folder, and the page's
+/// warnings: one for each program not on dandegate's `PATH`, or why the folder cannot be given.
+fn host_programs(
+    programs: &[HostProgram],
+    scratch: &Result<Utf8PathBuf, String>,
+) -> (Option<Utf8PathBuf>, Vec<String>) {
+    // Without a scratch folder there are no checkouts, so no step runs.
+    let Ok(scratch) = scratch else {
+        return (None, Vec::new());
+    };
+    if programs.is_empty() {
+        return (None, Vec::new());
+    }
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let linked = std::env::current_dir()
+        .map_err(|error| format!("dandegate's current folder cannot be read: {error}"))
+        .and_then(|current| host::link(programs, &path, &current, &scratch.join("host")));
+    match linked {
+        Ok(missing) => (
+            Some(scratch.join("host")),
+            missing
+                .iter()
+                .map(|program| format!("host program {program} is not on dandegate's PATH"))
+                .collect(),
+        ),
+        Err(why) => (
+            None,
+            vec![format!(
+                "the host programs cannot be given to the steps: {why}"
+            )],
+        ),
+    }
 }
 
 /// A new folder in `parent`, named `prefix`, this process's number and a counter, made by this call and so owned by
@@ -501,6 +545,7 @@ impl Session<'_> {
                     stdout,
                     stderr,
                     deadline,
+                    host: self.host.as_deref(),
                 });
                 match launched {
                     Ok(status) => Outcome::Exited {
@@ -543,6 +588,7 @@ impl Session<'_> {
                     log: log_path,
                     env: &self.env,
                     deadline,
+                    host: self.host.as_deref(),
                 };
                 match rust::run(*report, side, &context) {
                     Ok(()) => Outcome::Reported {

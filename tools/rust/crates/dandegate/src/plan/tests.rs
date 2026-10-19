@@ -162,6 +162,39 @@ fn an_environment_name_is_a_variable_a_step_may_set() {
 }
 
 #[test]
+fn host_programs_are_bare_file_names_each_named_once_in_the_files_order() {
+    let plan = read(&format!(
+        "host = [\"gamescope\", \"Xvfb\", \"vk.info\"]\n{MINIMAL}"
+    ))
+    .expect("a plan");
+    let named: Vec<&str> = plan.host().iter().map(HostProgram::as_str).collect();
+    assert_eq!(named, ["gamescope", "Xvfb", "vk.info"]);
+    assert_eq!(read(MINIMAL).expect("a plan").host(), []);
+    // Each name as TOML writes it, then as the refusal shows it.
+    let refused = [
+        (r#""""#, r#""""#),
+        (r#"".""#, r#"".""#),
+        (r#""..""#, r#""..""#),
+        (r#""/usr/bin/gamescope""#, r#""/usr/bin/gamescope""#),
+        (r#""bin/gamescope""#, r#""bin/gamescope""#),
+        (r#""a\u0000b""#, r#""a\0b""#),
+    ];
+    for (written, shown) in refused {
+        assert_eq!(
+            refusal(&format!("\nhost = [{written}]\n{MINIMAL}")),
+            format!("dandegate.toml:2: host: {shown} is not a program's file name"),
+            "{written}"
+        );
+    }
+    assert_eq!(
+        refusal(&format!(
+            "host = [\"gamescope\",\n  \"gamescope\"]\n{MINIMAL}"
+        )),
+        "dandegate.toml:2: host: \"gamescope\" is named twice"
+    );
+}
+
+#[test]
 fn a_pattern_names_a_variable_or_a_prefix() {
     let whole = EnvPattern::new("LD_LIBRARY_PATH").expect("a name");
     let prefix = EnvPattern::new("VK_*").expect("a prefix");

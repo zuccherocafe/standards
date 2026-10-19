@@ -171,6 +171,8 @@ pub(crate) struct Context<'a> {
     pub(crate) log: &'a Utf8Path,
     pub(crate) env: &'a [(String, String)],
     pub(crate) deadline: Instant,
+    /// The run's folder of host programs, as [`Launch`] takes it.
+    pub(crate) host: Option<&'a Utf8Path>,
 }
 
 /// Why a report stopped before writing its section.
@@ -285,6 +287,7 @@ impl Context<'_> {
             stdout: File::create(stdout).map_err(CommandError::Files)?,
             stderr: log,
             deadline: self.deadline,
+            host: self.host,
         });
         match launched {
             Ok(status) if status.success() => Ok(()),

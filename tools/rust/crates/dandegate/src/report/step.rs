@@ -6,7 +6,8 @@
 //! the tools the revision's shell provides, however the shell sets its `PATH`: a tool the shell lacks is not found, and
 //! the step fails with the shell's error in its log, rather than run a tool the revision does not pin. The rest of the
 //! environment passes through, except `DANDEGATE_REPOSITORY` and `DANDEGATE_MEASURES`, which hold this run's values or
-//! are unset.
+//! are unset. The host programs `dandegate.toml` names are the one exception to the shell's `PATH`: the command finds
+//! them after the shell's own tools ([`host`]).
 //!
 //! A command runs below a supervisor, a copy of dandegate that owns every process the command starts ([`supervise`]),
 //! and writes its output to a file. When the command exits, the supervisor stops whatever it left running. When its
@@ -15,11 +16,12 @@
 //!
 //! A failure here becomes an outcome on the page. It never stops the page.
 
+pub(crate) mod host;
 pub(crate) mod supervise;
 
 use std::collections::BTreeSet;
 use std::env;
-use std::ffi::OsString;
+use std::ffi::OsStr;
 use std::fmt;
 use std::fs::{self, File};
 use std::io;
@@ -56,6 +58,9 @@ pub(crate) struct Launch<'a> {
     pub(crate) stdout: File,
     pub(crate) stderr: File,
     pub(crate) deadline: Instant,
+    /// The run's folder of host programs, which the command finds after its shell's own tools; none when the plan
+    /// names no host program.
+    pub(crate) host: Option<&'a Utf8Path>,
 }
 
 /// Why a command did not finish.
@@ -79,16 +84,22 @@ pub(crate) fn launch(launch: Launch<'_>) -> Result<ExitStatus, LaunchError> {
     let caller = env::var_os("PATH").unwrap_or_default();
     let nix = find_on(&caller, "nix").ok_or(LaunchError::NoNix)?;
     let supervisor = env::current_exe().map_err(LaunchError::Supervisor)?;
-    let mut command = Command::new(supervisor);
+    let mut command = Command::new(&supervisor);
     command
         .arg(supervise::FLAG)
         .arg("--")
         .arg(nix)
         .args(["develop", "--unset", "PATH"])
         .arg(launch.checkout)
-        .arg("-c")
-        .args(launch.command)
-        .current_dir(launch.directory);
+        .arg("-c");
+    if let Some(folder) = launch.host {
+        command
+            .arg(&supervisor)
+            .arg(host::FLAG)
+            .arg(folder)
+            .arg("--");
+    }
+    command.args(launch.command).current_dir(launch.directory);
     for name in RESERVED {
         command.env_remove(name);
     }
@@ -117,14 +128,19 @@ pub(crate) fn launch(launch: Launch<'_>) -> Result<ExitStatus, LaunchError> {
 }
 
 /// The first executable file called `name` in the folders of `path`.
-fn find_on(path: &OsString, name: &str) -> Option<PathBuf> {
-    env::split_paths(path)
+fn find_on(path: &OsStr, name: &str) -> Option<PathBuf> {
+    let folders: Vec<PathBuf> = env::split_paths(path)
         .filter(|folder| !folder.as_os_str().is_empty())
-        .map(|folder| folder.join(name))
-        .find(|file| {
-            fs::metadata(file)
-                .is_ok_and(|found| found.is_file() && found.permissions().mode() & 0o111 != 0)
-        })
+        .collect();
+    find_in(&folders, name)
+}
+
+/// The first executable file called `name` in `folders`.
+fn find_in(folders: &[PathBuf], name: &str) -> Option<PathBuf> {
+    folders.iter().map(|folder| folder.join(name)).find(|file| {
+        fs::metadata(file)
+            .is_ok_and(|found| found.is_file() && found.permissions().mode() & 0o111 != 0)
+    })
 }
 
 /// A command as a log shows it: words with spaces, quotes or nothing in them single-quoted, as a shell reads them.

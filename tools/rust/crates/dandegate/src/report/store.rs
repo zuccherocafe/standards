@@ -115,6 +115,8 @@ pub(crate) struct NeedIdentity {
 /// - Every file of the after revision's adapters folder.
 /// - The environment variables the step's patterns match, and its collector's lines.
 /// - dandegate's own executable.
+/// - The host programs the plan names, by name: the plan comes from the after revision, so the before commit does not
+///   fix them.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct Identity {
     pub(crate) dandegate: String,
@@ -125,6 +127,9 @@ pub(crate) struct Identity {
     pub(crate) adapters: BTreeMap<String, String>,
     pub(crate) environment: BTreeMap<String, String>,
     pub(crate) collected: BTreeMap<String, String>,
+    /// The host programs the plan names, as written, left out when it names none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) host: Vec<String>,
 }
 
 impl Identity {

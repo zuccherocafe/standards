@@ -12,12 +12,15 @@
 //!    steps last (`scheduling`).
 //! 4. A page that stands alone, and earlier reports read back (`durable`).
 //! 5. A Rust workspace's built-in reports (`rust`).
-//! 6. Every refusal, before any step runs (`invocation`).
+//! 6. Host programs a step takes from the caller's machine (`host`).
+//! 7. Every refusal, before any step runs (`invocation`).
 
 #[path = "scenarios/comparisons.rs"]
 mod comparisons;
 #[path = "scenarios/durable.rs"]
 mod durable;
+#[path = "scenarios/host.rs"]
+mod host;
 #[path = "scenarios/invocation.rs"]
 mod invocation;
 

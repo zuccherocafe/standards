@@ -9,6 +9,7 @@
 //! - Every need names a step of a kind that the needing step can wait for. The needs have no cycle, and no ordinary
 //!   step needs an exclusive one, since exclusive steps run after every other step.
 //! - The enabled steps are the ordinary steps, the steps that `--with` names, and every step they need.
+//! - Every host program is a bare file name, named once.
 //!
 //! A per-revision step can need per-revision steps, on its own side. An after step can need per-revision steps, on the
 //! after side, or after steps. A once step can need any step, on every side that step runs.
@@ -113,6 +114,28 @@ impl Input {
 
     pub(crate) fn value(&self) -> &str {
         &self.value
+    }
+}
+
+/// A program the steps take from the caller's machine rather than the revision's shell: a bare file name.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct HostProgram(Box<str>);
+
+impl HostProgram {
+    /// `None` for an empty name, `.`, `..`, or one holding `/` or NUL.
+    pub(crate) fn new(text: &str) -> Option<Self> {
+        let plain = !matches!(text, "" | "." | "..") && !text.contains(['/', '\0']);
+        plain.then(|| Self(text.into()))
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for HostProgram {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
     }
 }
 
@@ -505,6 +528,8 @@ impl Step {
 /// The steps file read into checked values, with the command line applied.
 #[derive(Clone, Debug)]
 pub(crate) struct Plan {
+    /// Unique, in the file's order.
+    host: Vec<HostProgram>,
     inputs: IndexMap<InputName, Input>,
     steps: IndexMap<StepName, Step>,
     measures: MeasureRules,
@@ -512,6 +537,11 @@ pub(crate) struct Plan {
 }
 
 impl Plan {
+    /// The host programs every step's command finds after its revision shell's own tools.
+    pub(crate) fn host(&self) -> &[HostProgram] {
+        &self.host
+    }
+
     pub(crate) fn inputs(&self) -> &IndexMap<InputName, Input> {
         &self.inputs
     }

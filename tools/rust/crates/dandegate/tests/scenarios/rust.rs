@@ -57,7 +57,7 @@ exit 0
 
 const ALPHA_BEFORE: &str = "pub fn alpha() -> u8 {\n    1\n}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn one() {}\n}\n";
 
-fn workspace(fixture: &Fixture) {
+pub(crate) fn workspace(fixture: &Fixture) {
     fixture.tool("rust-scans", SCANS);
     fixture.tool("rust-mutants", MUTANTS);
     fixture.tool("cargo", CARGO);

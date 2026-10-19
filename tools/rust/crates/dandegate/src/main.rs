@@ -15,7 +15,9 @@
 //!
 //! dandegate runs steps on threads, not on an async runtime. It runs up to four steps at once, and runs exclusive steps
 //! last, one at a time. It runs every git operation with the `git` command and every step under `nix develop`, below a
-//! copy of itself started as `dandegate --supervise -- <command>`, which owns every process the step starts.
+//! copy of itself started as `dandegate --supervise -- <command>`, which owns every process the step starts. When
+//! `dandegate.toml` names host programs, the shell starts the step through another copy, `dandegate --host-programs
+//! <folder> -- <command>`, which gives the step those programs and becomes the command.
 //!
 //! - [`plan`] reads the steps file once into checked types. No later code checks them again.
 //! - [`revision`] resolves the two revisions, with [`revision::git`].
@@ -43,7 +45,7 @@ use clap::Parser;
 use crate::compare::measure::{LineError, Measures, SavedError};
 use crate::plan::{Plan, PlanError};
 use crate::report::Request;
-use crate::report::step::supervise;
+use crate::report::step::{host, supervise};
 use crate::revision::PerSide;
 use crate::revision::git::{Repository, ResolveError};
 
@@ -147,14 +149,18 @@ enum ImportError {
 }
 
 fn main() -> ExitCode {
-    let mut given = std::env::args_os().skip(1);
-    if given.next().is_some_and(|first| first == supervise::FLAG) {
-        let rest: Vec<OsString> = given.collect();
-        let command = match rest.split_first() {
-            Some((separator, command)) if separator == "--" => command,
-            _ => &rest,
-        };
-        return ExitCode::from(supervise::supervise(command));
+    let given: Vec<OsString> = std::env::args_os().skip(1).collect();
+    match given.as_slice() {
+        [flag, separator, command @ ..] if flag == supervise::FLAG && separator == "--" => {
+            return ExitCode::from(supervise::supervise(command));
+        }
+        [flag, command @ ..] if flag == supervise::FLAG => {
+            return ExitCode::from(supervise::supervise(command));
+        }
+        [flag, folder, separator, command @ ..] if flag == host::FLAG && separator == "--" => {
+            return ExitCode::from(host::enter(folder, command));
+        }
+        _ => {}
     }
     let arguments = Arguments::parse();
     let executable = executable_digest();

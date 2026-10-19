@@ -12,8 +12,9 @@ use crate::plan::error::{Place, PlanError, Problem};
 use crate::plan::raw::{RawOutput, RawOutputKind, RawPlan, RawRuns, RawRust, RawStep};
 use crate::plan::template::{Arg, Template};
 use crate::plan::{
-    DEFAULT_TIMEOUT, EnvName, EnvPattern, IDENTITY_ENV, Input, InputName, Kind, MUTANTS_TIMEOUT,
-    MeasureRules, OutPath, Output, Plan, Recipe, Report, Runs, RustSettings, Step, StepName, Work,
+    DEFAULT_TIMEOUT, EnvName, EnvPattern, HostProgram, IDENTITY_ENV, Input, InputName, Kind,
+    MUTANTS_TIMEOUT, MeasureRules, OutPath, Output, Plan, Recipe, Report, Runs, RustSettings, Step,
+    StepName, Work,
 };
 
 /// The text's line holding byte `offset`, counted from 1.
@@ -343,6 +344,17 @@ impl Plan {
             problem: Problem::Toml(error.message().to_owned()),
         })?;
 
+        let mut host: Vec<HostProgram> = Vec::new();
+        for written in &raw.host {
+            let program = HostProgram::new(written.get_ref()).ok_or_else(|| {
+                reader.at(written, Problem::HostProgram(written.get_ref().clone()))
+            })?;
+            if host.contains(&program) {
+                return Err(reader.at(written, Problem::DuplicateHost(program.to_string())));
+            }
+            host.push(program);
+        }
+
         let mut inputs = IndexMap::new();
         for (name, input) in &raw.inputs {
             let checked = InputName::new(name.get_ref())
@@ -380,6 +392,7 @@ impl Plan {
 
         let measures = raw.measures.map_or_default(Spanned::into_inner);
         Ok(Self {
+            host,
             inputs,
             steps,
             measures: MeasureRules {

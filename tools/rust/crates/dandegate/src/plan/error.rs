@@ -43,6 +43,10 @@ pub(crate) enum Problem {
     NotUtf8,
     #[error("{0}")]
     Toml(String),
+    #[error("host: {0:?} is not a program's file name")]
+    HostProgram(String),
+    #[error("host: {0:?} is named twice")]
+    DuplicateHost(String),
     #[error("input name: {0}")]
     InputName(BadName),
     #[error("step name: {0}")]

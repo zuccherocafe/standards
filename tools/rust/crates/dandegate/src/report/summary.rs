@@ -77,6 +77,7 @@ impl Session<'_> {
         let page = Page {
             revisions: &self.request.revisions,
             incomplete: &incomplete,
+            host: &self.host_warnings,
             measure_code: code.as_ref().ok().map(Vec::as_slice),
             measure_code_error: code.as_ref().err().map(String::as_str),
             affected: &affected,

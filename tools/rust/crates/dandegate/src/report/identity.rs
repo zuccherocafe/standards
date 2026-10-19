@@ -93,6 +93,12 @@ impl Session<'_> {
             adapters,
             environment: own.environment,
             collected: own.collected,
+            host: self
+                .plan()
+                .host()
+                .iter()
+                .map(|program| program.as_str().to_owned())
+                .collect(),
         })
     }
 
@@ -166,6 +172,7 @@ impl Session<'_> {
             stdout: files.0,
             stderr: files.1,
             deadline: Instant::now() + step.timeout(),
+            host: self.host.as_deref(),
         });
         self.log.write(&format!(
             "=== {} {}: identity collector: {}\n{}",

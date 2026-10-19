@@ -9,6 +9,8 @@ use toml::Spanned;
 #[serde(deny_unknown_fields)]
 pub(super) struct RawPlan {
     #[serde(default)]
+    pub(super) host: Vec<Spanned<String>>,
+    #[serde(default)]
     pub(super) inputs: BTreeMap<Spanned<String>, Spanned<RawInput>>,
     pub(super) measures: Option<Spanned<RawMeasures>>,
     pub(super) rust: Option<Spanned<RawRust>>,
