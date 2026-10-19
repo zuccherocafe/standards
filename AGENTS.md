@@ -23,4 +23,4 @@ Run every check from the repository root with `nix develop -c check`, before eac
 
 ## Commits
 
-Write messages as [general.md](rules/general.md#version-control) says. The scope is the changed file or folder: `general`, `rust`, `gdscript`, `python`, `review`, `templates`, `tools`, `skills`, `readme`, `agents`, or `flake`. Make one coherent change per commit. Include no attribution of any kind, including `Co-Authored-By`, tool trailers, or session trailers.
+Write messages as [general.md](rules/general.md#version-control) says. The scope is the changed file or folder: `general`, `rust`, `gdscript`, `python`, `review`, `templates`, `tools`, `skills`, `readme`, `contributing`, `agents`, or `flake`. Make one coherent change per commit. Include no attribution of any kind, including `Co-Authored-By`, tool trailers, or session trailers.

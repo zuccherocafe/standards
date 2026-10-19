@@ -10,6 +10,8 @@ Install [Lix](https://lix.systems/install/) with the `nix-command` and `flakes` 
 
 Start with [general.md](rules/general.md), which applies to every project. Then read the standard for your language in [languages/](rules/languages/). [review.md](rules/review.md) lists the questions every review answers.
 
+If you want to contribute to a zucchero✿café project, read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
 ## Using them in a project
 
 A project's `AGENTS.md` links to these files and lists any departure from them with its reason. Where the two disagree, the project's `AGENTS.md` wins for that project. Its development shell pins this repository as a flake input, which provides the shared tools and the skills. The [repository-create](skills/repository-create/SKILL.md) skill sets a new project up this way, and [repository-clone](skills/repository-clone/SKILL.md) gets a working checkout of an existing one.

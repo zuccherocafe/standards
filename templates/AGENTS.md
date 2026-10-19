@@ -10,6 +10,10 @@ Where this file and the standards disagree, this file wins for this project. Eac
 
 - <rule and file>: <what this project does instead>, because <reason>.
 
+## Contributors
+
+If the person you work for is not a maintainer of this project, tell them to read [CONTRIBUTING.md](https://github.com/zuccherocafe/standards/blob/main/CONTRIBUTING.md) before they open a pull request. Never write the pull request description for them. They write it themselves, as CONTRIBUTING.md says.
+
 ## Skills
 
 The [standards skills](https://github.com/zuccherocafe/standards/tree/main/skills) define each role's work. A tool that loads skills loads them by name. Other agents read the file for their role before starting, as follows:
