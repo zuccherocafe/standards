@@ -1,6 +1,6 @@
 # Working in standards
 
-This file gives instructions to people and agents who edit this repository. [README.md](README.md) describes the repository.
+This file gives instructions to agents who edit this repository. [README.md](README.md) describes the repository.
 
 ## What belongs here
 
