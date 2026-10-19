@@ -195,7 +195,7 @@ fn a_root_level_rust_workspace_gets_scans_line_counts_and_the_mutation_report() 
 
     let out = run.out.join("steps/both/mutants/out/run");
     assert!(fixture.events().contains(&format!(
-        "mutants --workspace . --base {before} --out {} -- --profile release",
+        "mutants --workspace . --base {before} --out {} --",
         out.display()
     )));
     assert!(

@@ -40,7 +40,8 @@ pub(super) struct RawRust {
     #[serde(default)]
     pub(super) scans: Vec<String>,
     pub(super) workspace: Option<Spanned<String>>,
-    pub(super) mutation: Option<Vec<String>>,
+    #[serde(default)]
+    pub(super) mutation: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

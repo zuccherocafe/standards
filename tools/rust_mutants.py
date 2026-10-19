@@ -18,13 +18,27 @@ build in its copy. Each shard therefore gets its own copy of the whole repositor
 also overrides a target folder in Cargo's configuration): shards sharing a target folder test each other's builds. The
 shards run at once and their lists are merged; the copies are removed afterwards, and on any failure every started
 shard is stopped first. The tool owns only `--out`'s `rust-mutants` folder, emptied at the start so what is printed is
-this run's. Needs `git` and `cargo mutants` on PATH, `systemd-run` for the memory cap and `unshare` for the PID
-namespaces.
+this run's. Needs `git`, `cargo mutants` and mold's `ld.mold` on PATH, a nightly Cargo for the profile's flags and
+the test harness's options, `systemd-run` for the memory cap and `unshare` for the PID namespaces.
 
 Each shard runs in a systemd user scope holding an equal part of a 16 GiB memory cap, without swap, so a mutant that
 allocates without end is killed and counted while the run goes on. Where `systemd-run --user` cannot start a scope, the
 shards run without a cap and the report says so. The shards share the jobserver's tasks, one per CPU, and each test
 binary stops at its first failing test, since one failure is enough to catch a mutant.
+
+Every mutant builds with the Cargo profile `mutants`, which the tool defines, so a project need not. The profile is
+the development profile with light optimisation, incremental builds, many codegen units and no debug information, and
+with dependencies fully optimised, since they build once per shard. The tool passes these settings with Cargo's
+`--config` on cargo-mutants' build, check and test calls, the baseline's included. A project's own `[profile.mutants]`
+keeps only the keys the tool does not set.
+
+mold links the profile, through the profile's own `rustflags`, which Cargo adds to the rustflags it selects from the
+environment or its configuration. With cargo-mutants' lint cap on (`--cap-lints true`), cargo-mutants sets
+`CARGO_ENCODED_RUSTFLAGS`, so Cargo drops configured target and build rustflags; the profile's own still apply.
+
+Doctests are skipped, since each is a binary of its own to build. A `--profile` among the options after `--` turns the
+tool's profile off: the tool then defines no profile and selects none, and that profile builds as the project defines
+it, linked by the project's own linker.
 
 Every test binary runs as the first process of a PID namespace of its own, through Cargo's test runner for the host
 (`CARGO_TARGET_<HOST>_RUNNER`, wrapping any runner already set there), so a mutant in code that signals processes can
@@ -49,6 +63,21 @@ OWNED = "rust-mutants"
 MEMORY = 16 * 1024**3
 # The test harness's arguments, through cargo test: stop each test binary at its first failure.
 FAIL_FAST = ("--", "-Zunstable-options", "--fail-fast")
+# Cargo's test targets without the doctests, through cargo test: the library, binaries and integration tests.
+NO_DOCTESTS = "--tests"
+# cargo-mutants' options whose value, given as the next argument, may start with a hyphen, even be `--`.
+HYPHEN_VALUES = ("--cargo-arg", "-C", "--cargo-test-arg")
+# The profile every mutant builds with unless the caller names another, and its settings as Cargo configuration.
+PROFILE = "mutants"
+SETTINGS = (
+    'inherits="dev"',
+    "incremental=true",
+    "codegen-units=256",
+    "opt-level=1",
+    'debug="none"',
+    'package."*".opt-level=3',
+    'rustflags=["-Clink-arg=-fuse-ld=mold"]',
+)
 
 
 def changed_rust(diff: str) -> list[str]:
@@ -150,8 +179,38 @@ def command(
         str(output),
         "--jobserver-tasks",
         str(max(1, cpus // options.shards)),
+        *profile(options.passed),
+        f"--cargo-test-arg={NO_DOCTESTS}",
         *(f"--cargo-test-arg={argument}" for argument in FAIL_FAST),
         *options.passed,
+    ]
+
+
+def names_profile(passed: list[str]) -> bool:
+    """Whether the options `passed` to cargo-mutants select a profile. An option that takes a hyphenated value consumes
+    the argument after it, even `--`; a `--` no option consumes ends cargo-mutants' options, and what follows is cargo
+    test's."""
+    options = iter(passed)
+    for option in options:
+        if option == "--":
+            return False
+        if option == "--profile" or option.startswith("--profile="):
+            return True
+        if option in HYPHEN_VALUES:
+            next(options, None)
+    return False
+
+
+def profile(passed: list[str]) -> list[str]:
+    """cargo-mutants' options that define the tool's profile for its build, check and test calls and build with it, or
+    none when the options `passed` to cargo-mutants select a profile of their own."""
+    if names_profile(passed):
+        return []
+    return [
+        "--cargo-arg=--config=unstable.profile-rustflags=true",
+        *(f"--cargo-arg=--config=profile.{PROFILE}.{setting}" for setting in SETTINGS),
+        "--profile",
+        PROFILE,
     ]
 
 

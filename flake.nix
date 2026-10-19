@@ -39,10 +39,10 @@
       rustScans = workspaceTool "rust-scans";
       dandegate = workspaceTool "dandegate";
 
-      # It runs `cargo mutants` from the shell it is used in. `git`, `systemd-run` and `unshare` follow the shell's own
-      # tools, so a shell without them, as dandegate runs a step in, still has them.
+      # It runs `cargo mutants` from the shell it is used in. `git`, `systemd-run`, `unshare` and mold's `ld.mold` follow
+      # the shell's own tools, so a shell without them, as dandegate runs a step in, still has them.
       rustMutants = pkgs.writeShellScriptBin "rust-mutants" ''
-        export PATH="$PATH:${pkgs.git}/bin:${pkgs.systemdMinimal}/bin:${pkgs.util-linux}/bin"
+        export PATH="$PATH:${pkgs.git}/bin:${pkgs.systemdMinimal}/bin:${pkgs.util-linux}/bin:${pkgs.mold}/bin"
         exec ${python}/bin/python3 -I ${./tools/rust_mutants.py} "$@"
       '';
 

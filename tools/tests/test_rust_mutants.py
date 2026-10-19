@@ -68,6 +68,22 @@ class OutcomeLists(unittest.TestCase):
         self.assertEqual(lists["timeout"], [])
 
 
+# The options that build every mutant with the tool's profile, linked by mold, without doctests.
+FAST = [
+    "--cargo-arg=--config=unstable.profile-rustflags=true",
+    '--cargo-arg=--config=profile.mutants.inherits="dev"',
+    "--cargo-arg=--config=profile.mutants.incremental=true",
+    "--cargo-arg=--config=profile.mutants.codegen-units=256",
+    "--cargo-arg=--config=profile.mutants.opt-level=1",
+    '--cargo-arg=--config=profile.mutants.debug="none"',
+    '--cargo-arg=--config=profile.mutants.package."*".opt-level=3',
+    '--cargo-arg=--config=profile.mutants.rustflags=["-Clink-arg=-fuse-ld=mold"]',
+    "--profile",
+    "mutants",
+    "--cargo-test-arg=--tests",
+]
+
+
 class Command(unittest.TestCase):
     def test_diff_mode_mutates_every_member_in_place_in_its_capped_shard_with_its_share_of_the_cpus(self) -> None:
         options = rust_mutants.arguments(["--base", "main", "--out", "/report", "--", "--timeout", "60"])
@@ -97,6 +113,7 @@ class Command(unittest.TestCase):
                 "/report/shard-1",
                 "--jobserver-tasks",
                 "8",
+                *FAST,
                 "--cargo-test-arg=--",
                 "--cargo-test-arg=-Zunstable-options",
                 "--cargo-test-arg=--fail-fast",
@@ -121,11 +138,50 @@ class Command(unittest.TestCase):
                 "/report/shard-0",
                 "--jobserver-tasks",
                 "1",
+                *FAST,
                 "--cargo-test-arg=--",
                 "--cargo-test-arg=-Zunstable-options",
                 "--cargo-test-arg=--fail-fast",
             ],
         )
+
+    def test_a_profile_the_caller_names_turns_the_tools_profile_off_and_keeps_the_test_options(self) -> None:
+        for passed in (["--profile", "release"], ["--profile=release"], ["--profile", "mutants"]):
+            options = rust_mutants.arguments(["--package", "core", "--out", "/report", "--", *passed])
+            self.assertEqual(
+                rust_mutants.command(options, None, 0, Path("/report/shard-0"), False, 2),
+                [
+                    "cargo",
+                    "mutants",
+                    "--package",
+                    "core",
+                    "--in-place",
+                    "--shard",
+                    "0/2",
+                    "--output",
+                    "/report/shard-0",
+                    "--jobserver-tasks",
+                    "1",
+                    "--cargo-test-arg=--tests",
+                    "--cargo-test-arg=--",
+                    "--cargo-test-arg=-Zunstable-options",
+                    "--cargo-test-arg=--fail-fast",
+                    *passed,
+                ],
+            )
+
+    def test_a_separator_an_option_takes_as_its_value_does_not_hide_the_callers_profile(self) -> None:
+        passed = ["--cargo-test-arg", "--", "--profile", "release"]
+        options = rust_mutants.arguments(["--package", "core", "--out", "/report", "--", *passed])
+        built = rust_mutants.command(options, None, 0, Path("/report/shard-0"), False, 2)
+        self.assertEqual(built.count("--profile"), 1)
+        self.assertEqual(built[-4:], passed)
+        self.assertEqual([option for option in built if option.startswith("--cargo-arg=")], [])
+
+    def test_a_profile_option_meant_for_cargo_test_leaves_the_tools_profile_in_place(self) -> None:
+        options = rust_mutants.arguments(["--package", "core", "--out", "/report", "--", "--", "--profile=release"])
+        built = rust_mutants.command(options, None, 0, Path("/report/shard-0"), False, 2)
+        self.assertEqual(built[built.index("--profile") : built.index("--profile") + 2], ["--profile", "mutants"])
 
     def test_a_scope_is_available_only_when_systemd_run_starts_one(self) -> None:
         def run(code: int | None) -> bool:

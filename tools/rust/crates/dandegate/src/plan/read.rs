@@ -472,9 +472,7 @@ fn rust_settings(
     Ok(Some(RustSettings {
         workspace,
         scans: settings.map_or_default(|rust| rust.scans.clone()),
-        mutation: settings
-            .and_then(|rust| rust.mutation.clone())
-            .unwrap_or_else(|| vec!["--profile".to_owned(), "release".to_owned()]),
+        mutation: settings.map_or_default(|rust| rust.mutation.clone()),
     }))
 }
 

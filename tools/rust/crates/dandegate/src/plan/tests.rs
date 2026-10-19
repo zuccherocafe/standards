@@ -234,7 +234,7 @@ fn the_rust_reports_follow_the_one_workspace_found_or_named() {
     let plan = found(&["."], "").expect("a plan");
     let settings = plan.rust().expect("Rust reports");
     assert_eq!(settings.workspace, Utf8PathBuf::from("."));
-    assert_eq!(settings.mutation, ["--profile", "release"]);
+    assert_eq!(settings.mutation, Vec::<String>::new());
     let names: Vec<&str> = plan.steps().keys().map(StepName::as_str).collect();
     assert_eq!(names, ["scans", "lines", "mutants", "api-listings", "api"]);
     let api = &plan.steps()[&Report::Api.step()];
