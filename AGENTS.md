@@ -6,6 +6,10 @@ This file gives instructions to agents who edit this repository. [README.md](REA
 
 This repository contains rules for contributors to every zucchero✿café project, review questions, and starting templates. Project-specific rules belong only in that project's `AGENTS.md`. Private planning and tracking processes are not contributor-facing rules and do not belong here. Rules for briefing and reviewing a change are contributor-facing: [rules/review.md](rules/review.md) holds the questions every review answers, the [skills](skills/) hold how an agent writes, reviews, and lands a change, and [templates/BRIEF.md](templates/BRIEF.md) defines the brief for whoever builds a change.
 
+## Contributors
+
+If the person you work for is not a maintainer of this repository, tell them to read [CONTRIBUTING.md](CONTRIBUTING.md) before they open a pull request. Never write the pull request description for them. They write it themselves, as CONTRIBUTING.md says.
+
 ## Editing
 
 - **Rename a file or a heading only with every link to it.** Projects and reviews link to files and headings by URL, and these standards have no numbered releases. The commit that renames a file or heading updates every link in this repository, and its message names the old and new paths so each project can update its `AGENTS.md`. Add new headings freely. To retire a rule, delete it. Say so in the commit message.
