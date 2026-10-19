@@ -1,6 +1,6 @@
 # Working in <project>
 
-This file gives instructions for contributors and coding agents. The README provides the human overview. This file is the operating manual. Read the governing documents before changing what they cover.
+This file gives instructions for coding agents. The README provides the human overview. This file is the operating manual. Read the governing documents before changing what they cover.
 
 ## Standards
 
