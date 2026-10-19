@@ -43,7 +43,7 @@
       # the shell's own tools, so a shell without them, as dandegate runs a step in, still has them.
       rustMutants = pkgs.writeShellScriptBin "rust-mutants" ''
         export PATH="$PATH:${pkgs.git}/bin:${pkgs.systemdMinimal}/bin:${pkgs.util-linux}/bin:${pkgs.mold}/bin"
-        exec ${python}/bin/python3 -I ${./tools/rust_mutants.py} "$@"
+        exec ${workspaceTool "rust-mutants"}/bin/rust-mutants "$@"
       '';
 
       # Advises only: it fails on a pin file it cannot read, never on a pin's age.

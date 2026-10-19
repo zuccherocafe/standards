@@ -30,11 +30,10 @@ event "start slow"
 wait
 "#;
 
-/// Runs the standards' mutation helper, whose shards start sessions of their own, and waits for it once both shards
-/// have started.
+/// Runs rust-mutants, whose shards start sessions of their own, and waits for it once both shards have started.
 const HELPER: &str = r#". "$(dirname "$0")/lib.sh"
 two_shards() { [ -f "$EVENTS/shard-0" ] && [ -f "$EVENTS/shard-1" ]; }
-python3 -I "$1" --workspace "$2" --package toy --out "$3" &
+"$1" --workspace "$2" --package toy --out "$3" &
 wait_until two_shards
 event "start helper"
 wait
@@ -163,16 +162,44 @@ fn independent_steps_run_four_at_once_and_exclusive_steps_last_and_alone() {
     }
 }
 
+/// The workspace's rust-mutants as its source now stands, built by the Cargo running these tests, which reports where
+/// it put the binary. dandegate cannot depend on another package's binary, so Cargo would not build it otherwise.
+fn rust_mutants() -> std::path::PathBuf {
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+    let built = std::process::Command::new(env!("CARGO"))
+        .arg("build")
+        .arg("--manifest-path")
+        .arg(manifest)
+        .args([
+            "--locked",
+            "--package",
+            "rust-mutants",
+            "--bin",
+            "rust-mutants",
+        ])
+        .arg("--message-format=json-render-diagnostics")
+        .stderr(std::process::Stdio::inherit())
+        .output()
+        .expect("cargo starts");
+    assert!(built.status.success(), "rust-mutants did not build");
+    String::from_utf8(built.stdout)
+        .expect("cargo prints UTF-8")
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .find_map(|message| {
+            let executable = message.get("executable")?.as_str()?;
+            (message.get("reason")?.as_str()? == "compiler-artifact").then(|| executable.into())
+        })
+        .expect("cargo reports the rust-mutants binary")
+}
+
 #[test]
 fn a_step_out_of_time_is_stopped_with_its_children_while_the_rest_finishes() {
     let fixture = Fixture::new("timeout");
     fixture.write("dandegate/slow.sh", SLOW);
     fixture.write("dandegate/helper.sh", HELPER);
     fixture.tool("cargo", SHARD);
-    let helper = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../rust_mutants.py");
-    let helper = helper
-        .canonicalize()
-        .expect("the standards' mutation helper");
+    let helper = rust_mutants();
     fixture.write(
         "dandegate.toml",
         &r#"
@@ -218,7 +245,7 @@ output = [{ kind = "section", file = "{out}/quick.md" }]
     for shard in ["shard-0", "shard-1"] {
         assert!(
             fixture.ended(shard),
-            "the helper's {shard}, in its own session, was not reaped"
+            "rust-mutants' {shard}, in its own session, was not reaped"
         );
     }
 }

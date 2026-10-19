@@ -40,7 +40,7 @@ exec "$@"
 }
 
 /// The system tools the stand-in shell links, each where the tests find it.
-const SHELL_TOOLS: &str = "sh bash git cp cat grep sleep dirname mkdir rm cut tr sha256sum kill python3 env ls mv \
+const SHELL_TOOLS: &str = "sh bash git cp cat grep sleep dirname mkdir rm cut tr sha256sum kill env ls mv \
                            touch head sed wc true printf cargo rustc rustdoc";
 
 /// The shell functions step scripts share, `dandegate/lib.sh` in every fixture: `event <words>` records an event;

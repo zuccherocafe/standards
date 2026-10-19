@@ -1,0 +1,16 @@
+[package]
+name = "rust-mutants"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "The Rust standard's mutation report: runs cargo-mutants over the Rust a change touched, or over a whole crate, and lists what the tests missed"
+
+[dependencies]
+clap.workspace = true
+rustix.workspace = true
+signal-hook.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
