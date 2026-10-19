@@ -55,6 +55,7 @@
           rustMutants
           dandegate
           pinAge
+          pkgs.lychee
         ];
 
         # Links the pinned standards' skills for agents; the links name store paths, so they are ignored and remade.
