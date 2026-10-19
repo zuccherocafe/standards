@@ -124,4 +124,4 @@ An include cycle is refused, naming every file in the cycle. The help text docum
 
 **Each commit passes its checks.** Each commit passes the quick checks that the project's `AGENTS.md` names for every commit. The full checks pass at the change's tip and again after every rebase.
 
-**No attribution.** Commit messages carry no `Co-Authored-By` line or other co-author, tool, or session trailer. Code comments and documentation name no author or tool either.
+**No attribution.** Commit messages carry no `Co-Authored-By` line or other co-author, tool, or session trailer, and code comments and documentation name no author or tool. The person who submits a change is responsible for all of it, and a tool trailer passes part of that to the tool while adding nothing to the log but an advertisement.
