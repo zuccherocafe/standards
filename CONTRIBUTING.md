@@ -4,7 +4,7 @@ zucchero✿café holds its code to very high standards, the ones in this reposit
 
 We encourage using AI when the code it produces meets these standards. We use it to raise the quality of our code, not only to write it faster. Most AI-written pull requests don't, and would fail [the review's first five questions](https://github.com/zuccherocafe/standards/blob/main/rules/review.md#first).
 
-If your contribution is describing the problem to AI and slinging its shit over the fence to us, the description is the only useful part. Put it in an issue and let us handle it. We can type a prompt as well as you can, and we know the codebase well enough to tell the AI when it is wrong.
+If your contribution is prompting an AI and slinging its shit over the fence to us, the prompt itself is the only thing of value to us. Put it in an issue and let us handle it. We can type a prompt as well as you can, and we know the codebase well enough to tell the AI when it is wrong.
 
 ## Write a detailed issue
 
@@ -21,17 +21,19 @@ Commits should carry no `Co-Authored-By` line or any other attribution. You are 
 
 ## Write the description yourself
 
-You (a human) write the pull request description in your own words. It is the one part of the pull request that shows you understand the change, and if the reviewer thinks an AI wrote it they will close the pull request without reading the code.
+Requesting human attention requires human effort.
+
+You (the human) will write the pull request description in your own words. It is the one part of the pull request that shows you understand the change, and if the reviewer thinks an AI wrote it they will close the pull request without reading the code.
 
 Don't describe the diff. Tell us how you understand the part of the system you changed: what the problem was, why it happens, and why your change is the right fix for it. If you considered another approach and dropped it, say why.
 
-Write it as carefully as the change deserves. A typo fix needs a sentence. A change to how part of the system works needs the care you would give its documentation.
+Write it as carefully as the change deserves. A typo fix would only need a sentence, but a change to how part of the system works needs more considered attention.
 
 ## Review
 
-Our AI reviews the code against review.md, and a maintainer reads the description and asks about anything that doesn't add up. Answer those questions yourself. If you paste an AI's answer to a question about your own change, we will close the pull request.
+A maintainer may ask you about your change. Answer in your own words. If you paste an AI's answer to a question about your own change, we will close the pull request.
 
-Every finding is a fix in this pull request. Have your AI fold each fix into the commit it belongs to and force-push the branch, so the history reads as the change was meant.
+Fold each fix into the commit it belongs to and force-push the branch.
 
 ## Licence
 
