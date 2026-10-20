@@ -1,2 +1,2 @@
-# Build and check state, all regenerable.
+/.cache/
 /tools/target/
