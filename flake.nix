@@ -17,18 +17,18 @@
         overlays = [ rust-overlay.overlays.default ];
       };
 
-      rust = pkgs.rust-bin.fromRustupToolchainFile ./tools/rust/rust-toolchain.toml;
+      rust = pkgs.rust-bin.fromRustupToolchainFile ./tools/rust-toolchain.toml;
       rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
 
       # A binary of the workspace, built from this repository's own source and lockfile with the pinned toolchain.
       workspaceTool = pname: rustPlatform.buildRustPackage {
         inherit pname;
-        inherit ((builtins.fromTOML (builtins.readFile ./tools/rust/Cargo.toml)).workspace.package) version;
+        inherit ((builtins.fromTOML (builtins.readFile ./tools/Cargo.toml)).workspace.package) version;
         src = pkgs.lib.fileset.toSource {
-          root = ./tools/rust;
-          fileset = pkgs.lib.fileset.unions [ ./tools/rust/Cargo.toml ./tools/rust/Cargo.lock ./tools/rust/crates ];
+          root = ./tools;
+          fileset = pkgs.lib.fileset.unions [ ./tools/Cargo.toml ./tools/Cargo.lock ./tools/crates ];
         };
-        cargoLock.lockFile = ./tools/rust/Cargo.lock;
+        cargoLock.lockFile = ./tools/Cargo.lock;
         cargoBuildFlags = [ "--package" pname ];
         # The checks run its tests.
         doCheck = false;
@@ -110,11 +110,11 @@
           step "python lint" lint
           step "python types" types
           step "python tests" tests
-          step "pin age" pin-age --toolchain tools/rust/rust-toolchain.toml \
+          step "pin age" pin-age --toolchain tools/rust-toolchain.toml \
             --toolchain templates/rust/rust-toolchain.toml --lock flake.lock
-          step "rust format" cargo fmt --manifest-path tools/rust/Cargo.toml --check
-          step "rust lint" cargo clippy --manifest-path tools/rust/Cargo.toml --locked --all-targets -- -D warnings
-          step "rust tests" cargo test --manifest-path tools/rust/Cargo.toml --locked
+          step "rust format" cargo fmt --manifest-path tools/Cargo.toml --check
+          step "rust lint" cargo clippy --manifest-path tools/Cargo.toml --locked --all-targets -- -D warnings
+          step "rust tests" cargo test --manifest-path tools/Cargo.toml --locked
           exit "$failed"
         '';
       };

@@ -147,8 +147,8 @@ mod tests {
     fn a_path_is_named_without_its_dot_components_and_spare_separators() {
         for (given, named) in [
             (
-                "./tools//rust/./rust-toolchain.toml",
-                "tools/rust/rust-toolchain.toml",
+                "./tools//./rust-toolchain.toml",
+                "tools/rust-toolchain.toml",
             ),
             ("flake.lock/", "flake.lock"),
             ("/abs/../flake.lock", "/abs/../flake.lock"),

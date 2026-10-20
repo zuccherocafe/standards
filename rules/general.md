@@ -24,7 +24,7 @@ A project's checks exist to catch what is broken, not what is different.
 
 **Checks fail only on broken results.** A check fails when the result is wrong for a correct input, whatever a change intended. Failures include a crash, a script error, an input that does not load or run, a non-finite value, a missing part, or a violated contract. Set each threshold where a person watching would see something wrong, never at today's value. Explain the threshold in one line.
 
-**Report differences without failing checks.** Report changed outputs, measurements, and before-and-after images for a person to read. Nothing is pinned to today's output, so no expectation is derived from that output. The change report is [dandegate](../tools/rust/crates/dandegate/), which the development shell provides. A project declares the steps it runs in a root `dandegate.toml`, and its own scripts do the work particular to it.
+**Report differences without failing checks.** Report changed outputs, measurements, and before-and-after images for a person to read. Nothing is pinned to today's output, so no expectation is derived from that output. The change report is [dandegate](../tools/crates/dandegate/), which the development shell provides. A project declares the steps it runs in a root `dandegate.toml`, and its own scripts do the work particular to it.
 
 **Expected values are authored.** A check compares with values written by hand from the input's source, a specification, or a law, never copied from a run. Exact text or structured output whose shape is the promise may use snapshots. Examples include help text, a rendered error, or a listing. A snapshot counts as authored when a reviewer reads and accepts it in the diff. Numbers and behaviour keep hand-written expectations.
 
@@ -60,7 +60,7 @@ A project's checks exist to catch what is broken, not what is different.
 
 **The upgrade shows what moved.** The change carries the full checks and a dandegate report from the base to the upgrade, with the performance steps selected. A difference the toolchain caused is explained before later work depends on it.
 
-**Checked by:** review of the upgrade change against these rules; the project's checks, where [pin-age](../tools/rust/crates/pin-age/) prints a line for each pin over a month old and fails on none.
+**Checked by:** review of the upgrade change against these rules; the project's checks, where [pin-age](../tools/crates/pin-age/) prints a line for each pin over a month old and fails on none.
 
 **Copy tool configuration, pin shared tools.** Cargo, Clippy, rustfmt, cargo-deny, Godot, and the GDScript formatter read only files inside the project, and a clean clone must build alone. So a project copies the files in [templates/](../templates/) it uses and adds its own entries after the shared ones, which keeps the shared part comparable with the latest template. A difference from the template is reported, never a failed check. A tool in [tools/](../tools/) reads the project's files and takes project details as arguments, so one copy serves every project. The development shell takes this repository as a flake input pinned in `flake.lock` and puts the tools on `PATH`. Whenever this repository's `main` moves, each project moves its pin to it in a change of its own, so every project reads the latest standards.
 
