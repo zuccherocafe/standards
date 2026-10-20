@@ -6,8 +6,8 @@ Review every change to a zucchero✿café project with these questions, whoever 
 
 These questions come before the rest. The first three ask whether the change fits what the project already has, and the fourth weighs every finding the review makes. A must-fix finding under any of them means the change is not ready, however well it answers the others.
 
-1. **One home.** Does each concept the change touches have exactly one home, or does the change add a second way of doing something that overlaps one the project already has? ([One home per concept](general.md#design))
-2. **Transitions.** Does the change finish every transition it starts, leaving no old path beside the new one? Does it build on a transition an earlier change left unfinished?
+1. **One home.** Does each concept the change touches have exactly one home, or does the change add a second way of doing something that overlaps one the project already has? ([Keep the system coherent](general.md#design), [One home per concept](general.md#design))
+2. **Transitions.** Does the change finish every transition it starts, leaving no old path beside the new one? Does it build on a transition an earlier change left unfinished? Does it serve the planned work that will touch it next? ([Keep the system coherent](general.md#design), [Design for where the system is going](general.md#design))
 3. **Repetition.** Does a changed document, rule, or skill say what another already says? Should two passages or files be one? The finding names the consolidation. ([One home per concept](general.md#design))
 4. **Worth fixing.** For each finding, who can produce the input that reaches it, what would a person see, and what does the fix cost? Accepting the risk is one of the answers. ([Weigh each fix, then fix the cause](general.md#design))
 5. **Invalid states.** Can the new types hold a value the domain forbids?

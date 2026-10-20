@@ -52,7 +52,7 @@
 
 ## Where this is going
 
-<Name the known needs that touch this change's area, and say whether its design serves each one or closes it off.>
+<Name the planned work that touches this change's area, and say whether the design serves each item or closes it off ([Design for where the system is going](../rules/general.md#design)).>
 
 ## Not this change
 
