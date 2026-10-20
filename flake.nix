@@ -49,6 +49,8 @@
       # Advises only: it fails on a pin file it cannot read, never on a pin's age.
       pinAge = workspaceTool "pin-age";
 
+      designRead = workspaceTool "design-read";
+
       crate = { pname, version, hash, cargoHash }:
         pkgs.rustPlatform.buildRustPackage {
           inherit pname version cargoHash;
@@ -104,6 +106,7 @@
         rust-scans = rustScans;
         rust-mutants = rustMutants;
         pin-age = pinAge;
+        design-read = designRead;
         inherit dandegate;
       };
 
@@ -117,6 +120,7 @@
           rustScans
           rustMutants
           pinAge
+          designRead
           pkgs.jujutsu
         ];
       };

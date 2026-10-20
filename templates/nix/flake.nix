@@ -45,6 +45,7 @@
       rustMutants = standards.packages.${system}.rust-mutants;
       dandegate = standards.packages.${system}.dandegate;
       pinAge = standards.packages.${system}.pin-age;
+      designRead = standards.packages.${system}.design-read;
 
     in
     {
@@ -55,6 +56,7 @@
           rustMutants
           dandegate
           pinAge
+          designRead
           pkgs.lychee
         ];
 

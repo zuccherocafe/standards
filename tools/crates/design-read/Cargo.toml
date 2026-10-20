@@ -1,0 +1,14 @@
+[package]
+name = "design-read"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Checks a design read's shape and that it carries forward every disagreement the previous read left unresolved"
+
+[dependencies]
+camino.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true
