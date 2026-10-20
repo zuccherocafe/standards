@@ -49,9 +49,6 @@
       # Advises only: it fails on a pin file it cannot read, never on a pin's age.
       pinAge = workspaceTool "pin-age";
 
-      # A new minor version moves the target in ruff.toml and pyrefly.toml with it.
-      python = pkgs.python315;
-
       crate = { pname, version, hash, cargoHash }:
         pkgs.rustPlatform.buildRustPackage {
           inherit pname version cargoHash;
@@ -71,11 +68,10 @@
         # Each check is a function `step` calls by name, which ShellCheck cannot follow.
         excludeShellChecks = [ "SC2329" ];
         runtimeInputs = [
-          rust python pinAge pkgs.ruff pkgs.pyrefly pkgs.lychee pkgs.git pkgs.findutils pkgs.coreutils
+          rust pinAge pkgs.lychee pkgs.git pkgs.findutils pkgs.coreutils
         ];
         text = ''
           cd "$(git rev-parse --show-toplevel)"
-          export PYTHONDONTWRITEBYTECODE=1
           failed=0
           step() {
             local name="$1" started status
@@ -92,24 +88,8 @@
               if [ -e "$file" ]; then printf '%s\0' "$file"; fi
             done < <(git ls-files -z --cached --others --exclude-standard "$@")
           }
-          python_files() { files '*.py'; }
           links() { files '*.md' | xargs -0 lychee --offline --include-fragments --no-progress; }
-          format() { python_files | xargs -0 -r ruff format --check; }
-          lint() { python_files | xargs -0 -r ruff check; }
-          types() { python_files | xargs -0 -r pyrefly check; }
-          tests() {
-            local suite folder result=0
-            while IFS= read -r -d "" suite; do
-              folder="$(dirname "$(dirname "$suite")")"
-              python3 -I -m unittest discover -s "$folder/tests" -t "$folder" || result=1
-            done < <(files '*/tests/__init__.py')
-            return "$result"
-          }
           step links links
-          step "python format" format
-          step "python lint" lint
-          step "python types" types
-          step "python tests" tests
           step "pin age" pin-age --toolchain tools/rust-toolchain.toml \
             --toolchain templates/rust/rust-toolchain.toml --lock flake.lock
           step "rust format" cargo fmt --manifest-path tools/Cargo.toml --check
@@ -130,9 +110,6 @@
       devShells.${system}.default = pkgs.mkShell {
         packages = [
           rust
-          python
-          pkgs.ruff
-          pkgs.pyrefly
           pkgs.lychee
           cargoMutants
           check

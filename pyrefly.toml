@@ -1,3 +1,0 @@
-preset = "strict"
-python-version = "3.15"
-project-includes = ["**/*.py"]

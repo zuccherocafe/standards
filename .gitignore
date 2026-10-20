@@ -1,4 +1,2 @@
 # Build and check state, all regenerable.
 /tools/target/
-__pycache__/
-/.ruff_cache/
