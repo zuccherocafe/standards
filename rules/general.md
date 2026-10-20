@@ -22,6 +22,8 @@ Each rule gives its kind in one italic word, after its name or at the start of i
 
 **Parse at the boundary.** *Always.* Parse authored data, files read back, process output, and values from other programs into domain types once, where they enter. Every refusal there names the file, line, and field. Past the boundary, nothing re-checks what a type already holds, and nothing takes the raw form. Three checks are not redundant. The first checks a newly computed result. The second checks a fact that can change after parsing, such as whether a file still exists with its digest. The third parses bytes a user supplies to another program.
 
+**A refusal sits where it is cheapest.** *Always.* Place a refusal where it is cheapest and clearest for the author: as soon as the needed facts are known, before expensive work the refusal would waste. A change may move a refusal earlier or later to get there. A moved refusal still refuses every input it refused before, and stays reachable. The order of independent refusals is not a promise, so no test fixes which independent fault is reported first.
+
 **Knowledge is data.** *Default.* Facts specific to one input belong in that input's files and their generated output, never in general code or host branches. Such facts include a name, a mapping, or a set of cases one model or file uses. Infer what the files already say by a method that works for any input. Put facts that hold only for one family of inputs in a named preset.
 
 **Generated output is typed and trusted.** *Always.* Build and tool output has typed fields. Parse it once more where it is loaded, as with any other input. Past that point, the program trusts it. Never edit a generated file by hand. Each generated file has exactly one writer.

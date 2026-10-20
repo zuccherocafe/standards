@@ -1,6 +1,6 @@
 ---
 name: change-land
-description: "As coordinator, verify a zucchero✿café change's review fixes against its evidence and land it on `main` by fast-forward. If `main` has changed, rebase and rerun full checks. Use when the writer reports review fixes complete or a reviewed change is ready to land."
+description: "As coordinator, check a zucchero✿café change's review fixes once, decide what remains, and land it on `main` by fast-forward. If `main` has changed, rebase and rerun full checks. Use when the writer reports review fixes complete or a reviewed change is ready to land."
 ---
 
 # Check a change's fixes and land it
@@ -9,15 +9,24 @@ The coordinator lands changes. No separate landing role is needed. With one chan
 
 ## Check the fixes narrowly
 
-After the writer fixes a review's findings, read only the fixes, against the findings they answer. Do not review the whole change again.
+A change gets one review and one check of its fixes. After the writer fixes the review's findings, read only the fixes, against the findings they answer. Do not review the whole change again.
 
-1. List the required findings from the reviews and the decision selecting them for correction.
+1. List the review's must-fix and should-fix findings, and the writer's declines.
 2. Read each fix commit's diff. For each finding, record **OK** or the remaining fault with its file and line.
-3. Check that each fix addresses its cause with the smallest required change. Check that production code stays the same size or smaller where possible. Identify growth and whether a smaller design avoids it.
-4. Check that nothing outside the findings changed. The change report and public API diff must show only changes explained by the fixes.
-5. Check that the evidence comes from the new tip. Full checks must pass there. The change report and any comparisons must come from runs after the last fix.
+3. Read every decline. If its reason is wrong, for example a real input does reach the finding, the finding becomes must-fix.
+4. Check that each fix addresses its cause with the smallest required change. Check that production code stays the same size or smaller where possible. Identify growth and whether a smaller design avoids it.
+5. Check that nothing outside the findings changed. Where the brief picked a change report or public API diff, it must show only changes explained by the fixes.
+6. Check that the evidence comes from the new tip. Full checks must pass there. Any change report or comparison the brief picked must come from runs after the last fix.
 
-If a fix is wrong, send the writer the unresolved finding. Never fix the change's code yourself.
+## Decide what remains
+
+No second review or check follows. After the check, triage what remains and decide.
+
+- With no must-fix finding left, read the declines again and go on to land.
+- Must-fix findings that remain after the check suggest the design is wrong. Either send the writer the few that matter and read their fixes yourself, or decide on a redesign.
+- Ask the maintainer only when a redesign changes a format, a type, an API, or a dependency.
+
+Never fix the change's code yourself.
 
 ## Decide whether to rebase
 
@@ -25,7 +34,7 @@ Compare the change's base with the current `main`.
 
 - If `main` is unchanged, use the writer's full-check evidence at the tip for landing. Proceed to the landing steps.
 - If `main` has changed, rebase onto it in a scratch clone. Resolve a conflict only where it is mechanical. A mechanical resolution keeps both sides' lines, merges imports, or follows a renamed path. If resolution needs a judgement about intent, stop. Ask the maintainer and name the files and both intents.
-- After rebasing, repeat the fresh-tree preparation required by the project's `AGENTS.md`. Run full checks and the change report at the rebased tip. If anything fails, stop. Report the failure to the writer.
+- After rebasing, repeat the fresh-tree preparation required by the project's `AGENTS.md`. Run full checks at the rebased tip, and the change report if the brief picked one. If anything fails, stop. Report the failure to the writer.
 
 ## Land by fast-forward
 
@@ -39,6 +48,6 @@ Compare the change's base with the current `main`.
 Following the technical-writing and unslop skills, report the following in a few lines:
 
 - The new `main` revision.
-- The narrow check's items with their results.
+- The narrow check's items with their results, and each decline with whether it stands.
 - Whether a rebase happened, how each conflict was resolved, and the full checks' result and time at the landed tip.
-- The change report's verdict.
+- The change report's verdict, where the brief picked one.

@@ -12,7 +12,8 @@ The other skills come from [pstack](https://github.com/cursor/plugins/tree/main/
 
 - unslop: loads on its own, with a description saying it applies to all prose.
 - technical-writing: unchanged.
-- principle-encode-lessons-in-structure, principle-fix-root-causes, principle-test-behavior-not-implementation: load on their own.
+- principle-encode-lessons-in-structure, principle-test-behavior-not-implementation: load on their own.
+- principle-fix-root-causes: loads on its own; of the places with the same fault, fixes each one a real input reaches rather than all of them; counts a refusal at our boundary of input a dependency mishandles as a fix at the cause.
 - principle-attack-the-premise: loads on its own; links to pstack skills not copied here, and its closing paragraph on one of them, removed.
 - principle-explain-the-number: loads on its own; its closing comparison with a pstack skill not copied here removed.
 - benchmark-checklist: loads on its own; references to pstack playbooks not copied here removed.

@@ -2,7 +2,7 @@
 
 zucchero✿café holds its code to very high standards, the ones in this repository. If you can't or won't hold yourself to these standards, don't open a pull request.
 
-We encourage using AI when the code it produces meets these standards. We use it to raise the quality of our code, not only to write it faster. Most AI-written pull requests don't, and would fail [the review's first five questions](https://github.com/zuccherocafe/standards/blob/main/rules/review.md#first).
+We encourage using AI when the code it produces meets these standards. We use it to raise the quality of our code, not only to write it faster. Most AI-written pull requests don't, and would fail [the review's first questions](https://github.com/zuccherocafe/standards/blob/main/rules/review.md#first).
 
 If your contribution is prompting an AI and slinging its shit over the fence to us, the prompt itself is the only thing of value to us. Put it in an issue and let us handle it. We can type a prompt as well as you can, and we know the codebase well enough to tell the AI when it is wrong.
 
@@ -15,7 +15,7 @@ We can only act on an issue as well as it describes the problem. Write it so som
 1. Read [general.md](https://github.com/zuccherocafe/standards/blob/main/rules/general.md) and the [standard for your language](https://github.com/zuccherocafe/standards/tree/main/rules/languages).
 2. Start your AI inside the project's development shell with `nix develop`, so it gets the pinned tools and the standards' skills.
 3. Have your AI run the project's full checks at the tip of your branch.
-4. Review the change against [review.md](https://github.com/zuccherocafe/standards/blob/main/rules/review.md) yourself, or have an AI do it with the change-review skill. Fix every finding.
+4. Review the change against [review.md](https://github.com/zuccherocafe/standards/blob/main/rules/review.md) yourself, or have an AI do it with the change-review skill. Fix every must-fix finding, and each should-fix finding unless its fix costs more than a few lines or changes the design.
 
 Commits should carry no `Co-Authored-By` line or any other attribution. You are responsible for every line you send, and a co-author line hands part of that to the AI. All it adds to the log is an ad for the company that sells it.
 
