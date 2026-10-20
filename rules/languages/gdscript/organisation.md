@@ -1,14 +1,14 @@
 # GDScript standard: Organisation
 
-Part of the [GDScript standard](README.md). Classes, files, names, duck typing and documentation.
+Part of the [GDScript standard](README.md). Classes, files, names, duck typing, and documentation.
 
 ## Classes, files, and organisation
 
 ### One job per class
 
-*Default.* A script is a class. Each class has one job stated by its first `##` line. Files are sized, merged, and grouped by subject as [Modules](../rust/design.md#modules) in the Rust standard says, with inner classes as the cooperating types that may share a file, such as a record and parser or a check and its cases. Behaviour follows [Methods on the owner](../rust/design.md#methods-on-the-owner), where a pure function over plain values is a `static func` in the class whose job it serves.
+*Default.* A script is a class. Each class has one job stated by its first `##` line. Size, merge, and group files by subject as [Modules](../rust/design.md#modules) in the Rust standard says. Inner classes serve as the cooperating types that may share a file, such as a record and its parser or a check and its cases. Behaviour follows [Methods on the owner](../rust/design.md#methods-on-the-owner), where a pure function over plain values is a `static func` in the class whose job it serves.
 
-Data classes extend `RefCounted`, which is freed when its last reference ends. Use `Resource` only for data saved or edited in the inspector. Use `Node` only for an object in the scene tree. Never use bare `Object`, which needs manual `free()`. A class that needs an autoload or scene tree cannot be tested alone. Pass collaborators through `configure(...)` or a scene-set `@export var x: Type`, rather than looking them up.
+Data classes extend `RefCounted`, which the engine frees when its last reference ends. Use `Resource` only for data saved or edited in the inspector. Use `Node` only for an object in the scene tree. Never use bare `Object`, which needs manual `free()`. A test cannot run a class alone if the class needs an autoload or a scene tree. Pass collaborators through `configure(...)` or a scene-set `@export var x: Type`, rather than looking them up.
 
 Ref: the manual's "When and how to avoid using nodes for everything" and "Scene organisation"; godot-open-rpg `src/field/gameboard/pathfinder.gd:20-38` (the anti-pattern: a data class connecting to autoloads in `_init`); phantom-camera's 3,000-line `phantom_camera_3d.gd` (2D and 3D near-duplicates: the cost of not splitting a job).
 
@@ -38,13 +38,13 @@ Ref: the manual's "When and how to avoid using nodes for everything" and "Scene 
 
 [GDScript-formatter](https://github.com/GDQuest/GDScript-formatter) governs layout, as rustfmt does for Rust. Pin it to an exact release like the engine. It decides indentation, spacing, blank lines, wrapping, quotes, and trailing commas in wrapped literals. Never adjust its output by hand. It follows the style guide except for `general.md`'s 120-column limit. It reads `.editorconfig` settings (measured), whose canonical form is [templates/godot/.editorconfig](../../../templates/godot/.editorconfig). Those settings use tabs, 120 columns, and double quotes, except for strings containing double quotes, which keep single quotes. Do not use `--reorder-code`. The formatter does not reorder members or rewrite expressions. Review therefore enforces `and`, `or`, and `not` instead of `&&`, `||`, and `!`, and `0.5` instead of `.5`. Run `--check` over every script in the project's checks. On adoption, reformat all scripts in one commit containing nothing else. A line the formatter cannot wrap, such as a long string, stays long. A project with a line-length check must keep that check.
 
-Ref: the style guide, "Naming conventions", "Code order" and "Formatting"; the formatter's `--help`, and its `--debug`, which prints the settings it read for each file.
+Ref: the style guide, "Naming conventions", "Code order", and "Formatting"; the formatter's `--help` and `--debug`, which prints the settings it read for each file.
 
-**Checked by:** the formatter's `--check` in the project's checks (layout); review for names, order and the expressions the formatter leaves alone.
+**Checked by:** the formatter's `--check` in the project's checks (layout); review for names, order, and the expressions the formatter leaves alone.
 
 ### class_name and inner classes
 
-*Default.* `class_name` registers a type in a global namespace shared with the engine, addons, and other project classes. A shipped class name therefore carries the project's prefix. `shadowed_global_identifier` detects a local that reuses a global name, not competing script class names. Every script used as a type by another file has a `class_name`. Entry scripts, such as checks or `--script` commands, have none and load by path, keeping them out of the global class cache. A test helper is used as a type through `const Helper := preload("res://…")`. A Godot 5 proposal removes `preload`. Such a migration would affect each of those constants.
+*Default.* `class_name` registers a type in a global namespace shared with the engine, addons, and other project classes. A shipped class name therefore carries the project's prefix. `shadowed_global_identifier` detects a local that reuses a global name, not competing script class names. Give a `class_name` to every script that another file uses as a type. Entry scripts, such as checks or `--script` commands, have none and load by path, keeping them out of the global class cache. Use a test helper as a type through `const Helper := preload("res://…")`. A Godot 5 proposal removes `preload`. Such a migration would affect each of those constants.
 
 An inner class implements a record or helper used by its outer class and that class's callers. External callers name it through the outer class. Saving follows [Resources are shared](design.md#resources-are-shared). A script naming a native-extension class fails to load without the library. Confine such access through `ClassDB` to as few files as possible. List those files in the project's `AGENTS.md`.
 
@@ -82,7 +82,7 @@ Ref: ["A Peek Under the Hood: Technical Learnings from Halls of Torment"](https:
 
 *Default.* Declare typed signal parameters. Emit signals with `name.emit(...)` and connect them with `name.connect(callable)`. The analyser does not check `emit` arguments against the declaration. Emit each signal from one place using typed local arguments. Type connected lambdas, as in `func(count: int) -> void:`. A signal payload is a record class, not a `Dictionary`, except on a documented external interface. A signal declared in one class but emitted only from another carries `@warning_ignore("unused_signal")` with its reason.
 
-Emission is synchronous. Connected callables run in connection order before `emit` returns. A handler can re-enter the emitter, so handlers determine the emitter's state after emission. Change state before emitting. Never rely on that state afterwards. A connection to an object's method ends when the object is freed. If a callable outlives an object it reads, such as a lambda capturing a node, its creator disconnects it when that object's lifetime ends. Parents initiate work by calling children. Children report events by signalling parents.
+Emission is synchronous: connected callables run in connection order before `emit` returns. Because a handler can re-enter the emitter and change its state during `emit`, update state before emitting and do not rely on it still holding afterwards. The engine drops a connection to an object's method when it frees the object. If a callable outlives an object it reads, such as a lambda that captures a node, its creator disconnects it when that object's lifetime ends. Parents start work by calling children, and children report events by signalling parents.
 
 Before (sketch), outcome signals relayed by a name the analyser cannot see:
 
@@ -98,7 +98,7 @@ Ref: the manual's "Using signals" and the GDScript reference, "Signals"; `Signal
 
 ## Documentation
 
-*Default.* Write documentation in `##` comments under [Documentation lives beside what it documents](../../general.md#writing). After `extends`, each class starts with a `##` comment whose first line is a one-line brief. Every public member of a class used by other code has a `##` comment. Public means no leading underscore. A member's `##` also gives its units and its failure behaviour, including refusal returns or `errors` values. `##` supplies editor help and export tooltips. BBCode references such as `[method read]`, `[member errors]`, and `[param at]` create links. A project's comment check exempts `##` from the cap of [Comments inside code stay short](../../general.md#writing), which covers comments inside a function body or top-level script code. Comment a private member with `#` only for a constraint the code cannot show ([Comments state constraints](../../general.md#writing)).
+*Default.* Write documentation in `##` comments under [Documentation lives beside what it documents](../../general.md#writing). After `extends`, each class starts with a `##` comment whose first line is a one-line brief. Every public member of a class used by other code has a `##` comment, where public means no leading underscore. A member's `##` states its units and failure behaviour, including refusal returns or `errors` values, and supplies editor help and export tooltips. Use BBCode references such as `[method read]`, `[member errors]`, and `[param at]` to link to other symbols. A project's comment check exempts `##` from the cap of [Comments inside code stay short](../../general.md#writing), which covers comments inside a function body or top-level script code. Comment a private member with `#` only for a constraint the code cannot show ([Comments state constraints](../../general.md#writing)).
 
 [Comments state constraints](../../general.md#writing) applies to a comment that states a type, such as "float ≥ 0, key light energy" above a `Variant` export. Where `Variant` is deliberate ([Typed exports are not validation](design.md#typed-exports-are-not-validation)), the `##` states the authored type and the refusal that enforces it.
 

@@ -1,6 +1,6 @@
 # Rust standard: Errors
 
-Part of the [Rust standard](README.md). Who fixes an error, panics by crate kind, error types, refusals and messages.
+Part of the [Rust standard](README.md). This file covers who fixes an error, panics by crate kind, error types, refusals, and messages.
 
 ## Errors
 
@@ -8,11 +8,11 @@ Part of the [Rust standard](README.md). Who fixes an error, panics by crate kind
 
 *Default.* Decide an error's form by who can fix it.
 
-- **The author or environment can fix it.** Return a typed `Err` at the boundary, with one variant per remedy. Cases include an authored file, a model, a missing file, or a failed process.
+- **The author or environment can fix it.** Return a typed `Err` at the boundary, with one variant per remedy, such as a bad authored file or model, a missing file, or a failed process.
 - **A reader program returns malformed output.** Use one detail variant per module that reads it.
 - **Accepted input fails numerically.** Return an outcome value.
 - **Our own code breaks a promise.** Use a type that rules out the failure. Otherwise, follow the crate's panic policy.
-- **A literal is invalid.** Use the `const` counterpart.
+- **A constant literal is invalid.** Use a panicking `const` constructor.
 
 Before, an empty curve (our own broken promise) is carried as a refusal through every caller's `?`:
 
@@ -36,12 +36,12 @@ impl Curve {
 
 *Always.*
 
-| Crate | A broken internal promise | Lints |
+| Crate | When an internal promise breaks | Lints |
 |---|---|---|
-| On a real-time or engine path (called every frame or from a script) | no intentional panic: every state handled, a caller's mistake returned as a value | `#![deny(clippy::expect_used, clippy::panic, clippy::unwrap_used)]` in `lib.rs`; `indexing_slicing` on |
-| A vocabulary crate used on such a path | never panics at run time; constructors return `Option` or `Result`; `const` twins panic only in constant evaluation | as the engine path, each `const` twin under `#[expect(clippy::panic, reason = "constant evaluation only")]` (a crate-level `deny` yields to it; `forbid` would not) |
-| Offline: a converter, a build tool, a command-line program | `expect("why it holds")`, with `# Panics` on a public function | workspace `unwrap_used` warns; `expect_used` allowed; `indexing_slicing` where indices come from outside data until those indices are issued types |
-| A binding's entry crate | nothing but the binding's entry point | as the engine path |
+| On a real-time or engine path (called every frame or from a script) | Do not panic intentionally. Handle every state and return a caller's mistake as a value. | `#![deny(clippy::expect_used, clippy::panic, clippy::unwrap_used)]` in `lib.rs`, plus `clippy::indexing_slicing`. |
+| A vocabulary crate used on such a path | Never panic at run time. Return `Option` or `Result` from constructors, and panic in `const` constructors only during constant evaluation. | Same as the engine path, with `#[expect(clippy::panic, reason = "constant evaluation only")]` on each `const` constructor (`deny` allows `#[expect]`, whereas `forbid` would not). |
+| Offline (a converter, build tool, or command-line program) | Call `expect("why it holds")`, and document it under `# Panics` on any public function. | Workspace `unwrap_used` warns; `expect_used` is allowed; enable `clippy::indexing_slicing` where indices come from external data until they use issued index types. |
+| A binding's entry crate (contains only the binding's entry point) | Same as the engine path. | Same as the engine path. |
 
 Test what the host does with a panic inside a binding call rather than assume the behaviour. State the result in the binding's crate documentation.
 
@@ -51,7 +51,7 @@ Ref: nextest's two-tier error model (`AGENTS.md`) and its many `expect` calls in
 
 ### One error per operation
 
-*Default.* Use one error type per operation a caller performs across a boundary. The layer that knows the context attaches it once. Name the error after the operation, such as `ReadGlbError` or `BuildError`. Internal helpers return their operation's error, never a crate-wide enum or `Result<Result<…>>`. Shared context is a struct around a `kind`. A core attaches the frame or position it knows. Its caller attaches the item, the shell attaches the file, and the parser attaches the line. Keep each error small. Box a large or rare cause (`clippy::result_large_err`). Report several independent refusals as one non-empty list.
+*Default.* Define one error type per boundary operation and name it after the operation, such as `ReadGlbError` or `BuildError`. Internal helpers return that operation's error, never a crate-wide error enum or `Result<Result<...>>`. When variants share context, wrap a `kind` enum in a struct. Each layer attaches the context it knows once: the core attaches the frame or position, its caller attaches the item, the shell attaches the file, and the parser attaches the line. Keep error types small by boxing large or rare causes (`clippy::result_large_err`), and return several independent refusals as one non-empty list.
 
 Before, a refusal hidden in the success type:
 
@@ -79,13 +79,13 @@ Ref: nextest's per-operation errors and `ConfigParseError { config_file, tool, k
 
 ### Where a refusal sits
 
-*Always.* A refusal sits and moves as [A refusal sits where it is cheapest](../../general.md#design) says. A change's description lists every move. A refusal's wording may improve for its reader, and the change lists that improvement too. Where a project has codes, a code stays stable unless the change explains why it changes.
+*Always.* Place and move refusals as [A refusal sits where it is cheapest](../../general.md#design) specifies. When a change moves a refusal or improves its wording, the change lists each move and wording change. In projects that use error codes, keep each code stable unless the change explains why it changed.
 
 **Checked by:** review of the change's list of moved refusals.
 
 ### Messages and codes
 
-*Default.* `Display` supplies its own message fragment. Put the cause in `source()`. A message is lowercase with no trailing period and reads after "failed to" or "{path}: ". A cause is never both inline and a source. Only the renderer walks the chain, once. Where a project has error codes, they belong to each binary's top error and to errors matched by non-Rust readers. Core errors carry typed variants for Rust callers to match. Never put a code inside `Display`. The renderer prints it once, and nothing reads a code back from text. A binding to another language returns code and message in separate fields.
+*Default.* Write each `Display` message in lowercase with no trailing period, phrased so it can follow `"failed to "` or `"{path}: "`. Return the underlying cause from `source()` instead of interpolating it into `Display`, so a cause is never both inline and a source and only the top-level renderer walks the source chain, once. Where a project uses error codes, put them on each binary's top-level error and on errors that non-Rust callers match, while Rust callers match typed variants on core errors. Never include an error code in `Display`: the renderer prints the code once, bindings to other languages return the code and message in separate fields, and nothing parses a code back out of formatted text.
 
 ```rust
 #[derive(Debug, thiserror::Error)]

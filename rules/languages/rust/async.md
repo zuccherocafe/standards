@@ -1,10 +1,10 @@
 # Rust standard: Async and concurrency
 
-Part of the [Rust standard](README.md). Only for a project that runs an async runtime.
+Part of the [Rust standard](README.md). This file covers tasks, cancellation, queues, and shutdown in projects that run an async runtime.
 
 ## Async and concurrency
 
-*Always.* A project that needs asynchronous I/O, such as a network service, follows this section. A project without that need forbids an async runtime rather than leaving it open. Each rule names its sources: Tokio 1.53 and tokio-util 0.7 for the runtime's contracts, and the source of the transport and storage crates a service uses for theirs.
+*Always.* Follow this section in any project that needs asynchronous I/O, such as a network service; projects that do not need asynchronous I/O forbid it in `AGENTS.md` ([For a new project: not yet decided](README.md#for-a-new-project-not-yet-decided)). Each rule names its sources: Tokio 1.53 and tokio-util 0.7 for the runtime's contracts, and the source of the transport and storage crates a service uses for theirs.
 
 ### Keep computation synchronous
 
@@ -24,7 +24,7 @@ Ref: Tokio's [runtime](https://docs.rs/tokio/1.53.3/tokio/runtime/index.html), [
 
 ### One owner for state, short polls
 
-*Default.* Mutable domain state has one owner, and other tasks exchange bounded, typed messages with it. Never hold a synchronous lock guard or a `RefCell` borrow across an `await`. An async mutex guards a resource that genuinely needs asynchronous exclusive access, never state left inconsistent across an await. Blocking database calls, file work, and substantial computation run off the executor: `spawn_blocking` for a bounded job that finishes, a dedicated thread for a persistent blocking worker. Bound admission before spawning, including queued jobs and their input size. A started blocking job cannot be cancelled by the runtime, so it has cooperative checkpoints or runs in its own process. On a current-thread scheduler one blocking poll stalls every task.
+*Default.* Give mutable domain state a single owner and have other tasks exchange bounded, typed messages with it. Never hold a synchronous lock guard or a `RefCell` borrow across an `.await`. Use an async mutex only for a resource that genuinely needs exclusive access across an `.await`, never to hold domain state in an inconsistent form across an `.await`. Run blocking database calls, file work, and substantial computation off the async executor: use `spawn_blocking` for a bounded job that finishes, and use a dedicated thread for a persistent blocking worker. Bound admission before spawning, including both queued jobs and their input size. Because the runtime cannot cancel a blocking job once it starts, give the job cooperative checkpoints or run it in its own process. On a current-thread scheduler, one blocking poll stalls every task.
 
 Ref: Tokio's [`spawn_blocking`](https://docs.rs/tokio/1.53.3/tokio/task/fn.spawn_blocking.html) and [`block_in_place`](https://docs.rs/tokio/1.53.3/tokio/task/fn.block_in_place.html).
 
@@ -38,9 +38,9 @@ Ref: Tokio's [`JoinHandle`](https://docs.rs/tokio/1.53.3/tokio/task/struct.JoinH
 
 **Checked by:** Clippy's `let_underscore_future` for `let _ =` on a future or handle, not for other ways a handle is dropped; tests that end with no task left running; review for each spawn's owner.
 
-### Cancellation is specified at each async boundary
+### Specify cancellation at each async boundary
 
-*Default.* Each async operation documents what dropping its future can lose, what state stays valid, whether its effect may already have happened, and how its owner finishes cleanup. Every `select!`, timeout, fail-fast join, and abort is a cancellation point and is reviewed as one: the losing branches of a `select!` are dropped. Cooperative stop requests use hierarchical `CancellationToken`s, with a child token for each narrower lifetime. A cancelled token is not proof that anything stopped: actual completion, or an unknown outcome, is recorded separately.
+*Default.* For each async operation, document what dropping its future can lose, what state stays valid, whether its effect may already have happened, and how its owner finishes cleanup. Review every `select!`, timeout, fail-fast join, and abort as a cancellation point, remembering that `select!` drops its losing branches. Use hierarchical `CancellationToken`s for cooperative stop requests, creating a child token for each narrower lifetime. Because cancelling a token requests a stop without proving that anything stopped, record actual completion or an unknown outcome separately.
 
 Ref: Tokio's [`select!`](https://docs.rs/tokio/1.53.3/tokio/macro.select.html) on cancellation safety; tokio-util's [`CancellationToken`](https://docs.rs/tokio-util/0.7.20/tokio_util/sync/struct.CancellationToken.html); nextest's executor (`nextest-runner/src/runner/executor.rs`).
 
@@ -48,7 +48,7 @@ Ref: Tokio's [`select!`](https://docs.rs/tokio/1.53.3/tokio/macro.select.html) o
 
 ### Cancelling a wait does not undo an effect
 
-*Always.* Never cancel and restart a multi-step operation, such as `write_all` or `read_exact`, on a stream that is reused, without keeping its progress. Keep the operation's future alive, keep its progress in its owner, finish an accepted frame at a safe point, or close the stream and reconcile. Essential cleanup lives outside any future a timeout can drop. A side effect carries an action identity, an acknowledgement, and a generation check. If an effect may already have happened, a timeout or a lost acknowledgement leaves its outcome unknown, not failed, unless the operation's contract establishes otherwise. A timeout while waiting to submit, before any work was handed over, is known non-execution and is reported as an admission timeout or a refusal. Non-idempotent work is retried only after reconciliation, or under a deduplication contract that has been verified, so that one request never takes effect twice.
+*Always.* Never cancel and restart a multi-step operation, such as `write_all` or `read_exact`, on a reused stream without tracking its progress: either keep the operation's future alive, store its progress in the owner, finish an accepted frame at a safe point, or close the stream and reconcile. Keep essential cleanup outside any future that a timeout can drop. Give every side effect an action identity, an acknowledgement, and a generation check. When an effect may already have happened, a timeout or lost acknowledgement leaves its outcome unknown rather than failed, unless the operation's contract establishes otherwise. When a timeout fires while waiting to submit work, before any work was handed over, report an admission timeout or a refusal because the work is known not to have run. Retry non-idempotent work only after reconciliation or under a verified deduplication contract, so that one request never takes effect twice.
 
 Ref: Tokio's [`mpsc::Sender::send`](https://docs.rs/tokio/1.53.3/tokio/sync/mpsc/struct.Sender.html) and `reserve` on what a cancelled send guarantees.
 
@@ -56,7 +56,7 @@ Ref: Tokio's [`mpsc::Sender::send`](https://docs.rs/tokio/1.53.3/tokio/sync/mpsc
 
 ### Bound work, not just channels
 
-*Always.* Every queue has a capacity, a maximum item size, an owner, and stated behaviour when full and when closed. Bound running tasks and waiting producers as well as buffered items: unbounded tasks waiting on a bounded channel are an unbounded queue. Reliable work waits for capacity only within its deadline, or is refused before it is accepted. A producer that may be cancelled holds its message while awaiting `reserve()` and sends through the permit. Updates that only the latest value matters for may be coalesced. Expired real-time data, such as audio or poses, is dropped, never replayed late. Stop and revocation travel on their own bounded or coalescing path, which obsolete work cannot bury.
+*Always.* Give every queue a capacity, a maximum item size, an owner, and stated behaviour when full and when closed. Bound running tasks and waiting producers as well as buffered items, because unbounded tasks waiting on a bounded channel still form an unbounded queue. Have reliable work wait for capacity only within its deadline, or refuse it before accepting it. A producer that may be cancelled keeps its message while awaiting `reserve()` and sends it through the permit. Updates where only the latest value matters may be coalesced. Drop expired real-time data, such as audio or poses, rather than replaying it late. Send stop and revocation signals on their own bounded or coalescing path so obsolete work cannot bury them.
 
 Ref: Tokio's [`mpsc`](https://docs.rs/tokio/1.53.3/tokio/sync/mpsc/index.html) on bounded channels and backpressure.
 
@@ -72,7 +72,7 @@ Ref: Tokio's [`timeout`](https://docs.rs/tokio/1.53.3/tokio/time/fn.timeout.html
 
 ### Shut down in dependency order
 
-*Default.* Shutdown has explicit phases and a finite grace deadline: stop admitting work, request cancellation of what can be dropped, finish accepted obligations and required records, stop their dependencies, and join workers. The runtime, transport drivers, and record store stay alive while cleanup needs them. After the deadline, remaining tasks are aborted and their joins observed, and work that will not stop is escalated to the process's supervisor. Dropping the runtime or `shutdown_timeout` is not a graceful shutdown.
+*Default.* Run shutdown in explicit phases under a finite grace deadline: stop admitting work, request cancellation of what can be dropped, finish accepted obligations and required records, stop their dependencies, and join workers. Keep the runtime, transport drivers, and record store alive while cleanup needs them. After the deadline, abort the remaining tasks, observe their joins, and escalate any work that will not stop to the process's supervisor. Neither dropping the runtime nor calling `shutdown_timeout` counts as a graceful shutdown.
 
 Ref: Tokio's guide to [graceful shutdown](https://tokio.rs/tokio/topics/shutdown).
 

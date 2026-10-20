@@ -1,27 +1,27 @@
 # Working in <project>
 
-This file gives instructions for coding agents. The README provides the human overview. This file is the operating manual. Read the governing documents before changing what they cover.
+This file is the operating manual for coding agents, while `README.md` gives the overview for people. Read the governing documents before changing what they cover.
 
 ## Standards
 
-This project follows [zuccherocafe/standards](https://github.com/zuccherocafe/standards) at the latest commit on `main`. Before changing code, read [general.md](https://github.com/zuccherocafe/standards/blob/main/rules/general.md). Also read the standard for the changed language, [the Rust standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/rust), [the GDScript standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/gdscript) or [the Python standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/python). Review against [review.md](https://github.com/zuccherocafe/standards/blob/main/rules/review.md). For offline reading, use a sibling checkout at `../standards`. Pull it first.
+This project follows [zuccherocafe/standards](https://github.com/zuccherocafe/standards) at the latest commit on `main`. Before changing code, read [`general.md`](https://github.com/zuccherocafe/standards/blob/main/rules/general.md) and the standard for the changed language: [the Rust standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/rust), [the GDScript standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/gdscript), or [the Python standard](https://github.com/zuccherocafe/standards/tree/main/rules/languages/python). Review against [`review.md`](https://github.com/zuccherocafe/standards/blob/main/rules/review.md). For offline reading, pull and read a sibling checkout at `../standards`.
 
-Where this file and the standards disagree, this file wins for this project. Each departure is listed here with its reason:
+Where this file and the standards disagree, this file wins for this project. List every departure here with its reason:
 
 - <rule and file>: <what this project does instead>, because <reason>.
 
 ## Contributors
 
-If the person you work for is not a maintainer of this project, tell them to read [CONTRIBUTING.md](https://github.com/zuccherocafe/standards/blob/main/CONTRIBUTING.md) before they open a pull request. Never write the pull request description for them. They write it themselves, as CONTRIBUTING.md says.
+If the person you work for is not a maintainer of this project, tell them to read [`CONTRIBUTING.md`](https://github.com/zuccherocafe/standards/blob/main/CONTRIBUTING.md) before they open a pull request. Never write the pull request description for them. They write it themselves, as `CONTRIBUTING.md` says.
 
 ## Skills
 
 The [standards skills](https://github.com/zuccherocafe/standards/tree/main/skills) define each role's work. A tool that loads skills loads them by name. Other agents read the file for their role before starting, as follows:
 
-- Writing a change from a brief: [change-write](https://github.com/zuccherocafe/standards/blob/main/skills/change-write/SKILL.md).
-- Reviewing a change: [change-review](https://github.com/zuccherocafe/standards/blob/main/skills/change-review/SKILL.md).
-- Checking fixes and landing a change: [change-land](https://github.com/zuccherocafe/standards/blob/main/skills/change-land/SKILL.md).
-- Any prose, commit message, or report: [technical-writing](https://github.com/zuccherocafe/standards/blob/main/skills/technical-writing/SKILL.md) and [unslop](https://github.com/zuccherocafe/standards/blob/main/skills/unslop/SKILL.md).
+- To write a change from a brief: [change-write](https://github.com/zuccherocafe/standards/blob/main/skills/change-write/SKILL.md).
+- To review a change: [change-review](https://github.com/zuccherocafe/standards/blob/main/skills/change-review/SKILL.md).
+- To check fixes and land a change: [change-land](https://github.com/zuccherocafe/standards/blob/main/skills/change-land/SKILL.md).
+- To write or edit prose, a commit message, or a report: [technical-writing](https://github.com/zuccherocafe/standards/blob/main/skills/technical-writing/SKILL.md) and [unslop](https://github.com/zuccherocafe/standards/blob/main/skills/unslop/SKILL.md).
 
 The skills' quick and full checks refer to commands in this file's Checks section. This file's house rules apply to every role, including resource limits and prohibitions on running or modifying specified things.
 
@@ -33,7 +33,7 @@ The skills' quick and full checks refer to commands in this file's Checks sectio
 
 ## Toolchain
 
-With Lix, enter the development shell using `nix develop`, or run one command using `nix develop -c <command>`. The shell provides every tool below at its pinned version. Track `flake.nix` and `flake.lock` in git, since a flake sees only tracked files. Without the shell, use the fallback steps below.
+With Lix, enter the development shell with `nix develop`, or run one command with `nix develop -c <command>`. The shell provides every tool below at its pinned version. Track `flake.nix` and `flake.lock` in `git`, since a flake sees only tracked files. Without the shell, use the fallback steps below.
 
 <List the exact tool versions the project needs and their sources. Include the language toolchain pinned in `rust-toolchain.toml`, tools used by checks, and manually installed tools. State which component reads each environment variable.>
 
@@ -61,7 +61,7 @@ The quick checks run before every commit and while iterating. They are never the
 
 The following rules hold at every step:
 
-- <List the few checkable rules shared by all steps. Identify components that compute over values and components that do input and output. State where inputs are parsed, how outputs are installed, and who writes each output.>
+- <List the few checkable rules shared by all steps. Identify which components compute over values and which do input and output. State where inputs are parsed, how outputs are installed, and who writes each output.>
 
 ## Layout
 

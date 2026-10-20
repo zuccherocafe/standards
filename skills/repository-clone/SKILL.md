@@ -9,11 +9,11 @@ The project's `AGENTS.md` is the authority for everything specific to it: its to
 
 ## Check the machine
 
-The machine needs Lix with the `nix-command` and `flakes` features, and git. If one is missing, stop and report it: installing them is the owner's choice. Every other tool comes from the project's development shell. To clone before that shell exists, run jj once from nixpkgs with `nix shell nixpkgs#jujutsu`.
+The machine needs git and Lix with the `nix-command` and `flakes` features enabled. If one is missing, stop and report it: installing them is the owner's choice. Every other tool comes from the project's development shell. To clone before that shell exists, run jj once from nixpkgs with `nix shell nixpkgs#jujutsu`.
 
 ## Clone it
 
-1. Clone the repository with `jj git clone git@github.com:zuccherocafe/<project>.git`. jj colocates with git by default, so jj and git see the same commits and tools that need git still work.
+1. Clone the repository with `jj git clone git@github.com:zuccherocafe/<project>.git` ([Version control](../../rules/general.md#version-control)).
 2. Push nothing until the owner asks.
 
 ## Enter the development shell
@@ -35,6 +35,6 @@ The machine needs Lix with the `nix-command` and `flakes` features, and git. If 
 2. Run `git status`. It shows no changes.
 3. If a check fails, do not patch the project to make it pass. Report the failure and the one-time step that should have prepared for it.
 
-## Report
+## Report the result
 
 Report the commit you cloned, the one-time steps you ran, and the quick checks' result.

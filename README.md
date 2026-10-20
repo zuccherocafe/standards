@@ -4,18 +4,18 @@ These are the engineering standards for zucchero✿café projects. They cover ho
 
 ## Before you start
 
-Install [Lix](https://lix.systems/install/) with the `nix-command` and `flakes` features enabled, and git. Every other tool, jj included, comes from each project's development shell.
+Install [Lix](https://lix.systems/install/) with the `nix-command` and `flakes` features enabled, and `git`. Every other tool, including `jj`, comes from each project's development shell.
 
-## Reading them
+## How to read these standards
 
-Start with [general.md](rules/general.md), which applies to every project. Then read the standard for your language in [languages/](rules/languages/). [review.md](rules/review.md) lists the questions every review answers.
+Start with [`rules/general.md`](rules/general.md), which applies to every project. Then read the standard for your language in [`rules/languages/`](rules/languages/). [`rules/review.md`](rules/review.md) lists the questions every review answers.
 
-If you want to contribute to a zucchero✿café project, read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+If you want to contribute to a zucchero✿café project, read [`CONTRIBUTING.md`](CONTRIBUTING.md) first.
 
-## Using them in a project
+## How a project uses these standards
 
-A project's `AGENTS.md` links to these files and lists any departure from them with its reason. Where the two disagree, the project's `AGENTS.md` wins for that project. Its development shell pins this repository as a flake input, which provides the shared tools and the skills. The [repository-create](skills/repository-create/SKILL.md) skill sets a new project up this way, and [repository-clone](skills/repository-clone/SKILL.md) gets a working checkout of an existing one.
+A project's `AGENTS.md` links to these standards and lists any departure from them with its reason. Where the two disagree, the project's `AGENTS.md` wins for that project. The project's development shell pins this repository as a flake input, which provides the shared tools and the skills. The [repository-create](skills/repository-create/SKILL.md) skill sets a new project up this way, and [repository-clone](skills/repository-clone/SKILL.md) gets a working checkout of an existing one.
 
 ## Licence
 
-Everything here is under the [MIT licence](LICENSE). The skills copied from pstack keep their own MIT notice ([skills/README.md](skills/README.md)).
+Everything here is under the [MIT licence](LICENSE). The skills copied from pstack keep their own MIT notice ([`skills/README.md`](skills/README.md)).

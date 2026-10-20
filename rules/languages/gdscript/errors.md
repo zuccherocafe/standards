@@ -1,10 +1,10 @@
 # GDScript standard: Errors
 
-Part of the [GDScript standard](README.md). Refusals as values, reporting at the host's edge, assert and engine errors.
+Part of the [GDScript standard](README.md). Refusals as values, reporting at the host's edge, `assert`, and engine errors.
 
 ## Errors
 
-GDScript has no exceptions. A run-time script error prints `SCRIPT ERROR`, abandons the function, and returns `null` or the zero value. Examples include wrong-type assignments, missing keys, and calls on `null`. The caller continues without notification of the failure (measured). Return a failure as a value when a caller must handle it. For a bug, produce an error in debug builds, where checks run. Its printed error line fails the checks.
+GDScript has no exceptions. A run-time script error prints `SCRIPT ERROR`, abandons the function, and returns `null` or the zero value. Examples include wrong-type assignments, missing keys, and calls on `null`. The caller continues without learning that the call failed (measured). Return a failure as a value when a caller must handle it. For a bug, produce an error in debug builds, where checks run. Its printed error line fails the checks.
 
 ### Refusals are values
 
@@ -12,7 +12,7 @@ GDScript has no exceptions. A run-time script error prints `SCRIPT ERROR`, aband
 
 - **The author or environment can fix it.** Return a refusal value for an authored file, missing file, failed process, or external request. One option is a record with an `errors: PackedStringArray` field. Set it through a named static constructor, such as `static func refused(reasons: PackedStringArray) -> ImportInput`, so construction occurs in one place. Alternatively, return the typed record or `null` from a parse function and store reasons in the caller-supplied parser object. A program-matched refusal, such as an interface refusal or protocol error, carries a stable `snake_case` code beside its message in separate fields ([Messages and codes](../rust/errors.md#messages-and-codes)). A human-readable refusal names its place as [Parse at the boundary](../../general.md#design) says.
 - **Our own code breaks a promise.** Use a type that rules out the failure. Otherwise, use `assert` with a message. Its error fails checks, and a release build strips the assertion.
-- **Accepted input fails numerically.** Return an outcome that the caller handles, never a refusal or silent `NaN`. Cases include a non-finite result or a degenerate input. A comparison with `NaN` is false, so `if error > limit:` accepts `NaN`. Test `is_finite` where the value is produced.
+- **Accepted input fails numerically.** Return an outcome that the caller handles, never a refusal or silent `NaN`. Cases include a non-finite result or a degenerate input. A comparison with `NaN` is false, so `if error > limit:` accepts `NaN`. Test `is_finite` where you compute the value.
 
 Never return a `Variant` containing either the value or a refusal string, distinguished with `is String`. The following sketch shows the rejected form:
 
@@ -35,7 +35,7 @@ class Installed extends RefCounted:
 	var refusal := ""
 ```
 
-A refused record has the same type as a complete one. GDScript cannot express that distinction as a type. The record's `##` says which fields are meaningful when `errors` is empty. Callers test `errors` first.
+A refused record has the same type as a complete one because GDScript cannot express that distinction as a type. The record's `##` states which fields hold values when `refusal` or `errors` is empty, and callers test that field first.
 
 Ref: gdUnit4 `addons/gdUnit4/src/core/GdUnitResult.gd` (a result object, with its `int` state as the weakness to avoid: use a named enum).
 
@@ -68,6 +68,6 @@ Ref: the GDScript reference, "Assert keyword".
 
 ### Engine errors are checked
 
-*Always.* An engine call that can fail reports failure as an `Error`, `null` with a separate reason, or an empty value. `ResourceSaver.save`, `DirAccess.make_dir_recursive_absolute`, and `JSON.parse` return `Error`. `FileAccess.open` returns `null`, with its reason available through `FileAccess.get_open_error()`. Bind the result at the call site. Test it there. Convert failure into a refusal naming the path. With `return_value_discarded` off, review must catch a discarded `Error`. A signal connection's `Error` and an `Array.append`'s `bool` may be discarded.
+*Always.* An engine call that can fail reports failure as an `Error`, `null` with a separate reason, or an empty value. `ResourceSaver.save`, `DirAccess.make_dir_recursive_absolute`, and `JSON.parse` return `Error`. `FileAccess.open` returns `null`, with its reason available through `FileAccess.get_open_error()`. Bind and test the result at the call site, and convert a failure into a refusal that names the path. With `return_value_discarded` off, review must catch a discarded `Error`. Callers may discard the `Error` from `connect` and the `bool` from `Array.append`.
 
 **Checked by:** review.

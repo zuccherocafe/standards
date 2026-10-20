@@ -1,20 +1,20 @@
 # <name>: <the one concept, in a few words>
 
 <!--
-- Write a brief for one change for whoever builds it, whether a person or agent.
+- Write a brief that covers one change for whoever builds it, whether a person or an agent.
 - Keep the brief to one page, with one line per item. Link to material rather than copy it.
 - Keep every section. Write "none" where a section has no content. Delete this comment.
 -->
 
 <State the date, repository, base revision, and branch name. Name the writer and the review process.>
 
-**Size.** <small, normal, or design. A small change is one commit of about 200 lines that adds no type, and gets one review and no review of its brief. A design change adds or changes a format, a type, an API, or a dependency.>
+**Size.** <State `small`, `normal`, or `design`. A `small` change is one commit of about 200 lines that adds no type, gets one review, and needs no brief review. A `design` change adds or changes a format, a type, an API, or a dependency.>
 
 **Concept.** <State the one thing this change makes true, in a sentence the reviewer can check.>
 
 **Closes.** <Identify the tracked items this change finishes by identifier. Identify separately any items it advances without finishing.>
 
-**Decided.** <List each decision the change implements and where it is recorded. The writer does not reopen those decisions.>
+**Decided.** <List each decision the change implements and the document that records it. The writer does not reopen those decisions.>
 
 ## Read first
 
@@ -26,7 +26,7 @@
 
 - `<file>`: `<symbol>`, `<symbol>`: <what changes there, and which item it serves>.
 
-<Find each site by its symbol, not its line, because other changes land while this one is written.>
+<Identify each site by its symbol, not its line number, because other changes may land while the writer works on this one.>
 
 ## Do
 
@@ -48,7 +48,7 @@
 
 ## Evidence
 
-<State where the writer leaves the evidence. Check logs per commit and at the tip are the default. Pick any other evidence the change-write skill lists that this change needs, such as a report of differences or the list of moved refusals.>
+<State where the writer leaves the evidence. Check logs per commit and at the tip are the default. Pick any other evidence the `change-write` skill lists that this change needs, such as a report of differences or a list of moved refusals.>
 
 ## Where this is going
 
@@ -64,6 +64,6 @@
 
 ## Rules
 
-<State the branch, clone, commit-message form, resource limits, and prohibitions on running or modifying specified things. Define the report's contents: work done, evidence paths, and every departure with its reason.>
+<List only rules specific to this brief, such as the target branch, checkout path, or extra constraints beyond the project's `AGENTS.md` and the `change-write` skill.>
 
 The writer follows the standards' [change-write](https://github.com/zuccherocafe/standards/blob/main/skills/change-write/SKILL.md) skill. Where the skill and this brief differ, this brief wins.

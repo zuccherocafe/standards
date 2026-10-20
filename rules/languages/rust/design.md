@@ -1,12 +1,12 @@
 # Rust standard: Design
 
-Part of the [Rust standard](README.md). Types, parsing, where behaviour lives, visibility, records, modules and crates.
+Part of the [Rust standard](README.md). This file covers types, parsing, where behaviour lives, visibility, records, modules, and crates.
 
 ## Types and invariants
 
 ### Identities
 
-*Weigh.* An identity in a crate-level interface, or one that is stored, has its own type where it could be confused with another identity or keys a map. A crate-level interface is a `pub(crate)` or wider signature, a record, or an error. Use a newtype with a private field, a checked constructor, an accessor, `Display`, and `Eq + Ord + Hash`. Key maps by the identity type so a key from one map does not fit another. When authored and stored names differ, the type has two entry points. One accepts the authored form. `FromStr` accepts the stored form, which must round-trip. For example, a person may write "violin case" while the program stores `violin_case`.
+*Weigh.* Give an identity its own type when it appears in a crate-level interface or in stored state, and when it keys a map or could be confused with another identity. A crate-level interface is a `pub(crate)` or wider signature, a record, or an error. Use a newtype with a private field, a checked constructor, an accessor, `Display`, and `Eq + Ord + Hash`. Key each map by its identity type so a key from one map cannot index another. When authored and stored names differ, give the type two entry points: one for the authored form, such as `"violin case"`, and `FromStr` for the stored form, such as `violin_case`, which must round-trip.
 
 Before, the maps share a string key type:
 
@@ -39,9 +39,9 @@ Ref: nextest `RustBinaryId` (`nextest-metadata/src/test_list.rs`); guppy `Packag
 
 ### Quantities
 
-*Default.* A quantity has a type. A unit is never merely a name. A length, angle, time, or rate in a crate-level interface uses a unit type. Examples include `Length`, `Radians`, `Seconds`, and `Rate`. Use one explicit conversion where another unit enters from an authored file. A unitless type is only for a dimensionless value. A compound dimension read by one consumer keeps its unit in its name rather than gaining a one-use type. A record keeps its wire spelling with `#[serde(rename = "margin_metres")]`.
+*Default.* Give every quantity in a crate-level interface or stored state (such as a length, angle, time, or rate) its own unit type, such as `Length`, `Radians`, `Seconds`, or `Rate`, rather than putting the unit only in the name. Convert once where another unit enters from an authored file, and keep the wire field name with `#[serde(rename = "margin_metres")]`. Use a unitless type only for a dimensionless value. When a compound dimension has only one consumer, keep the unit in the field or parameter name instead of adding a one-use type.
 
-Type crate-level interfaces and stored state, not arithmetic. A numerical kernel is a private module with one caller in its crate. Its functions may take and return primitive types and slices, unwrapped once at entry and wrapped once at exit. A unit type has only operations its callers use. Every `impl Mul<Seconds> for Rate` is a dimensional claim. The exception is temporary numerical arithmetic. A local or intermediate calculation result, and a kernel argument, remain the primitive types the arithmetic uses. Stored state and values protected by private invariants keep their types wherever they occur. [Identities](#identities) defines a crate-level interface.
+Type crate-level interfaces ([Identities](#identities)) and stored state, not temporary numerical arithmetic. Local intermediate values and arguments to a numerical kernel, which is a private module with one caller in its crate, may use primitive types and slices, unwrapped once on entry and wrapped once on exit. Stored state and values protected by a private invariant keep their types everywhere. Give a unit type only the operations its callers use, because an implementation such as `impl Mul<Seconds> for Rate` states a dimensional relationship.
 
 Ref: jiff `SignedDuration` (`crates/jiff/src/signed_duration.rs`); nextest stores time only as `Duration` (`nextest-runner/src/config/elements/slow_timeout.rs`); jiff moved ranged integers out of its internals and kept them at the public boundary (`CHANGELOG.md`, 0.2.20).
 
@@ -49,7 +49,7 @@ Ref: jiff `SignedDuration` (`crates/jiff/src/signed_duration.rs`); nextest store
 
 ### Invariants
 
-*Always.* Establish an invariant once and preserve it on every path. An invariant type has private fields in its owning module and one checked constructor, `new(raw) -> Result<Self, ItsOwnError>`. Use `Option` instead when there is one reason to refuse. Every other construction or mutation preserves the invariant. `Deserialize` follows [Deserialising](#deserialising). `Default` exists only if the default is valid. Mutators and `From` conversions preserve the invariant. `pub(crate)` fields permit construction throughout the crate and are not private. A `const` counterpart that panics exists only where a constant needs it. It panics only during constant evaluation. Use no `new_unchecked` unless a measurement shows that checking has a cost. A function that checks a value returns the checked type, not `()` ([Make invalid states unrepresentable](../../general.md#design)).
+*Always.* Establish an invariant once and preserve it on every path. An invariant type has private fields in its owning module (`pub(crate)` fields allow construction across the crate and are not private) and one checked constructor, `new(raw) -> Result<Self, ItsOwnError>`. Use `Option` instead when there is one reason to refuse. A function that checks a value returns the checked type, not `()` ([Make invalid states unrepresentable](../../general.md#design)). Every other construction or mutation must also preserve the invariant: `Deserialize` follows [Deserialising](#deserialising), `Default` exists only when the default value is valid, and mutators and `From` conversions keep the value valid. Add a panicking `const` constructor only when a constant needs one, and make it panic only during constant evaluation. Add `new_unchecked` only when a measurement shows that the check has a cost.
 
 Before:
 
@@ -80,9 +80,9 @@ Ref: nextest `TestPriority::new` and its `Deserialize` (`nextest-runner/src/conf
 
 *Always.* Valid inputs do not guarantee a valid result.
 
-- Give a combination of individually valid values that an algorithm cannot use its own named outcome. Never narrow a general type to fit one algorithm.
-- Finite inputs do not guarantee finite arithmetic. Check a result that can overflow or lose definition where it is produced. Alternatively, document an input bound that proves the result finite.
-- Sizes and indices use `try_from` and either `checked_*` or `saturating_*`. Document the chosen meaning. Use `as` only under `#[expect(clippy::cast_*, reason = "...")]` that names the bound.
+- When an algorithm cannot accept a combination of individually valid inputs, return a named outcome for that case rather than narrowing a general type to fit one algorithm.
+- Finite inputs do not guarantee finite arithmetic. Check any result that can overflow or produce `NaN` or infinity where it is computed, or document an input bound that proves the result is finite.
+- Convert sizes and indices with `try_from`, and use `checked_*` or `saturating_*` arithmetic, documenting which one applies. Use `as` only with `#[expect(clippy::cast_*, reason = "...")]` naming the bound that makes the cast safe.
 - A tolerance is a named constant beside the type that uses it.
 - Public components do not enforce an invariant. A `glam` quaternion is not unit by construction, and multiplication does not renormalise it.
 - Numerical failure of accepted input is an ordinary outcome value, distinct from a refusal of an author's mistake and from a bug.
@@ -102,7 +102,7 @@ Ref: guppy `DependencyDirection::opposite` (`guppy/src/graph/mod.rs`); nextest `
 
 ### Sum types
 
-*Default.* State that varies together, or may be absent, is a sum type. Replace a `bool` that selects a mode or determines other fields' meanings with an enum. Each variant contains exactly the fields for its case. Represent options set together, an `Option` tied to one value of a neighbouring enum, or parallel vectors that must agree as one variant or one vector of structs. Absence is `Option` or a named variant, never an empty string, infinity, `-1`, or zero. A `bool` that is an independent observation stays a `bool`. Before combining two flags into one enum, prove from the code that they cannot both hold. Convert a command-line or file flag to its enum at the boundary.
+*Default.* Use a sum type for state that varies together or may be absent. Replace a `bool` that selects a mode or changes what other fields mean with an enum whose variants hold only the fields for their case. Fold options that are always set together, or an `Option` that applies only to one variant of a neighbouring enum, into that variant. Replace parallel vectors that must agree with one vector of structs. Represent absence as `Option` or a named variant, never as an empty string, infinity, `-1`, or zero. A `bool` that is an independent observation stays a `bool`. Before combining two flags into one enum, prove from the code that they cannot both hold. Convert a command-line or file flag to its enum at the boundary.
 
 Before, what `end` means depends on `valid`, and a third case has no flag at all:
 
@@ -131,7 +131,7 @@ Ref: nextest `MaxFail::from_fail_fast(bool)` turning a flag into its enum (`next
 
 ### Tuples
 
-*Default.* A domain value or interface value with its own meaning is a named type, not a bare tuple. In a crate-level interface or a stored field, same-typed values whose order carries meaning use named struct fields or a [small key set](#small-key-sets). Examples include low and high values or left and right values. A tuple would allow a caller to swap them. A numerical kernel's working pairs remain tuples under the [Quantities](#quantities) exception, such as bracket endpoints passed between its functions. Different-typed pairs that the caller unpacks at once also remain tuples. Their types already distinguish the values, so a one-use struct adds no useful name.
+*Default.* Give a domain or interface value with its own meaning a named type rather than a bare tuple. When two values in a crate-level interface or a stored field share a type and their order carries meaning, such as low and high bounds or left and right values, use named struct fields or a [small key set](#small-key-sets) so a caller cannot swap them. Keep tuples in two places: working pairs inside a numerical kernel under the [Quantities](#quantities) exception, such as bracket endpoints passed between its functions, and pairs of different types that the caller unpacks immediately, where the types already distinguish the values.
 
 Before, only a convention says which end is the root:
 
@@ -177,7 +177,7 @@ Ref: guppy's private `PackageIx(u32)` (`guppy/src/graph/mod.rs`); rust-analyzer'
 
 ### Checked against a source
 
-*Weigh.* A value checked against a source retains that source. A value valid only with another value, such as a clip checked against one body, holds a reference to that source. Construct the checked value through its source. No operation then takes the pair separately or can combine mismatched values. The lifetime prevents the checked value from outliving its source but does not distinguish source instances. Lifetimes are not brands, so construction must go through the source. A stage gets its own type when it establishes a fact that the next operation needs. An ordinary transformation that establishes nothing new does not.
+*Weigh.* When a value is valid only with the source it was checked against, such as a clip checked against one body, store a reference to that source inside the checked value and construct it through a method on the source. No operation then takes the pair separately or can combine mismatched values. Because a lifetime only stops the checked value from outliving its source and cannot tell two instances of the source type apart, only constructing the value through its source ties it to that instance. Give a pipeline stage its own type when it proves a fact that the next operation relies on, not for an ordinary transformation that proves nothing new.
 
 For example, in tdollhouse, before:
 
@@ -213,7 +213,7 @@ Ref: guppy `PackageMetadata<'g>` borrowing its graph (`guppy/src/graph/graph_imp
 
 ### Parse once
 
-*Always.* [Parse at the boundary](../../general.md#design) governs every Rust input as written. In crates that take paths, convert paths to UTF-8 once at entry, using `camino`'s `Utf8PathBuf`.
+*Always.* Follow [Parse at the boundary](../../general.md#design). In crates that take paths, convert each path to `camino::Utf8PathBuf` once at entry.
 
 Ref: Alexis King, ["Parse, don't validate"](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/); rust-analyzer builds `CrateGraph` through constructing functions (`docs/book/src/contributing/architecture.md`).
 
@@ -245,7 +245,7 @@ Ref: nextest `TestThreads` with `FromStr`, `Display`, and a visitor (`nextest-ru
 
 ### Traits
 
-*Default.* Do not introduce a trait merely for one implementation. A trait exists where several types implement it or where it inverts a dependency a core must not have. In the latter case, the core declares the trait and hosts implement it without adding the host dependency to the core. An adaptor trait for foreign types at a named boundary is allowed. A test double alone does not justify a trait, as [Code is not shaped for its tests](../../general.md#checks) says. When a test needs made-up inputs, put the algorithm in a plain function over values that both the test and the production type's inherent method call. Production behaviour remains an inherent method.
+*Default.* Define a trait only when several types implement it, when it inverts a dependency that a core crate must not carry (so the core declares the trait and host crates implement it), or when it adapts a foreign type at a named boundary. Do not introduce a trait merely for one implementation or only for a test double ([Do not shape production code for its tests](../../general.md#checks)). When a test needs made-up inputs, keep the production entry point as an inherent method and put the algorithm in a plain function over values that both the method and the test call.
 
 Ref: nextest `StoreReader` with two implementations (`nextest-runner/src/record/reader.rs`); guppy's `IntoMietteDiagnostic` adapting foreign errors (`target-spec-miette/src/imp.rs`).
 
@@ -253,7 +253,7 @@ Ref: nextest `StoreReader` with two implementations (`nextest-runner/src/record/
 
 ## Visibility
 
-*Default.* The public API is what other crates use. An item is `pub` only when another crate names it. A module is `pub` only to group such items. Everything else is `pub(crate)` or narrower, enforced by rustc's `unreachable_pub`. A field is public only when every value of its type is valid there. A struct has either all public fields or none, enforced by Clippy's `partial_pub_fields`. A crate exports types and operations, not internal tuning. Caller-variable settings are fields of a settings type with a `const DEFAULT`. Tuning that another crate must read is exported read-only and accepted by no function. A sealed trait may hide a constructor. `#[non_exhaustive]` follows a compatibility promise. A workspace whose crates are not published makes no such promise. The public API report lists each library crate's public items before and after a change. It is dandegate's `api` step ([tools/crates/dandegate/](../../../tools/crates/dandegate/)), which `--with api` selects. Reviewers read these promises before the implementation. The report causes no check failures.
+*Default.* Make an item `pub` only when another crate names it, and make a module `pub` only to group such items. Keep everything else `pub(crate)` or narrower, as rustc's `unreachable_pub` enforces. Make a struct's fields public only when every value of their types is valid, and make either all of its fields public or none, as Clippy's `partial_pub_fields` enforces. Export types and operations rather than internal tuning: put settings a caller may vary on a settings struct with a `const DEFAULT`, and export any tuning constant that another crate must read as read-only, accepted by no function. A sealed trait may hide a constructor. Add `#[non_exhaustive]` only when a crate promises compatibility across versions, which an unpublished workspace crate does not. The public API report lists each library crate's public items before and after a change; reviewers read these promises before the implementation, and the report causes no check failures. The public API report is dandegate's `api` step, which `--with api` selects.
 
 Ref: nextest's `AGENTS.md` ("Use `pub(crate)` and `pub(super)` liberally"); nextest's raw serde shapes are `pub(in crate::config)` (`nextest-runner/src/config/overrides/imp.rs`).
 
@@ -271,7 +271,7 @@ Ref: nextest-filtering imports `RustBinaryId` from nextest-metadata (`nextest-fi
 
 ### Records
 
-*Default.* A record serialises the core's report type or one wire type with one conversion. Core report types derive `Serialize` and `Deserialize` behind an optional `serde` feature enabled by the writing crate. Working inputs never do. A separate wire type exists only when the wire form differs, such as names instead of indices, a projection, or a legacy shape. It has exactly one conversion and a round-trip test against a hand-written fixture file. A change to a written file's bytes states the change and names the file and format tag. It updates every reader in the same commit. Disk collections are ordered, using `BTreeMap` or `IndexMap`. `HashMap` and `HashSet` serve lookups only.
+*Default.* Serialise either the core's report type directly or one wire type with one conversion. Core report types derive `Serialize` and `Deserialize` behind an optional `serde` feature that the writing crate enables; working input types never derive serde traits. Add a separate wire type only when the wire form differs from the core type, as when it stores names instead of indices, a projection, or a legacy shape. Give that wire type exactly one conversion and a round-trip test against a hand-written fixture file. When a change alters a written file's bytes, state the change and name the file and format tag, and update every reader in the same commit. Use ordered collections (`BTreeMap` or `IndexMap`) for data written to disk, and keep `HashMap` and `HashSet` for lookups only.
 
 Ref: guppy serialises `guppy-summaries`, not `PackageGraph`; nextest serialises `nextest-metadata` summaries, not its test list; ripgrep's `grep-printer` keeps serde behind a feature (`crates/printer/Cargo.toml`).
 
@@ -279,7 +279,7 @@ Ref: guppy serialises `guppy-summaries`, not `PackageGraph`; nextest serialises 
 
 ### Debug
 
-*Always.* `Debug` is for diagnostics. It is never a stable encoding, record field, identity, or cache-key input. A record names a case through serde, `Display`, or an `as_str` with one arm per variant. Diagnostic `Debug` output in logs and test failures is allowed.
+*Always.* Use `Debug` only for diagnostics, such as logs and test failures, never as a stable encoding, record field, identity, or cache-key input. In a record, format an enum variant through serde, `Display`, or an `as_str` method with one arm per variant.
 
 Before, renaming a variant silently invalidates every cache:
 
@@ -295,7 +295,7 @@ After: the role's serde spelling, or an `as_str` with one arm per variant.
 
 ### Modules
 
-*Default.* Keep one cohesive concept per module. Cooperating types may share a file, and a large concept may occupy one large file. A parent may contain a façade's entry functions, declarations, and re-exports, so splitting a file never changes a caller's path. Merge files too small to stand alone into their owner. Group flat directories by subject. A module directory is `name/` beside `name.rs`, never `mod.rs`, as `clippy::mod_module_files` enforces. Tests sit beside their subject in `#[cfg(test)] mod tests`. They may use a named test module when shared fixtures make that more cohesive. Scenario tests live in the crate's `tests/`. Impose no file-count or one-type-per-file rules.
+*Default.* Keep one cohesive concept per module. Cooperating types may share a file, and a large concept may stay in one large file; impose no file-count or one-type-per-file limits. Put a parent module's entry functions, submodule declarations, and re-exports in `name.rs` with submodules in `name/`, never `mod.rs` (`clippy::mod_module_files`), so splitting a file never changes a caller's path. Merge files that are too small to stand alone into their owner, and group flat directories by subject. Keep unit tests beside their subject in `#[cfg(test)] mod tests`, or in a named test module when shared fixtures make that more cohesive, and put scenario tests in the crate's `tests/` ([Scenarios first](tests.md#scenarios-first)).
 
 Ref: nextest `config/elements/`, one element per file with its impls and tests; guppy's `graph_impl.rs` holds several cooperating types.
 
@@ -311,7 +311,7 @@ Ref: matklad, ["Fast Rust Builds"](https://matklad.github.io/2021/09/04/fast-rus
 
 ### Purity
 
-*Always.* Cores compute. The shell does input and output. An engine-independent core reads no file, clock, environment variable, or process and spawns nothing. Purity applies at crate level, and the dependency list is the cheapest proof. Purity alone does not justify a crate because `std::fs` is in every crate's graph. Inside an input-output crate, purity applies at function level. Each stage's logic is a named function over values, tested on values. Named modules perform input and output at the boundaries. Document a clock read that only reports timings and changes no output in the crate's documentation.
+*Always.* Cores compute, and shell crates do input and output. An engine-independent core crate reads no file, clock, environment variable, or process, and spawns nothing. At the crate level, the dependency list is the cheapest proof of purity, though purity alone does not justify a new crate because `std::fs` is available in every crate. Inside an input-output crate, purity applies at the function level: keep each stage's logic in a named function over values, tested on values, and keep input and output in named boundary modules. If a crate reads the clock only to report timings without changing any output, document that in the crate's top-level documentation.
 
 Ref: rust-analyzer's core "never does any IO" (`docs/book/src/contributing/architecture.md`); nextest-runner does IO throughout and keeps pure functions such as `compute_outstanding_pure` (`nextest-runner/src/record/rerun.rs`).
 

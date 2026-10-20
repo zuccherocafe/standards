@@ -1,10 +1,10 @@
 ---
 name: principle-encode-lessons-in-structure
-description: "Apply when you catch yourself writing the same instruction a second time, or notice a recurring correction. Encode the rule as a lint, metadata flag, runtime check, or script instead of more text."
+description: "Apply when you catch yourself writing the same instruction a second time, or notice a recurring correction. Encode the rule as a lint, metadata flag, runtime check, or script instead of adding more prose."
 ---
 
-# Encode Lessons in Structure
+# Encode lessons in structure
 
-If the lesson needs judgment and cannot be encoded, make the instruction more prominent and add an example of the failure mode.
+When you write the same instruction a second time or make the same correction twice, encode the rule as a lint, metadata flag, runtime check, or script instead of adding more prose. When a structural fix works, use only the structural fix and delete the prose instruction.
 
-**Corollary:** If the fix is structural, only use the structural fix. The instruction is the symptom.
+If the lesson requires human judgement that a tool cannot check, make the instruction prominent and add a concrete example of the failure.

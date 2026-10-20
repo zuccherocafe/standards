@@ -5,7 +5,7 @@ description: "As coordinator, check a zucchero✿café change's review fixes onc
 
 # Check a change's fixes and land it
 
-The coordinator lands changes. No separate landing role is needed. With one change in progress at a time, `main` stays unchanged during that work. The writer's evidence at the final tip therefore also supports landing. The project's `AGENTS.md` supplies checks and house rules.
+The coordinator lands changes. When one change runs at a time, `main` stays unchanged during that work, so the writer's evidence at the final tip also supports landing. The project's `AGENTS.md` supplies checks and house rules.
 
 ## Check the fixes narrowly
 
@@ -13,8 +13,8 @@ A change gets one review and one check of its fixes. After the writer fixes the 
 
 1. List the review's must-fix and should-fix findings, and the writer's declines.
 2. Read each fix commit's diff. For each finding, record **OK** or the remaining fault with its file and line.
-3. Read every decline. If its reason is wrong, for example a real input does reach the finding, the finding becomes must-fix.
-4. Check that each fix addresses its cause with the smallest required change. Check that production code stays the same size or smaller where possible. Identify growth and whether a smaller design avoids it.
+3. Read every decline. If its reason is wrong, such as when a real input reaches the finding, mark the finding must-fix.
+4. Check that each fix follows [Fix a review's findings](../change-write/SKILL.md#fix-a-reviews-findings). Identify any growth in production code and check whether a smaller design avoids it.
 5. Check that nothing outside the findings changed. Where the brief picked a change report or public API diff, it must show only changes explained by the fixes.
 6. Check that the evidence comes from the new tip. Full checks must pass there. Any change report or comparison the brief picked must come from runs after the last fix.
 
@@ -22,7 +22,7 @@ A change gets one review and one check of its fixes. After the writer fixes the 
 
 No second review or check follows. After the check, triage what remains and decide.
 
-- With no must-fix finding left, read the declines again and go on to land.
+- If no must-fix finding remains, read the declines again and proceed to [Decide whether to rebase](#decide-whether-to-rebase).
 - Must-fix findings that remain after the check suggest the design is wrong. Either send the writer the few that matter and read their fixes yourself, or decide on a redesign.
 - Ask the maintainer only when a redesign changes a format, a type, an API, or a dependency.
 
@@ -43,9 +43,9 @@ Compare the change's base with the current `main`.
 3. Delete the change's branch. If you made a scratch clone, delete it.
 4. Leave the main checkout clean and on `main`. Never push. Never create a remote. Leave nothing running.
 
-## Report
+## Write the report
 
-Following the technical-writing and unslop skills, report the following in a few lines:
+Write a short report that follows the technical-writing and unslop skills. Include these items:
 
 - The new `main` revision.
 - The narrow check's items with their results, and each decline with whether it stands.

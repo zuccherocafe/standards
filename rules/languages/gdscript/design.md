@@ -1,6 +1,6 @@
 # GDScript standard: Design
 
-Part of the [GDScript standard](README.md). Types, records, closed sets, invariants and parsing at boundaries.
+Part of the [GDScript standard](README.md). Types, records, closed sets, invariants, and parsing at boundaries.
 
 ## Types and records
 
@@ -18,7 +18,7 @@ The table shows what Error-level warnings catch and what they do not catch:
 | `as` on a `Variant` (`unsafe_cast`) | A coroutine run through `Callable.call()` without `await`: no `missing_await` |
 | An enum variable without a default when `0` is not a member | An enum variable without a default when `0` is a member |
 
-The engine enforces the first column, and review enforces the second. A typed declaration from a `Variant` follows an `is` test on the preceding line. Read a dictionary with `.get(key, default)` only when a default is intended. Never read it as a record through dot access. By-name access follows [No duck typing](organisation.md#no-duck-typing). Inside `if value is T:`, the analyser does not narrow `value`. Bind it to a typed local to obtain checks on subsequent lines:
+The engine enforces the first column, and review enforces the second. A typed declaration from a `Variant` follows an `is` test on the preceding line. Read a dictionary with `.get(key, default)` only when you want a default, and never read it as a record through dot access. By-name access follows [No duck typing](organisation.md#no-duck-typing). Inside `if value is T:`, the analyser does not narrow `value`. Bind it to a typed local so the analyser checks later lines:
 
 ```gdscript
 func length_of(value: Variant) -> float:
@@ -70,12 +70,12 @@ class Step extends RefCounted:
 	var transform := Transform3D.IDENTITY
 ```
 
-A `Dictionary` is right in four places, and a project lists its own instances in its AGENTS.md:
+A `Dictionary` fits four cases, and a project lists its own uses in `AGENTS.md`:
 
 - **A true map.** Use `Dictionary[K, V]` for keys and values of one type, available since 4.4. For example, `Dictionary[String, Image]` maps files to decoded images. It rejects wrong literal keys and mismatched typed dictionaries at compile time. Its value-returning methods still return `Variant`.
-- **Inside a parser**, between its field readers, before the values become a record ([Parse once](#parse-once)).
+- **Inside a parser.** Field readers may exchange a dictionary before the values become a record ([Parse once](#parse-once)).
 - **A documented external interface.** Use a dictionary where the wire form requires one, such as a JSON protocol. Parse it into records at input and build it once from records at output.
-- **Made-up raw inputs in tests** that model the boundary's own form.
+- **Made-up raw inputs in tests.** Tests may pass a dictionary to model the boundary's raw input.
 
 Nested typed containers such as `Array[Array[int]]` and `Dictionary[String, Dictionary[String, int]]` are syntax errors. Use a record class for the inner value. Use `Dictionary[StringName, Clip]`, never `Dictionary[StringName, Dictionary]`. A class remains appropriate when it contains only a name, fields, and a constructor. Forty lines of typed fields is the reference form. A record class costs one object per instance. For tens of thousands of plain-number records, a `Packed*Array` per field is an alternative ([Performance](performance.md#performance)).
 
@@ -87,7 +87,7 @@ Ref: phantom-camera `addons/phantom_camera/scripts/resources/tween_resource.gd` 
 
 *Default.* A closed set is a named enum, never an anonymous `enum { A, B }`, bare `int`, or string compared with `==`. A named enum is a distinct static type. Assigning another enum or an anonymous enum's constant is a compile error. Give every enum variable an explicit default, even when `0` is a member. Enum values remain integers internally, so different enums can compare and add. `int_as_enum_without_cast` requires `as` for integer conversion, and `int_as_enum_without_match` rejects a constant integer absent from the enum. At the boundary, convert an external run-time integer by matching it to a member. Refuse unmatched values.
 
-`match` is not exhaustive, and missing members produce no warning. A `match` on a project-owned enum lists every member and ends with a default arm that asserts. An added member then fails when execution first reaches a missing decision in a debug build. Names sent outside the program, such as status fields or records, use an explicit map with one entry per member. Never derive those names through reflection. `Phase.find_key(phase).to_lower()` silently changes the format when a variant is renamed.
+`match` is not exhaustive, and missing members produce no warning. A `match` on a project-owned enum lists every member and ends with a default arm that asserts. An added member then fails when execution first reaches a missing decision in a debug build. Names sent outside the program, such as status fields or records, use an explicit map with one entry per member. Never derive those names through reflection. Renaming a variant makes `Phase.find_key(phase).to_lower()` silently change the wire format.
 
 ```gdscript
 enum Phase { STOPPED, PLANNING, MOVING, TURNING, SETTLING, ARRIVED }
@@ -126,17 +126,17 @@ Ref: the engine tests `analyzer/errors/enum_type_checking.gd` and `analyzer/warn
 |---|---|---|
 | **No generics** | GDScript has no `Result<T, E>`, `Option<T>`, or typed callable. gdUnit4's `GdUnitResult` holds a `Variant` payload, so every caller casts. | Use a per-operation result record with typed fields ([Refusals are values](errors.md#refusals-are-values)). For a callback, use a `Callable` and document its signature in the `##` of the member that holds it. |
 | **No sum types** | An enum is an integer without a payload, so a record cannot express alternative shapes. | Use a record with an enum field and the fields of every case. Document in `##` which fields each case uses. Construct it only through one static function per case, so a caller never assembles a combination by hand. The other combinations remain representable, so review keeps them out. |
-| **No nullability** | Object-typed variables may be `null`. Built-in-typed variables cannot hold `null` and default to their zero. | Represent an absent object as `null` and test it where it is returned. Put an absent built-in value in a record field that is `null` when absent. Never use a sentinel such as `-1`, `INF`, or `Vector3.ZERO`. A single refusal is a `String` that is empty when nothing was refused, because a refusal is never empty text. The function's `##` says so. |
+| **No nullability** | Object-typed variables may be `null`. Built-in-typed variables cannot hold `null` and default to their zero. | Represent an absent object as `null` and test it where a function returns it. Put an absent built-in value in a record field that is `null` when absent. Never use a sentinel such as `-1`, `INF`, or `Vector3.ZERO`. A single refusal is a `String` that is empty when nothing was refused, because a refusal is never empty text. State that convention in the function's `##`. |
 | **No interfaces** | GDScript has no traits or structural typing and supports only single inheritance. | Use an `@abstract` class with `@abstract func`s, available since 4.5, extended by each implementation. Never use `has_method` ([No duck typing](organisation.md#no-duck-typing)). As in the [Rust standard](../rust/design.md#traits), an abstract base needs more than one implementation or a dependency that it inverts. |
 | **Invariant typed arrays** | `Array[Node3D]` does not fit `Array[Node]`. An untyped `Array` holding integers does not fit `Array[int]` when assigned at run time. | Fill a typed array with `.assign()`, which copies and converts. Build typed containers through their typed field, never by assigning an untyped variable to them. |
 | **`as` returns null** | `node as Node3D` returns `null` on mismatch without an error or warning. | If the value must have a particular type, use a typed declaration such as `var mesh: MeshInstance3D = node`, so a mismatch causes a run-time error. Use `as` only when `null` is an expected outcome, and test it on the next line. For a `Variant`, test with `is` first, then assign to a typed local. |
 | **No exhaustive `match`** | A missing enum member falls through a `match` without a diagnostic. | Use the default arm that asserts ([Closed sets](#closed-sets)). |
 | **Untyped signal emission** | The analyser does not check `emit` arguments against the declaration. A wrong type fails at the receiver at run time (measured). | Declare typed signal parameters as documentation, and emit as [Signals](organisation.md#signals) says. |
-| **No typed nested containers** | `Array[Array[int]]` is a syntax error | A record class for the inner value ([A record is a class](#a-record-is-a-class)) |
+| **No typed nested containers** | `Array[Array[int]]` is a syntax error. | Use a record class for the inner value ([A record is a class](#a-record-is-a-class)). |
 | **No private members** | A leading underscore is a convention. | Methods keep the invariants, and review checks those methods ([Invariants](#invariants)). |
 | **Freed objects** | A reference to a freed node compares `== null` and still has `TYPE_OBJECT`. Applying `is` to it raises an error (measured). | Where `null` has meaning, test `typeof(value) == TYPE_NIL`. Enter an object branch only after `typeof(value) == TYPE_OBJECT` and `is_instance_valid` pass, before any class test, in one helper that every caller uses. |
 
-The style guide and static typing page disagree about `as` versus a typed declaration. The style guide calls `get_node(...) as ProgressBar` "more type-safe". The static typing page calls a typed declaration "more reliable" because a mismatch "will be detected immediately". It says `as` "will be silently cast to null". A project that requires an explicit mismatch error uses the typed declaration.
+The style guide and the static typing page disagree about `as` versus a typed declaration. The style guide calls `get_node(...) as ProgressBar` "more type-safe". The static typing page calls a typed declaration "more reliable" because a mismatch "will be detected immediately". The static typing page adds that `as` "will be silently cast to null". A project that requires an explicit mismatch error uses the typed declaration.
 
 Ref: the manual's static typing page ("Type casting", "Safe lines") and GDScript reference ("Typed arrays", "Abstract classes and methods"); godot-open-rpg `src/combat/actions/battler_action.gd` (an `@abstract` resource as an interface); gdUnit4 `addons/gdUnit4/src/core/GdUnitResult.gd` (how far a result goes without generics, and where it stops); ["Make objects non-nullable by default"](https://github.com/godotengine/godot-proposals/issues/11054) (godot-proposals #11054), on GDScript's three kinds of null.
 
@@ -197,7 +197,7 @@ func whole(value: Variant, at: String) -> int:
 
 Read a disk record once into its class. Represent a nested optional part with a record that is `null` when absent. Pass the resulting class to consumers. No consumer reads `record.get("failure", {}).get("cache_key")`.
 
-Ref: gdUnit4 `addons/gdUnit4/src/cmd/CmdArgumentParser.gd` (one entry point, refusals returned as a result rather than printed; its payload is still an untyped `Array`); godot-demo-projects `networking/webrtc_signaling/server/ws_webrtc_server.gd:204-217` (checking parsed JSON's shape, and the assign-before-check trap at `:206-207`); Pixelorama `src/Classes/Project.gd:458-495` (the anti-pattern: parsing and building interleaved, nested JSON read by dot access mid-load). For example, in tdollhouse: `GFParse` (`addons/dolls/contract/parse.gd`) has the shape: one parser per file, `refuse` naming file and field path, `record` refusing unknown fields.
+Ref: gdUnit4 `addons/gdUnit4/src/cmd/CmdArgumentParser.gd` (one entry point, refusals returned as a result rather than printed; its payload is still an untyped `Array`); godot-demo-projects `networking/webrtc_signaling/server/ws_webrtc_server.gd:204-217` (checking parsed JSON's shape, and the assign-before-check trap at `:206-207`); Pixelorama `src/Classes/Project.gd:458-495` (the anti-pattern: parsing and building interleaved, nested JSON read by dot access mid-load). For example, in tdollhouse: `GFParse` (`addons/dolls/contract/parse.gd`) uses one parser per file, `refuse` names the file and the field path, and `record` refuses unknown fields.
 
 **Checked by:** the engine, partly (`unsafe_call_argument` where a field reader passes a `Variant` on untested); unit tests of each refusal on made-up input; review (that no raw value leaves the parser).
 
@@ -234,8 +234,8 @@ These conversion and code-execution risks determine when typed exports are safe 
 
 - **Safe generated resource.** Only the project's own tool, such as a bake or build, writes the resource from parsed values. It is typed, trusted generated output under [Generated output is typed and trusted](../../general.md#design). Typed exports load what the tool wrote.
 - **Safe inspector-edited resource.** A person edits the resource only in the inspector, which writes declared types.
-- **Unsafe text-edited resource.** A person writes or edits the resource as text, and the program loads it through `ResourceLoader`. The resource itself is the authored boundary. Its exports are `Variant`, with `##` comments stating authored types. A `validate()` refuses each incorrect type by field before anything reads the values. The root fix is a plain record parsed into typed resources by the project's parser, as for any authored file. Keep the `Variant` form only while the project itself authors the resource.
-- **Never load an external resource through `ResourceLoader`.** External resources include downloads, users' saves, and imported packages. Outside data uses a plain format parsed by the project, never a resource passed to `ResourceLoader`.
+- **Unsafe text-edited resource.** A person writes or edits the resource as text, and the program loads it through `ResourceLoader`. The resource itself is the authored boundary. Its exports are `Variant`, with `##` comments stating authored types. A `validate()` refuses each incorrect type by field before anything reads the values. The root fix is to store a plain record that the project's parser reads into typed resources, as for any authored file. Keep the `Variant` form only while the project itself authors the resource.
+- **External resource.** Never pass downloads, users' saves, or imported packages to `ResourceLoader`. Store outside data in a plain format that the project's parser reads.
 
 Never add a hand-written resource where a typed generated one exists.
 

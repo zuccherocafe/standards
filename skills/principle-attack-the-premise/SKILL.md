@@ -1,18 +1,17 @@
 ---
 name: principle-attack-the-premise
-description: "Apply when two or more fixes that share one premise have failed the same gate. Write the premise down and test it directly before you write another fix that assumes it."
+description: "Apply when two or more fixes that share one premise have failed the same check. Write the premise down and test it directly before you write another fix that assumes it."
 ---
 
-# Attack the Premise
+# Attack the premise
 
-When two or more fixes that share one premise have failed the same gate, suspect the premise, not the fixes.
+When two or more fixes that share one premise have failed the same check, suspect the premise, not the fixes. Each failed fix is evidence against the belief it assumed. A third fix on the same premise spends effort where the evidence already shows the cause does not lie.
 
-**Why:** Each failed fix is evidence against the belief it assumed. A third fix on the same premise spends effort where the evidence already says the cause is not.
+Follow these steps before writing another fix:
 
-**Pattern:**
-- **Write the premise down.** The premise is the one sentence that every failed fix assumed.
-- **Test the premise before the next fix.** Find an observation that would come out differently if the premise were false, and make it. Look at how the failures are distributed, not only at how large they are. Make the check rerunnable.
-- **Follow the evidence.** If it contradicts the premise, the cause is elsewhere. Look for what the failures have in common that the premise did not predict. If it confirms the premise, ask the next "why" per [Fix Root Causes](../principle-fix-root-causes/SKILL.md). The earlier fixes may have treated a consequence instead of the cause.
+- **Write the premise down.** State the one sentence that every failed fix assumed.
+- **Test the premise before the next fix.** Make a repeatable observation that would come out differently if the premise were false. Check how the failures are distributed, not only how large they are.
+- **Follow the evidence.** If the observation contradicts the premise, look for what the failures share that the premise did not predict. If it confirms the premise, ask the next "why" as in [Fix root causes](../principle-fix-root-causes/SKILL.md), because the earlier fixes may have treated a symptom instead of the cause.
 - **Remove the condition instead of compensating for it.** If the evidence shows that one part always lands on the losing side, change what puts it there. A mechanism that cleans up after it leaves the cause in place and adds work on every run.
 
-**Stop:** Do not start the next fix before the premise is written down and tested.
+Do not start the next fix before the premise is written down and tested.

@@ -1,14 +1,12 @@
 # Rust standard: Tests
 
-Part of the [Rust standard](README.md). The test policy, scenarios, expected values, properties and the mutation report.
+Part of the [Rust standard](README.md). This file covers the test policy, scenarios, expected values, properties, and the mutation report.
 
 ## Tests
 
 ### The test policy
 
-*Default.* A crate's tests come in the three layers of [Test the common scenario first](../../general.md#checks), written in that order, and a review reads them in the same order. Scenarios live in `tests/scenarios.rs` ([Scenarios first](#scenarios-first)), each function's unit tests sit beside that function, and properties follow [Properties](#properties).
-
-Expected values follow [Expected values and snapshots](#expected-values-and-snapshots), and a test is kept as [What a test is kept for](#what-a-test-is-kept-for) says. A scenario's smallest input may be a code-built character or a fixture with a few files. A minutes-long run over real data belongs in the change report, not the checks. The report shows what changed.
+*Default.* Write and review a crate's tests in the three layers of [Test the common scenario first](../../general.md#checks), in that order: scenarios in `tests/scenarios.rs` ([Scenarios first](#scenarios-first)), unit tests beside each function, and property tests ([Properties](#properties)). Expected values follow [Expected values and snapshots](#expected-values-and-snapshots), and a test is kept as [What a test is kept for](#what-a-test-is-kept-for) says. Keep each scenario's input small, such as a value built in code or a fixture with a few files, and put any minutes-long run over real data in the change report rather than in the checks so the report shows what changed.
 
 **Checked by:** review; the mutation report lists mutations the tests miss, and review decides whether each breaks a promise.
 
@@ -22,7 +20,7 @@ For example, in tdollhouse: the first scenario covers a spring chain trailing a 
 /// Hair behind a turning head trails it, swings, and settles where the clip points it.
 #[test]
 fn a_chain_trails_a_turning_parent_then_settles_where_the_clip_points_it() {
-    // …
+    // ...
     // A spring that never lags reads as rigid; a degree is what a person notices.
     assert!(lag > 1.0_f64.to_radians());
 }
@@ -50,7 +48,7 @@ Ref: nextest's integration snapshots of help, errors, and diagnostics (`integrat
 
 ### Properties
 
-*Weigh.* Properties test what types cannot express. Generate valid-domain values through domain constructors. Generate malformed input, such as arbitrary text or numbers, at a parsing boundary to test refusal. A loud failure that only generated malformed input reaches, in offline code whose boundary reads no outside party's input, is a should-fix finding. A silently wrong result, a broken stated promise, or a panic on an engine path is must-fix, whatever input reaches it. Prefer an oracle, then a round trip, then an invariance promised by the specification. Examples include stable output for the same input, independence from unit order, or preservation of already-clear values. Where a numerical or behavioural promise has a cheap oracle, a property may cover it as well as its hand-written expectations.
+*Weigh.* Use property tests for invariants that types cannot express. Generate valid domain values through their constructors, and generate malformed inputs, such as arbitrary text or numbers, at parsing boundaries to test refusals. In offline code whose boundary reads no outside party's input, a loud failure that only generated malformed input can reach is a should-fix finding; a silently wrong result, a broken stated promise, or a panic on an engine path is must-fix whatever input reaches it. Prefer an oracle first, then a round trip, and then an invariance promised by the specification, such as identical output for identical input, independence from unit order, or preserving already-clear values. When a numerical or behavioural promise has a cheap oracle, a property test may cover it alongside its hand-written unit tests.
 
 *Always.* Never test a property the code does not promise. Property tests in the checks use a fixed seed and case budget so rerunning the test reproduces a failure. They write nothing. Turn off proptest's default persistence in every configuration because it writes a regressions file beside the test. Explore fresh seeds by hand. Keep a counterexample to a real promise as an ordinary unit test named for that promise.
 
@@ -70,7 +68,7 @@ Ref: jiff's `Arbitrary for Date` through its constructor (`crates/jiff/src/civil
 
 ### What a test is kept for
 
-*Default.* Tests are kept and named as [Keep a test for a promise](../../general.md#checks) says. Answer a review finding whose input nothing real produces with the type or reasoning, not a test. When a type makes a refusal unreachable, the test of the static promise is a `compile_fail` doctest. A case table reports the failed input. Use separately named `test-case` rows when independent reporting helps, or a loop whose assertion names the input. Assert on variants. Compare rendered text only where wording is the promise, under the snapshot rule.
+*Default.* Keep and name tests as [Keep a test for a promise](../../general.md#checks) specifies. When a review finding rests on an input that nothing real produces, answer it with a type or an explanation rather than adding a test. When a type makes a refusal unreachable at run time, test the static promise with a `compile_fail` doctest. In table-driven tests, make a failure name the offending input, either with separately named `test-case` rows when independent reporting helps or with a loop whose assertion prints the input. Assert on variants, and compare rendered text only when the exact wording is the promise ([Expected values and snapshots](#expected-values-and-snapshots)).
 
 Ref: ripgrep ties regression tests to issues (`tests/regression.rs`); nextest loops over identifier cases (`nextest-runner/src/config/core/identifier.rs`).
 
@@ -78,6 +76,14 @@ Ref: ripgrep ties regression tests to issues (`tests/regression.rs`); nextest lo
 
 ### Mutation report
 
-*Default.* `rust-mutants`, built from [tools/crates/rust-mutants/](../../../tools/crates/rust-mutants/) and exported by the standards' flake, runs [cargo-mutants](https://mutants.rs/) over the Rust a change touched. It makes one edit at a time, such as `>` to `>=`, `-` to `+`, or a function returning a default, and runs the crate's tests against each. It lists each edit the tests miss. A missed edit is a candidate, not proof of a weak test: judgement decides whether it breaks a promise. A change to Rust runs the report against its base, and keeps it with its evidence, when its brief picks it. dandegate's built-in `mutants` step runs the report on the Rust that changed between a change report's two revisions, with the report's own `mutants` profile. The writer judges each missed mutant as one of three kinds. A real gap is a wrong result no test notices, and the change adds the test that does. An equivalent mutant changes no behaviour, and the writer says why in one line. An unstated edge is a boundary the code never promised, such as which side an exact tie falls on. Where a reader depends on it, the writer states the rule in the code's documentation, then tests it as a real gap. Where none does, the writer says so in one line. The maintainer decides a rule the writer cannot. A mutant that times out is listed separately: it usually makes a loop run forever, which the tests already notice by stopping, so the writer checks the time allowance and adds no test for it. A mutant that allocates without end is killed by the memory cap the report runs its shards under, and the run goes on. Each test binary runs in a PID namespace of its own, so a mutant in code that signals processes reaches only those its test started. Never write a test only to catch a mutant, without a promise behind it. The report causes no check failures, since judging a miss needs a reviewer and its cost grows with the change. A run over a whole crate is a manual report, useful before trusting a crate's tests. The project pins cargo-mutants in its development shell.
+*Default.* A change to Rust runs the mutation report against its base, and keeps it with its evidence, when its brief picks it. dandegate's built-in `mutants` step runs `rust-mutants` ([tools/crates/rust-mutants/](../../../tools/crates/rust-mutants/), exported by the standards' flake, with [cargo-mutants](https://mutants.rs/) pinned in the project's development shell) on the Rust that changed between a change report's two revisions, in every change report that includes it. You can also run `rust-mutants` manually across a whole crate before trusting its test suite. The tool makes one small edit at a time, such as changing `>` to `>=`, `-` to `+`, or a function body to a default return value, runs the crate's tests under the report's `mutants` profile, and lists every edit the tests miss. The report runs its shards under a memory cap, so a mutant that allocates without bound is killed and the run goes on. Each test binary runs in its own PID namespace, so a mutant in code that signals processes can reach only children that its own test started. Because judging a miss needs a reviewer and the run time grows with the change, the report causes no check failures.
+
+A missed mutant is a candidate for review, not automatic proof of a weak test; never write a test only to catch a mutant when no promise is behind it. For each missed mutant, the writer records one of three judgements:
+
+- **Real gap.** The edit produces a wrong result that no test notices, and the change adds the test that does.
+- **Equivalent mutant.** The edit changes no observable behaviour, and the writer explains why in one line.
+- **Unstated edge.** The edit changes behaviour at a boundary the code never promised, such as which side an exact tie falls on. If a reader depends on that boundary, the writer states the rule in the code's documentation and tests it as a real gap; if none does, the writer says so in one line. The maintainer decides any rule the writer cannot.
+
+Timed-out mutants appear in their own list because they usually make a loop run forever, which the tests already notice by stopping, so the writer checks the time allowance and adds no test for it.
 
 **Checked by:** review of the report and each judgement.

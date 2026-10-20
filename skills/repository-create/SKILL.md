@@ -9,7 +9,7 @@ First pull the standards checkout to the latest `main`. Paths below are relative
 
 ## Create the repository
 
-1. Create the repository folder. Run `jj git init --colocate` in it. Use `jj` for history and `git` where a tool requires it. Both see the same commits.
+1. Create the repository folder and run `jj git init --colocate` in it, as [Version control](../../rules/general.md#version-control) specifies.
 2. Add no remote. Push nothing. The owner adds the remote when the owner asks for one.
 
 ## Write AGENTS.md
@@ -22,11 +22,11 @@ First pull the standards checkout to the latest `main`. Paths below are relative
 
 ## Add the development shell
 
-1. Copy `templates/nix/flake.nix` to the repository root. Replace `<project>` in `description`. Fetch inputs as tarballs (`github:` or a tarball URL), never `git+https`. The flake and its lock are tracked by git, since a flake sees only tracked files; the shell is written for Lix and kept to what other Nix implementations also evaluate.
-2. Keep the `standards` input, `github:zuccherocafe/standards`, as a flake. Keep `dandegate`, the standards' change report, which puts `dandegate` on `PATH`. A project with steps of its own declares them in a root `dandegate.toml`, and a Rust workspace gets the Rust reports without one. A step finds only the tools its revision's shell puts on `PATH`, so the shell holds every tool the steps run, except a host program such as a GPU program or a compositor, which `dandegate.toml` names in its top-level `host` list instead. Keep `rustScans` and `rustMutants`, the standards' `rust-scans` and `rust-mutants` packages, which put those commands on `PATH`. Keep `pinAge`, the standards' `pin-age` package, which says when a pin is due to move ([Toolchain](../../rules/general.md#toolchain)). Add `pin-age --lock flake.lock` to the quick checks `AGENTS.md` names. A Rust project also passes `--toolchain <workspace>/rust-toolchain.toml`. Keep the `shellHook` that links skills. For each other shared tool, use the standards' package where the standards export one, and otherwise add a `pkgs.writeShellScriptBin` wrapper that runs its script.
-3. If the project uses Rust, choose its workspace as [Copy the Rust template](#copy-the-rust-template) says, and copy `templates/rust/rust-toolchain.toml` into that workspace. Track the copied `rust-toolchain.toml` with `git add` and point `rust` at it now, because the shell reads that file the first time it is entered. Otherwise, remove `rust-overlay`, `rust`, and `rustScans`. Keep the `standards` input.
-4. Add each tool used by checks with the `crate` helper (a cargo tool from crates.io) or the `official` helper (a published binary, such as an engine, fetched by its publisher's digest and installed unchanged), with an exact version and hash, and add it to `packages`. To learn a hash, write `lib.fakeHash`, enter the shell and copy the hash the error reports; for a published binary, prefer the digest its publisher prints. A Rust project pins cargo-mutants this way, for `rust-mutants`, and `cargo-public-api` at the release that reads its pinned nightly's rustdoc JSON, for dandegate's `api` step. The two pins move together. A Python project pins its interpreter, Ruff and Pyrefly, through the lock or these helpers. Give each program the project's scripts find by a variable, such as `ENGINE_BIN`, that variable in the shell. A pin moves in the same change as the file that checks it.
-5. Track `flake.nix`, create the lock, and then track `flake.lock` by running `git add flake.nix && nix flake lock && git add flake.lock`. A flake sees only tracked files.
+1. Copy `templates/nix/flake.nix` to the repository root and replace `<project>` in `description`. Use `github:` or a tarball URL for flake inputs, never `git+https`.
+2. Keep the `standards` flake input, `github:zuccherocafe/standards`, together with `dandegate`, `rustScans`, `rustMutants`, `pinAge`, and the `shellHook` that links skills. Add `pin-age --lock flake.lock` to the quick checks in `AGENTS.md`, and for a Rust project also pass `--toolchain <workspace>/rust-toolchain.toml` ([Toolchain](../../rules/general.md#toolchain)). A Rust workspace gets the Rust reports without a `dandegate.toml`. If the project defines its own report steps, declare them in a root `dandegate.toml`. A step finds only the tools its revision's shell puts on `PATH`, so the shell holds every tool the steps run, except host programs such as a GPU binary or a compositor, which go in `dandegate.toml`'s top-level `host` list. For any other shared tool, use the package that `standards` exports, or wrap its script with `pkgs.writeShellScriptBin`.
+3. If the project uses Rust, choose its workspace directory as [Copy the Rust template](#copy-the-rust-template) says, and copy `templates/rust/rust-toolchain.toml` into that workspace. Track the copied `rust-toolchain.toml` with `git add` and point `rust` at it now, because the shell reads that file the first time it is entered. Otherwise, remove `rust-overlay`, `rust`, and `rustScans`, and keep the `standards` input.
+4. Add each tool the checks run to `packages`, pinned with the `crate` helper for crates.io binaries or the `official` helper for publisher binaries ([Toolchain](../../rules/general.md#toolchain)). For a published binary, use the digest its publisher prints. Otherwise, set `lib.fakeHash`, enter the shell, and copy the hash from the error message. For a Rust project, pin `cargo-mutants` for `rust-mutants` and `cargo-public-api` for dandegate's `api` step this way ([Toolchain and lints](../../rules/languages/rust/README.md#toolchain-and-lints)). Export any environment variable that project scripts use to locate a binary, such as `ENGINE_BIN`, from the shell.
+5. Track `flake.nix`, create the lockfile, and track `flake.lock` by running `git add flake.nix && nix flake lock && git add flake.lock`.
 6. Run `nix develop -c true` to show the shell builds.
 
 ## Copy the Rust template
@@ -35,23 +35,23 @@ For a project without Rust, skip this section.
 
 1. Use the repository root as the Rust workspace, or `rust/` if the repository also contains other languages. Copy the rest of `templates/rust/` into that workspace, beside the `rust-toolchain.toml` the shell already reads.
 2. Rename `crates/example` to the first real crate. Update `members` and that crate's `description`.
-3. Fill in the project's values: its crates in `members`, each crate's one-sentence `description` agreeing with the first line of its `//!` documentation, its licence, each dependency once in `[workspace.dependencies]` as `major.minor`, and any lints of its own after the shared ones.
+3. Fill in `Cargo.toml` for the project: list its crates in `members`, set the workspace `license`, and add any project-specific lints after the shared table. Follow [Toolchain and lints](../../rules/languages/rust/README.md#toolchain-and-lints) for `[workspace.dependencies]` and [Crates](../../rules/languages/rust/design.md#crates) for each crate's `description`.
 4. Inside the shell, run `cargo build`, `cargo fmt --check`, and `cargo clippy --all-targets -- -D warnings` in the workspace.
 
 ## Merge the Godot template
 
 For a project without Godot, skip this section.
 
-1. Merge `templates/godot/project.godot`'s `[debug]` section into the project's `project.godot`. Include each project-owned addon once in `directory_rules`; anything else under addons stays excluded. A project not yet clean of a typing warning leaves its line out, lists it as a departure in `AGENTS.md` with its count, and brings them in one at a time, each with its sites fixed: `untyped_declaration`; then `unsafe_property_access` and `unsafe_cast`; then `unsafe_method_access` and `unsafe_call_argument`.
-2. Merge the `[*.gd]` section of `templates/godot/.editorconfig` into the root `.editorconfig`, rather than replacing an existing one.
-3. Pin the engine and the GDScript formatter in the flake with the `official` helper, by their publishers' digests.
+1. Merge `templates/godot/project.godot`'s `[debug]` section into the project's `project.godot`. Configure `directory_rules` and any staged typing-warning departures as [Warnings](../../rules/languages/gdscript/warnings.md#warnings) specifies.
+2. Merge the `[*.gd]` section of `templates/godot/.editorconfig` into the root `.editorconfig` rather than replacing an existing file.
+3. Pin the engine and the GDScript formatter in `flake.nix` with the `official` helper.
 
 ## Add the Python configuration
 
 For a project without Python, skip this section.
 
-1. Copy `templates/python/ruff.toml` and `pyrefly.toml` to the repository root. Set the target Python (the latest stable release the shell pins), the folders the checker reads (`project-includes`), and its `search-path` (each folder a script adds to its import path, and any host's type stubs). A folder of scripts that run inside a host gets its own `pyrefly.toml` with the host's Python, and Ruff's `per-file-target-version` sets it there too.
-2. Pin the interpreter, Ruff and Pyrefly in the flake by exact version, through the lock or the `crate` or `official` helper.
+1. Copy `templates/python/ruff.toml` and `templates/python/pyrefly.toml` to the repository root. Set the target Python version, the folders the checker reads in `project-includes`, `search-path`, and any host-specific configuration as [Toolchain](../../rules/languages/python/README.md#toolchain) specifies.
+2. Pin the Python interpreter, Ruff, and Pyrefly in `flake.nix` as [Toolchain](../../rules/languages/python/README.md#toolchain) specifies.
 3. Inside the shell, run `ruff format --check`, `ruff check`, and `pyrefly check`, and name all three in `AGENTS.md`'s checks.
 
 ## Add the licences
@@ -64,13 +64,13 @@ For a project without Python, skip this section.
 ## Make the skills available to agents
 
 1. Keep the template flake's `shellHook`. On `nix develop`, it links skills from the pinned `standards` input into `.agents/skills/`, which Codex and Cursor read. It removes links absent from the pin. Git ignores those links because they point to store paths.
-2. The same hook links `.claude/skills` to `.agents/skills` because Claude Code reads only `.claude/skills/`. None of these links is committed. `.claude` is usually git-ignored, and the links follow the pin. Before starting a skill-loading tool in a new checkout, enter the shell once.
+2. The same hook links `.claude/skills` to `.agents/skills` because Claude Code reads only `.claude/skills/`. Do not commit those links. `.claude` is usually git-ignored, and the links follow the pin. Enter the shell once before starting a skill-loading tool in a new checkout.
 3. When you set up, check both paths against each tool's own documentation. The vendors' documentation is the authority, and a path can move.
 4. Keep `AGENTS.md`'s Skills section for tools that load no skills, such as pi. It names the file each role reads.
 
 ## Remove the template's instructions
 
-A copied file keeps only what applies to the project. Delete any instruction or placeholder the copy still carries, and keep a comment only where a value needs a reason a reader couldn't guess.
+Keep only what applies to the project in each copied file. Delete every template instruction and placeholder, and follow [Configuration files carry few comments](../../rules/general.md#writing).
 
 ## Make the first commit
 
