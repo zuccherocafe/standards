@@ -10,9 +10,10 @@
 //! them after the shell's own tools ([`host`]).
 //!
 //! A command runs below a supervisor, a copy of dandegate that owns every process the command starts ([`supervise`]),
-//! and writes its output to a file. When the command exits, the supervisor stops whatever it left running. When its
-//! time runs out, dandegate tells the supervisor to stop everything, and waits for it. When dandegate itself ends, the
-//! supervisor stops everything too. Nothing the command started keeps running after its step.
+//! on the CPUs its step was given, and writes its output to a file. When the command exits, the supervisor stops
+//! whatever it left running. When its time runs out, dandegate tells the supervisor to stop everything, and waits for
+//! it. When dandegate itself ends, the supervisor stops everything too. Nothing the command started keeps running after
+//! its step.
 //!
 //! A failure here becomes an outcome on the page. It never stops the page.
 
@@ -37,6 +38,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use crate::compare::image;
 use crate::compare::measure::Measures;
 use crate::plan::{Output, StepName};
+use crate::report::cpus::Cpus;
 
 /// How often a running command is checked for its end: far below any step's length, and well above the cost of a
 /// check.
@@ -61,6 +63,8 @@ pub(crate) struct Launch<'a> {
     /// The run's folder of host programs, which the command finds after its shell's own tools; none when the plan
     /// names no host program.
     pub(crate) host: Option<&'a Utf8Path>,
+    /// The CPUs the command and everything it starts run on; none to leave them as dandegate's own.
+    pub(crate) cpus: Option<&'a Cpus>,
 }
 
 /// Why a command did not finish.
@@ -85,8 +89,11 @@ pub(crate) fn launch(launch: Launch<'_>) -> Result<ExitStatus, LaunchError> {
     let nix = find_on(&caller, "nix").ok_or(LaunchError::NoNix)?;
     let supervisor = env::current_exe().map_err(LaunchError::Supervisor)?;
     let mut command = Command::new(&supervisor);
+    command.arg(supervise::FLAG);
+    if let Some(cpus) = launch.cpus {
+        command.arg(supervise::CPUS).arg(cpus.to_string());
+    }
     command
-        .arg(supervise::FLAG)
         .arg("--")
         .arg(nix)
         .args(["develop", "--unset", "PATH"])

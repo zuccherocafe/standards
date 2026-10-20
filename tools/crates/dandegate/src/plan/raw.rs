@@ -113,6 +113,7 @@ pub(super) struct RawStep {
     pub(super) reuse: bool,
     #[serde(default)]
     pub(super) exclusive: bool,
+    pub(super) cpus: Option<Spanned<u32>>,
     #[serde(default)]
     pub(super) env: BTreeMap<Spanned<String>, Spanned<String>>,
     pub(super) timeout: Option<Spanned<String>>,

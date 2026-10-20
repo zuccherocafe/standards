@@ -22,6 +22,8 @@ pub(crate) struct Shown {
     pub(crate) log: Option<String>,
     /// What happened about reuse, for a reusable step.
     pub(crate) reuse: Option<String>,
+    /// The CPUs it ran on, when the report shared them out.
+    pub(crate) cpus: Option<String>,
 }
 
 /// One linked section.
@@ -263,22 +265,29 @@ fn worse(html: &mut String, rows: &[&MeasureRow]) {
 
 fn steps(html: &mut String, shown: &[Shown]) {
     html.push_str("<h2 id=\"steps\">Steps</h2>\n");
+    // The CPUs show only when the report shared them out.
+    let shared = shown.iter().any(|shown| shown.cpus.is_some());
+    let mut header = vec!["Side", "Step", "Outcome", "Log"];
+    if shared {
+        header.push("CPUs");
+    }
     table(
         html,
-        &["Side", "Step", "Outcome", "Log"],
+        &header,
         shown.iter().map(|shown| {
             let log = shown.log.as_ref().map_or_else(String::new, |log| {
                 format!("<a href=\"{0}\">{0}</a>", escape(log))
             });
-            (
-                shown.failed,
-                vec![
-                    escape(&shown.place),
-                    escape(&shown.step),
-                    escape(&shown.outcome),
-                    log,
-                ],
-            )
+            let mut row = vec![
+                escape(&shown.place),
+                escape(&shown.step),
+                escape(&shown.outcome),
+                log,
+            ];
+            if shared {
+                row.push(escape(shown.cpus.as_deref().unwrap_or_default()));
+            }
+            (shown.failed, row)
         }),
     );
     let reused: Vec<&Shown> = shown.iter().filter(|shown| shown.reuse.is_some()).collect();

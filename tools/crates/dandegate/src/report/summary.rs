@@ -72,6 +72,7 @@ impl Session<'_> {
                 log: (!matches!(outcome, Outcome::Disabled | Outcome::Skipped(_)))
                     .then(|| relative(&self.request.out, &self.folder(instance).join("log.txt"))),
                 reuse: notes.get(&at).map(|notes| notes.join("; ")),
+                cpus: self.cpus.label(at),
             })
             .collect();
         let notices: Vec<String> = self

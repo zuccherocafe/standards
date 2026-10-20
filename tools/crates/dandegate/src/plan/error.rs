@@ -91,6 +91,16 @@ pub(crate) enum Problem {
         "step \"{step}\": needs \"{need}\", which is exclusive and so runs after every step that is not"
     )]
     NeedsExclusive { step: StepName, need: StepName },
+    #[error(
+        "step \"{step}\": needs \"{need}\", which has a CPU share and so can run after every step without one"
+    )]
+    NeedsShare { step: StepName, need: StepName },
+    #[error("step \"{0}\": cpus: a share is at least one CPU")]
+    NoCpus(StepName),
+    #[error(
+        "step \"{0}\": cpus: an exclusive step runs alone on every CPU, so it has no share of them"
+    )]
+    ExclusiveShare(StepName),
     #[error("the steps need each other in a cycle: {}", .0.iter().map(StepName::as_str).collect::<Vec<_>>().join(" -> "))]
     Cycle(Vec<StepName>),
     #[error("{name:?} names no step; the steps are {known}")]

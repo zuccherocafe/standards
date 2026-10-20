@@ -1,16 +1,19 @@
 //! The process that owns one command's whole process tree.
 //!
-//! dandegate starts every command through a copy of itself, `dandegate --supervise -- <command>`, which becomes the
-//! command's child subreaper: every process the command starts stays below it, whether it starts a new session or is
-//! left behind when its parent exits. The supervisor reads its standard input, a pipe from dandegate, until it ends.
-//! dandegate closes the pipe when the command's time runs out, and the kernel closes it when dandegate ends for any
-//! reason, a signal included.
+//! dandegate starts every command through a copy of itself, `dandegate --supervise [--cpus <list>] -- <command>`, which
+//! becomes the command's child subreaper: every process the command starts stays below it, whether it starts a new
+//! session or is left behind when its parent exits. The supervisor reads its standard input, a pipe from dandegate,
+//! until it ends. dandegate closes the pipe when the command's time runs out, and the kernel closes it when dandegate
+//! ends for any reason, a signal included.
+//!
+//! Given `--cpus`, the supervisor runs on those CPUs before it starts the command, so the command and everything it
+//! starts run on them too. When it cannot, it starts nothing and fails as a command that cannot start does.
 //!
 //! The supervisor stops its tree when the command exits or the pipe ends, whichever comes first. It kills every process
 //! below it and reaps each one before it exits, so nothing the command started outlives it. It then exits as the
 //! command did, with its exit code or by the signal that ended it.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{self, Read as _, Write as _};
 use std::process::{Command, Stdio};
@@ -24,8 +27,13 @@ use rustix::process::{
     set_child_subreaper, wait,
 };
 
+use crate::report::cpus::Cpus;
+
 /// The argument that makes dandegate a supervisor, before `--` and the command.
 pub(crate) const FLAG: &str = "--supervise";
+
+/// The supervisor's option that names the CPUs the command runs on, as `taskset -c` writes them.
+pub(crate) const CPUS: &str = "--cpus";
 
 /// How often the supervisor looks for the command's end and the pipe's: the same as dandegate's own check.
 const POLL: Duration = super::POLL;
@@ -33,10 +41,21 @@ const POLL: Duration = super::POLL;
 /// The exit code when the command cannot be started, as a shell gives for a command it cannot find.
 const NOT_STARTED: u8 = 127;
 
-/// Run `command` to its end or the pipe's, stop everything it started, and give the command's exit code. When a
-/// signal ended the command, the supervisor ends by the same signal first.
-pub(crate) fn supervise(command: &[OsString]) -> u8 {
+/// Run `command`, on `cpus` when given, to its end or the pipe's, stop everything it started, and give the command's
+/// exit code. When a signal ended the command, the supervisor ends by the same signal first.
+pub(crate) fn supervise(cpus: Option<&OsStr>, command: &[OsString]) -> u8 {
     let mut errors = io::stderr();
+    if let Some(written) = cpus {
+        let entered = written
+            .to_str()
+            .and_then(Cpus::parse)
+            .ok_or_else(|| format!("{} is not a list of CPUs", written.to_string_lossy()))
+            .and_then(|cpus| cpus.enter().map_err(|error| error.to_string()));
+        if let Err(why) = entered {
+            let _ = writeln!(errors, "dandegate: the step's CPUs cannot be set: {why}");
+            return NOT_STARTED;
+        }
+    }
     // Without the subreaper attribute an orphan escapes to init. The command still runs and is still stopped.
     if let Err(error) = set_child_subreaper(Some(getpid())) {
         let _ = writeln!(

@@ -5,9 +5,11 @@
 //! uses. [`crate::plan`] says which needs each kind of step can have.
 //!
 //! The scheduler starts each instance whose needs have finished, up to four at once, each on its own thread. When a
-//! need did not succeed, the scheduler skips the instance and records which need failed. Exclusive instances wait until
-//! every other instance has finished, then run one at a time, so a step that measures time runs alone. An instance
-//! whose outcome dandegate knows beforehand, because it is disabled, unneeded or reused, takes no thread.
+//! need did not succeed, the scheduler skips the instance and records which need failed. An instance on CPUs of its own
+//! starts as soon as its needs have finished and is not one of the four, since it takes nothing from them. Instances
+//! that run alone, exclusive ones and those whose CPU share did not fit, wait until every other instance has finished,
+//! then run one at a time, so a step that measures time runs alone. An instance whose outcome dandegate knows
+//! beforehand, because it is disabled, unneeded or reused, takes no thread.
 
 use std::fmt;
 use std::panic::{self, AssertUnwindSafe};
@@ -241,11 +243,22 @@ impl Graph {
     }
 }
 
+/// How an instance shares the machine with the others.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Lane {
+    /// One of up to four at once, on the CPUs no share holds.
+    Ordinary,
+    /// On CPUs of its own, beside the ordinary instances.
+    Own,
+    /// Alone, after every other instance.
+    Alone,
+}
+
 /// How an instance starts.
 #[derive(Debug)]
 pub(crate) enum Start {
-    /// It runs once its needs succeed, or, when exclusive, after every other instance.
-    Run { exclusive: bool },
+    /// It runs in its lane once its needs succeed.
+    Run(Lane),
     /// Its outcome is known already.
     Decided(Outcome),
 }
@@ -253,8 +266,8 @@ pub(crate) enum Start {
 /// Where an instance is in the scheduler.
 #[derive(Debug)]
 enum State {
-    Waiting { exclusive: bool },
-    Running,
+    Waiting(Lane),
+    Running(Lane),
     Done(Outcome),
 }
 
@@ -269,7 +282,7 @@ where
     let mut states = graph.each(|_| State::Done(Outcome::Disabled));
     for (at, start) in graph.ids().zip(starts) {
         states[at] = match start {
-            Start::Run { exclusive } => State::Waiting { exclusive },
+            Start::Run(lane) => State::Waiting(lane),
             Start::Decided(outcome) => State::Done(outcome),
         };
     }
@@ -277,13 +290,12 @@ where
     let done = |state: &State| matches!(state, State::Done(_));
     thread::scope(|scope| {
         let (sender, receiver) = mpsc::channel::<(InstanceId, thread::Result<Outcome>)>();
-        let mut running = 0;
         loop {
             // Skip what waits for a need that finished without succeeding, until nothing more is skipped.
             loop {
                 let skipped: Vec<(InstanceId, StepName)> = states
                     .iter()
-                    .filter(|(_, state)| matches!(state, State::Waiting { .. }))
+                    .filter(|(_, state)| matches!(state, State::Waiting(_)))
                     .filter_map(|(at, _)| {
                         let failed = graph
                             .needs(at)
@@ -299,26 +311,40 @@ where
                     states[at] = State::Done(Outcome::Skipped(Skip::NeedFailed(need)));
                 }
             }
-            let ordinary_left = states
+            let others_left = states
                 .iter()
-                .any(|(_, state)| matches!(state, State::Waiting { exclusive: false }));
-            let mut starting = Vec::new();
+                .any(|(_, state)| matches!(state, State::Waiting(lane) if *lane != Lane::Alone));
+            let running = states
+                .iter()
+                .filter(|(_, state)| matches!(state, State::Running(_)))
+                .count();
+            let ordinary = states
+                .iter()
+                .filter(|(_, state)| matches!(state, State::Running(Lane::Ordinary)))
+                .count();
+            let mut starting: Vec<(InstanceId, Lane)> = Vec::new();
             for (at, state) in states.iter() {
-                let State::Waiting { exclusive } = *state else {
+                let State::Waiting(lane) = *state else {
                     continue;
                 };
-                let room = if exclusive {
-                    !ordinary_left && running == 0 && starting.is_empty()
-                } else {
-                    running + starting.len() < PARALLEL
+                let room = match lane {
+                    Lane::Alone => !others_left && running == 0 && starting.is_empty(),
+                    Lane::Own => true,
+                    Lane::Ordinary => {
+                        let starting_ordinary = starting
+                            .iter()
+                            .filter(|(_, lane)| *lane == Lane::Ordinary)
+                            .count();
+                        ordinary + starting_ordinary < PARALLEL
+                    }
                 };
                 if room && graph.needs(at).iter().all(|&need| done(&states[need])) {
-                    starting.push(at);
+                    starting.push((at, lane));
                 }
             }
-            for at in starting {
-                states[at] = State::Running;
-                running += 1;
+            let started = !starting.is_empty();
+            for (at, lane) in starting {
+                states[at] = State::Running(lane);
                 let sender = sender.clone();
                 scope.spawn(move || {
                     // A panic is sent too, so the scheduler never waits for an outcome that cannot come.
@@ -327,13 +353,12 @@ where
                     let _ = sender.send((at, outcome));
                 });
             }
-            if running == 0 {
+            if running == 0 && !started {
                 break;
             }
             match receiver.recv() {
                 Ok((at, Ok(outcome))) => {
                     states[at] = State::Done(outcome);
-                    running -= 1;
                 }
                 // The scope waits for the other running instances, then the panic goes on.
                 Ok((_, Err(payload))) => panic::resume_unwind(payload),
@@ -342,10 +367,10 @@ where
         }
     });
     graph.each(|at| {
-        match std::mem::replace(&mut states[at], State::Running) {
+        match std::mem::replace(&mut states[at], State::Done(Outcome::Disabled)) {
             State::Done(outcome) => outcome,
             // Every waiting instance's needs finish, so the loop ends with none waiting or running.
-            State::Waiting { .. } | State::Running => Outcome::Skipped(Skip::Unneeded),
+            State::Waiting(_) | State::Running(_) => Outcome::Skipped(Skip::Unneeded),
         }
     })
 }
@@ -380,15 +405,11 @@ mod tests {
         let bad = graph.ids().next();
         let finished = AtomicBool::new(false);
         let caught = panic::catch_unwind(AssertUnwindSafe(|| {
-            run_all(
-                &graph,
-                graph.each(|_| Start::Run { exclusive: false }),
-                &|at| {
-                    assert_ne!(Some(at), bad, "a bug in one step's work");
-                    finished.store(true, Ordering::SeqCst);
-                    Outcome::Disabled
-                },
-            )
+            run_all(&graph, graph.each(|_| Start::Run(Lane::Ordinary)), &|at| {
+                assert_ne!(Some(at), bad, "a bug in one step's work");
+                finished.store(true, Ordering::SeqCst);
+                Outcome::Disabled
+            })
         }));
         let payload = caught.expect_err("the panic goes on");
         let message = payload

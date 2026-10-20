@@ -70,6 +70,7 @@ impl Session<'_> {
                     step: needed.written(),
                     environment,
                     collected,
+                    cpus: self.cpus_followed(need),
                 },
             );
         }
@@ -117,7 +118,16 @@ impl Session<'_> {
                 .map(|program| program.as_str().to_owned())
                 .collect(),
             rust,
+            cpus: self.cpus_followed(at),
         })
+    }
+
+    /// The CPUs the instance runs on, when its result follows them: the mutation report's job budget does, and so
+    /// does the output of a command that names `{cpus}`.
+    fn cpus_followed(&self, at: InstanceId) -> Option<String> {
+        let step = self.step(at);
+        (step.report() == Some(Report::Mutants) || step.uses_cpus())
+            .then(|| self.cpus.cpus(at).to_string())
     }
 
     /// What a step kept by content reads of the revisions: the diff rust-mutants takes in the after checkout's
@@ -230,6 +240,7 @@ impl Session<'_> {
             stderr: files.1,
             deadline: Instant::now() + step.timeout(),
             host: self.host.as_deref(),
+            cpus: self.cpus.enforced(at),
         });
         self.log.write(&format!(
             "=== {} {}: identity collector: {}\n{}",

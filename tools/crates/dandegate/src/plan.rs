@@ -30,7 +30,9 @@
 //! - Every placeholder is one that the step's kind has, and every input it names is declared.
 //! - Every output is a plain path under `{out}`, of a kind that the step can write.
 //! - Every need names a step of a kind that the needing step can wait for. The needs have no cycle, and no ordinary
-//!   step needs an exclusive one, since exclusive steps run after every other step.
+//!   step needs an exclusive one, since exclusive steps run after every other step, or one with a CPU share, which
+//!   runs so when the CPUs are too few to split.
+//! - A step's CPU share, `cpus`, is at least one, and an exclusive step has none ([`crate::report`] splits the CPUs).
 //! - The enabled steps are the ordinary steps, the steps that `--with` names, and every step they need.
 //! - Every host program is a bare file name, named once.
 //!
@@ -482,6 +484,8 @@ pub(crate) struct Step {
     enabled: bool,
     reuse: bool,
     exclusive: bool,
+    /// The CPUs of its own the step asks for, at least one; none for an exclusive step.
+    cpus: Option<usize>,
     timeout: Duration,
     identity_env: Vec<EnvPattern>,
     outputs: Vec<Output>,
@@ -518,6 +522,11 @@ impl Step {
         self.exclusive
     }
 
+    /// How many CPUs of its own the step asks for, if it has a share.
+    pub(crate) fn cpus(&self) -> Option<usize> {
+        self.cpus
+    }
+
     pub(crate) fn timeout(&self) -> Duration {
         self.timeout
     }
@@ -543,6 +552,16 @@ impl Step {
                 recipe.templates().any(Template::uses_cache)
             }
             Runs::Once(recipe) => recipe.templates().any(Template::uses_cache),
+        }
+    }
+
+    /// Whether any of the step's templates names its CPUs, `{cpus}`.
+    pub(crate) fn uses_cpus(&self) -> bool {
+        match &self.runs {
+            Runs::PerRevision(recipe) | Runs::After(recipe) => {
+                recipe.templates().any(Template::uses_cpus)
+            }
+            Runs::Once(recipe) => recipe.templates().any(Template::uses_cpus),
         }
     }
 
@@ -604,6 +623,7 @@ impl Step {
             "needs": self.needs.iter().map(StepName::as_str).collect::<Vec<_>>(),
             "live": self.live,
             "exclusive": self.exclusive,
+            "cpus": self.cpus,
             "identity-env": self.identity_env.iter().map(EnvPattern::written).collect::<Vec<_>>(),
             "outputs": outputs,
         })

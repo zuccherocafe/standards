@@ -7,17 +7,20 @@
 //! 1. Take the build caches when a step names one ([`cache`]). Then check out both commits as detached worktrees in a
 //!    folder of `.cache/dandegate/scratch/` that this run makes for itself, and link the host programs the plan names
 //!    into a folder beside them ([`step::host`]).
-//! 2. For each reusable step, work out its identity, running its collector, and look for a kept result.
-//! 3. Decide which steps run. A step that only other steps need runs only when one of them runs fresh.
-//! 4. Run the steps, and keep each complete success.
-//! 5. Remove the checkouts, keep the build caches within their bound and let go of them ([`cache`]).
-//! 6. Compare the two sides, and write the page, `measures.json` and the printed lines.
+//! 2. Share the CPUs between the enabled steps with a CPU share and the others ([`cpus`]).
+//! 3. For each reusable step, work out its identity, running its collector, and look for a kept result.
+//! 4. Decide which steps run. A step that only other steps need runs only when one of them runs fresh.
+//! 5. Run the steps, and keep each complete success.
+//! 6. Remove the checkouts, keep the build caches within their bound and let go of them ([`cache`]).
+//! 7. Compare the two sides, and write the page, `measures.json` and the printed lines.
 //!
 //! [`schedule`] orders the steps and runs up to four at once. [`step`] runs one command and records what happened to a
 //! step. [`store`] keeps complete successes. [`identity`] lists what a kept result depends on. [`summary`] compares the
-//! two sides and writes the page. [`cache`] holds the build caches that `{cache}` names.
+//! two sides and writes the page. [`cache`] holds the build caches that `{cache}` names, and [`cpus`] shares the CPUs
+//! out.
 
 pub(crate) mod cache;
+pub(crate) mod cpus;
 mod identity;
 mod schedule;
 pub(crate) mod step;
@@ -39,6 +42,7 @@ use crate::plan::{
     TreeArg, TreeValues, Work,
 };
 use crate::report::cache::{BOUND, Builds};
+use crate::report::cpus::{Allocation, Cpus};
 use crate::report::schedule::{Graph, Instance, InstanceId, PerInstance, Place, Start, run_all};
 use crate::report::step::{Launch, LaunchError, Outcome, Skip, check_outputs, host, launch, shown};
 use crate::report::store::{Identity, Lookup, Store};
@@ -102,6 +106,8 @@ struct Session<'a> {
     caches: PerInstance<Option<Result<Utf8PathBuf, String>>>,
     /// The kept build caches, which this report owns until they are dropped; none when it builds in scratch.
     builds: Option<Builds>,
+    /// The CPUs each instance runs on.
+    cpus: Allocation,
     notes: Mutex<BTreeMap<InstanceId, Vec<String>>>,
 }
 
@@ -125,18 +131,7 @@ pub(crate) fn report(request: &Request) -> Finished {
     ));
     let scratch = prepare_cache(&cache);
     // Taken before either checkout is made, so no checkout's files are older than what the caches hold.
-    let builds = request
-        .plan
-        .steps()
-        .values()
-        .any(|step| step.enabled() && step.uses_cache())
-        .then(
-            || match Builds::take(cache.join("builds"), &cache.join("builds.lock")) {
-                Ok(Some(builds)) => Ok(builds),
-                Ok(None) => Err("the build caches are in use by another report".to_owned()),
-                Err(error) => Err(format!("the build caches cannot be locked: {error}")),
-            },
-        );
+    let builds = take_builds(&request.plan, &cache);
     let checkouts = PerSide::from_fn(|side| {
         let folder = scratch.as_ref().map_err(Clone::clone)?.join(side.as_str());
         request
@@ -160,25 +155,18 @@ pub(crate) fn report(request: &Request) -> Finished {
     }
     let graph = Graph::new(&request.plan);
     let identities = graph.each(|_| None);
-    let caches = graph.each(|at| {
-        let instance = graph.instance(at);
-        let step = &request.plan.steps()[&instance.step];
-        (step.enabled() && step.uses_cache()).then(|| match &builds {
-            Some(Ok(builds)) => builds
-                .folder(&instance.step, instance.place)
-                .map_err(|error| format!("its build cache cannot be made: {error}")),
-            Some(Err(why)) => scratch_cache(&scratch, instance).map_err(|error| {
-                format!("{why}, and no folder of this report's can be made: {error}")
-            }),
-            None => Err("the build caches were not taken".to_owned()),
-        })
+    let cpus = Allocation::new(&graph, Cpus::allowed(), |at| {
+        let step = &request.plan.steps()[&graph.instance(at).step];
+        step.enabled().then(|| step.cpus())
     });
-    let busy = match &builds {
-        Some(Err(why)) => Some(format!(
-            "{why}, so it builds in a new folder of this report's"
-        )),
-        _ => None,
-    };
+    if let Some(line) = cpus.summary() {
+        log.write(&format!("=== CPUs: {line}\n"));
+    }
+    let caches = instance_caches(&graph, &request.plan, builds.as_ref(), &scratch);
+    let busy = builds
+        .as_ref()
+        .and_then(|builds| builds.as_ref().err())
+        .cloned();
     let mut session = Session {
         request,
         graph,
@@ -197,12 +185,16 @@ pub(crate) fn report(request: &Request) -> Finished {
         identities,
         caches,
         builds: builds.and_then(Result::ok),
+        cpus,
         notes: Mutex::new(BTreeMap::new()),
     };
-    if let Some(note) = busy {
+    if let Some(why) = busy {
         for (at, cache) in session.caches.iter() {
             if matches!(cache, Some(Ok(_))) {
-                session.note(at, note.clone());
+                session.note(
+                    at,
+                    format!("{why}, so it builds in a new folder of this report's"),
+                );
             }
         }
     }
@@ -215,6 +207,44 @@ pub(crate) fn report(request: &Request) -> Finished {
         }
     }
     session.page(&outcomes)
+}
+
+/// The kept build caches, locked, when an enabled step names one, or why this report cannot have them.
+fn take_builds(plan: &Plan, cache: &Utf8Path) -> Option<Result<Builds, String>> {
+    let named = plan
+        .steps()
+        .values()
+        .any(|step| step.enabled() && step.uses_cache());
+    named.then(
+        || match Builds::take(cache.join("builds"), &cache.join("builds.lock")) {
+            Ok(Some(builds)) => Ok(builds),
+            Ok(None) => Err("the build caches are in use by another report".to_owned()),
+            Err(error) => Err(format!("the build caches cannot be locked: {error}")),
+        },
+    )
+}
+
+/// Each enabled instance's build cache, when its step names one: its kept folder, or a new one of this report's when
+/// the kept ones are another report's.
+fn instance_caches(
+    graph: &Graph,
+    plan: &Plan,
+    builds: Option<&Result<Builds, String>>,
+    scratch: &Result<Utf8PathBuf, String>,
+) -> PerInstance<Option<Result<Utf8PathBuf, String>>> {
+    graph.each(|at| {
+        let instance = graph.instance(at);
+        let step = &plan.steps()[&instance.step];
+        (step.enabled() && step.uses_cache()).then(|| match builds {
+            Some(Ok(builds)) => builds
+                .folder(&instance.step, instance.place)
+                .map_err(|error| format!("its build cache cannot be made: {error}")),
+            Some(Err(why)) => scratch_cache(scratch, instance).map_err(|error| {
+                format!("{why}, and no folder of this report's can be made: {error}")
+            }),
+            None => Err("the build caches were not taken".to_owned()),
+        })
+    })
 }
 
 /// A new build cache for `instance` in this report's scratch folder, for when another report holds the kept ones.
@@ -479,9 +509,7 @@ impl Session<'_> {
             {
                 return Start::Decided(reused);
             }
-            Start::Run {
-                exclusive: step.exclusive(),
-            }
+            Start::Run(self.cpus.lane(at, step.exclusive()))
         })
     }
 
@@ -534,12 +562,14 @@ impl Session<'_> {
             Some(Ok(folder)) => folder,
             Some(Err(why)) => return Err(why.clone()),
         };
+        let cpus = self.cpus.cpus(at).to_string();
         let expansion = Expansion {
             values,
             inputs: self.plan().inputs(),
             out,
             adapters: &self.adapters,
             cache,
+            cpus: &cpus,
         };
         let command = expanded(command, &expansion);
         let mut env = self.env.clone();
@@ -662,6 +692,7 @@ impl Session<'_> {
                     stderr,
                     deadline,
                     host: self.host.as_deref(),
+                    cpus: self.cpus.enforced(at),
                 });
                 match launched {
                     Ok(status) => Outcome::Exited {
@@ -695,6 +726,7 @@ impl Session<'_> {
                     ));
                 }
                 let context = rust::Context {
+                    cpus: self.cpus.enforced(at),
                     settings,
                     revisions: &self.request.revisions,
                     checkouts: &self.checkouts,

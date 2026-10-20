@@ -114,6 +114,9 @@ pub(crate) struct NeedIdentity {
     pub(crate) step: serde_json::Value,
     pub(crate) environment: BTreeMap<String, String>,
     pub(crate) collected: BTreeMap<String, String>,
+    /// The CPUs it runs on, left out for a step whose result does not follow them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) cpus: Option<String>,
 }
 
 /// Everything a kept result depends on:
@@ -131,6 +134,8 @@ pub(crate) struct NeedIdentity {
 /// - The host programs the plan names, by name: the plan comes from the after revision, so the before commit does not
 ///   fix them.
 /// - For a built-in Rust report, the Rust settings of the steps file: the workspace and each report's arguments.
+/// - For the mutation report, whose job budget follows them, and for a step that names `{cpus}`, the CPUs it runs on;
+///   the same for each instance it needs.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct Identity {
     pub(crate) dandegate: String,
@@ -147,6 +152,9 @@ pub(crate) struct Identity {
     /// The Rust settings, left out for a step that is not a built-in Rust report.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) rust: Option<serde_json::Value>,
+    /// The CPUs the step runs on, left out for a step whose result does not follow them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) cpus: Option<String>,
 }
 
 impl Identity {

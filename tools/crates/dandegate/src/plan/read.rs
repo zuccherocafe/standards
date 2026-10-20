@@ -348,6 +348,16 @@ impl Reader<'_> {
             .iter()
             .map(|output| self.output(&name, runs.kind(), output))
             .collect::<Result<_, _>>()?;
+        let cpus = match &fields.cpus {
+            None => None,
+            Some(count) if *count.get_ref() == 0 => {
+                return Err(self.at(count, Problem::NoCpus(name)));
+            }
+            Some(count) if fields.exclusive => {
+                return Err(self.at(count, Problem::ExclusiveShare(name)));
+            }
+            Some(count) => Some(*count.get_ref() as usize),
+        };
         let mut needs = Vec::new();
         for need in &fields.needs {
             let named = StepName::new(need.get_ref())
@@ -361,6 +371,7 @@ impl Reader<'_> {
             enabled: !fields.optional,
             reuse: fields.reuse,
             exclusive: fields.exclusive,
+            cpus,
             timeout,
             identity_env,
             outputs,
@@ -646,6 +657,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
         enabled: !optional,
         reuse,
         exclusive: false,
+        cpus: None,
         timeout,
         identity_env: default_identity_env(),
         outputs,
@@ -668,8 +680,8 @@ fn collector<A: Arg>(settings: &RustSettings, programs: &[&str]) -> Vec<Template
     .collect()
 }
 
-/// Every need names a step of a kind its step can wait for, no ordinary step needs an exclusive one, and there is no
-/// cycle.
+/// Every need names a step of a kind its step can wait for, no ordinary step needs an exclusive one or one with a CPU
+/// share, and there is no cycle.
 fn check_needs(
     reader: &Reader<'_>,
     raw: &[Spanned<RawStep>],
@@ -708,6 +720,16 @@ fn check_needs(
                 return Err(reader.at(
                     written,
                     Problem::NeedsExclusive {
+                        step: name.clone(),
+                        need: need.clone(),
+                    },
+                ));
+            }
+            // A step with a share runs alone, last, when the CPUs are too few to split.
+            if needed.cpus.is_some() && !step.exclusive && step.cpus.is_none() {
+                return Err(reader.at(
+                    written,
+                    Problem::NeedsShare {
                         step: name.clone(),
                         need: need.clone(),
                     },

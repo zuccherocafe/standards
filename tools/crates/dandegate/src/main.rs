@@ -13,11 +13,12 @@
 //! project's domain. A project's own scripts, its adapters in the after revision's `dandegate/` folder, do that work.
 //! For the Rust workspace `[project.rust]` names, dandegate adds the Rust reports as built-in steps ([`rust`]).
 //!
-//! dandegate runs steps on threads, not on an async runtime. It runs up to four steps at once, and runs exclusive steps
-//! last, one at a time. It runs every git operation with the `git` command and every step under `nix develop`, below a
-//! copy of itself started as `dandegate --supervise -- <command>`, which owns every process the step starts. When
-//! `dandegate.toml` names host programs, the shell starts the step through another copy, `dandegate --host-programs
-//! <folder> -- <command>`, which gives the step those programs and becomes the command.
+//! dandegate runs steps on threads, not on an async runtime. It runs up to four steps at once, a step with a CPU
+//! share beside them on CPUs of its own, and exclusive steps last, one at a time. It runs every git operation with the
+//! `git` command and every step under `nix develop`, below a copy of itself started as `dandegate --supervise --
+//! <command>`, which owns every process the step starts and sets the CPUs it runs on. When `dandegate.toml` names host
+//! programs, the shell starts the step through another copy, `dandegate --host-programs <folder> -- <command>`, which
+//! gives the step those programs and becomes the command.
 //!
 //! - [`plan`] reads the steps file once into checked types. No later code checks them again.
 //! - [`revision`] resolves the two revisions, with [`revision::git`].
@@ -152,10 +153,15 @@ fn main() -> ExitCode {
     let given: Vec<OsString> = std::env::args_os().skip(1).collect();
     match given.as_slice() {
         [flag, separator, command @ ..] if flag == supervise::FLAG && separator == "--" => {
-            return ExitCode::from(supervise::supervise(command));
+            return ExitCode::from(supervise::supervise(None, command));
+        }
+        [flag, option, cpus, separator, command @ ..]
+            if flag == supervise::FLAG && option == supervise::CPUS && separator == "--" =>
+        {
+            return ExitCode::from(supervise::supervise(Some(cpus), command));
         }
         [flag, command @ ..] if flag == supervise::FLAG => {
-            return ExitCode::from(supervise::supervise(command));
+            return ExitCode::from(supervise::supervise(None, command));
         }
         [flag, folder, separator, command @ ..] if flag == host::FLAG && separator == "--" => {
             return ExitCode::from(host::enter(folder, command));

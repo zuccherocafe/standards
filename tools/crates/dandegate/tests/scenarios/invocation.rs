@@ -161,7 +161,7 @@ fn every_refusal_comes_before_any_step_runs() {
             &["--before", &valid, "--after", &placeholder],
             "placeholder",
             "dandegate: dandegate.toml:4: step \"visual\": run: {before} is not a placeholder this kind of step has; \
-             it has {tree}, {commit}, {out}, {adapters}, {cache} and {input.<name>}",
+             it has {tree}, {commit}, {out}, {adapters}, {cache}, {cpus} and {input.<name>}",
         ),
         (
             &["--before", &valid, "--after", &valid, "--with", "nope"],

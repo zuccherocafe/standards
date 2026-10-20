@@ -34,6 +34,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::plan::{Report, RustSettings};
+use crate::report::cpus::Cpus;
 use crate::report::rendered;
 use crate::report::step::{Launch, LaunchError, SectionStatus, launch, shown, status_path};
 use crate::revision::git::{GitError, Repository};
@@ -241,6 +242,8 @@ pub(crate) struct Context<'a> {
     pub(crate) deadline: Instant,
     /// The run's folder of host programs, as [`Launch`] takes it.
     pub(crate) host: Option<&'a Utf8Path>,
+    /// The CPUs the step runs on, as [`Launch`] takes them.
+    pub(crate) cpus: Option<&'a Cpus>,
 }
 
 /// Why a report stopped before writing its section.
@@ -356,6 +359,7 @@ impl Context<'_> {
             stderr: log,
             deadline: self.deadline,
             host: self.host,
+            cpus: self.cpus,
         });
         match launched {
             Ok(status) if status.success() => Ok(()),

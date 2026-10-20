@@ -563,3 +563,40 @@ fn the_groups_are_project_reports_and_steps() {
         );
     }
 }
+
+#[test]
+fn a_cpu_share_is_at_least_one_never_on_an_exclusive_step_and_needed_only_by_steps_that_can_run_last()
+ {
+    let share = |extra: &str| {
+        format!(
+            "[[steps.step]]\nname = \"perf\"\nruns = \"once\"\nrun = [\"x\", \"{{cpus}}\"]\n{extra}\n"
+        )
+    };
+    let plan = read(&share("cpus = 4")).expect("a plan");
+    assert_eq!(
+        plan.steps()[&StepName::new("perf").expect("a name")].cpus(),
+        Some(4)
+    );
+    assert_eq!(
+        refusal(&share("cpus = 0")),
+        "dandegate.toml:5: step \"perf\": cpus: a share is at least one CPU"
+    );
+    assert_eq!(
+        refusal(&share("cpus = 2\nexclusive = true")),
+        "dandegate.toml:5: step \"perf\": cpus: an exclusive step runs alone on every CPU, so it has no share of them"
+    );
+    let needing = |extra: &str| {
+        format!(
+            "{}[[steps.step]]\nname = \"after\"\nruns = \"once\"\nneeds = [\"perf\"]\nrun = [\"x\"]\n{extra}\n",
+            share("cpus = 2")
+        )
+    };
+    assert_eq!(
+        refusal(&needing("")),
+        "dandegate.toml:9: step \"after\": needs \"perf\", which has a CPU share and so can run after every step \
+         without one"
+    );
+    read(&needing("exclusive = true")).expect("an exclusive step runs last too");
+    read(&needing("cpus = 1"))
+        .expect("a step with a share runs last too when the shares do not fit");
+}
