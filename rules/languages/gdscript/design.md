@@ -34,7 +34,7 @@ The objection to typing all GDScript is that missing type features make typed co
 
 Ref: the manual's static typing page, "Global scope methods" and "Cases where you can't specify types"; ["GDScript progress report: Typed instructions"](https://godotengine.org/article/gdscript-progress-report-typed-instructions/) (the speed of typed code); ["GDScript: The Good, Bad, and Ugly Parts"](https://azhdarchid.com/gdscript-good-bad-ugly/) (the opposing case); gdUnit4's `addons/gdUnit4/src/` types all of its declarations.
 
-**Checked by:** the engine for the first column; review for the second.
+**Checked by:** the engine for the first column; review for the second, and the bare-type scan for bare types in public signatures.
 
 ### Inference and the type on the line
 
@@ -81,7 +81,7 @@ Nested typed containers such as `Array[Array[int]]` and `Dictionary[String, Dict
 
 Ref: phantom-camera `addons/phantom_camera/scripts/resources/tween_resource.gd` (a typed data `Resource`); Pixelorama `src/Palette/Palette.gd:26` (`Dictionary[int, PaletteColor]`); the engine test `analyzer/errors/typed_dictionary.gd`; ["Add structs in GDScript"](https://github.com/godotengine/godot-proposals/issues/7329) (godot-proposals #7329), on why classes are heavy and dictionaries unchecked.
 
-**Checked by:** review. The engine flags a dictionary only where its values flow into typed code through `Variant` (`unsafe_call_argument`, `unsafe_method_access`); dot access on a typed `Dictionary` compiles silently.
+**Checked by:** the bare-type scan and review. The engine flags a dictionary only where its values flow into typed code through `Variant` (`unsafe_call_argument`, `unsafe_method_access`); dot access on a typed `Dictionary` compiles silently.
 
 ### Closed sets
 

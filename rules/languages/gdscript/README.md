@@ -10,7 +10,7 @@ Each rule ends with a Checked by entry naming the engine, a project check, or re
 
 The standard is in several files. Read this one first, then each file whose subject a change touches:
 
-- [Warnings](warnings.md): Warning levels, exceptions, the project's addons, and script compilation.
+- [Warnings](warnings.md): Warning levels, exceptions, the project's addons, script compilation, and the report scans.
 - [Design](design.md): Types, records, closed sets, invariants, and parsing at boundaries.
 - [Errors](errors.md): Refusals as values, reporting at the host's edge, `assert`, and engine errors.
 - [Organisation](organisation.md): Classes, files, names, duck typing, and documentation.

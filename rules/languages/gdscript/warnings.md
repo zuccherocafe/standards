@@ -58,3 +58,15 @@ var majority := votes.size() / 2 + 1
 Ref: `modules/gdscript/gdscript_parser.cpp` `warning_ignore_annotation` (what an ignore covers on each statement kind); `@GDScript` class reference, `@warning_ignore`.
 
 **Checked by:** the engine (the name); a report-only text scan and review (placement and reason).
+
+### Report scans
+
+*Always.* On a Godot project whose `dandegate.toml` has `[project.godot]`, the change report runs `gdscript-scans` and lists what a change added and removed. You can also run `gdscript-scans` from the development shell as a review aid, and it causes no check failures. It runs three scans:
+
+- **`unused`.** Lists public members that nothing outside the test folders names.
+- **`write-only`.** Lists properties written but never read.
+- **`bare-type`.** Lists public functions with an untyped, bare `Dictionary`, bare `Array`, or `Variant` parameter or return ([Typed everything](design.md#typed-everything), [A record is a class](design.md#a-record-is-a-class)).
+
+Every finding is a candidate for review, not a fault, because name matching misses and over-reports in known ways. The crate documentation in [tools/crates/gdscript-scans/src/main.rs](../../../tools/crates/gdscript-scans/src/main.rs) gives the exact rules and limits.
+
+**Checked by:** review of the findings that a change adds.
