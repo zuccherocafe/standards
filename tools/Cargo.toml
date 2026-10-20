@@ -2,6 +2,7 @@
 members = [
     "crates/dandegate",
     "crates/design-read",
+    "crates/gdscript-scans",
     "crates/pin-age",
     "crates/rust-mutants",
     "crates/rust-scans",
@@ -29,6 +30,8 @@ signal-hook = "0.4"
 syn = { version = "3.0", features = ["full", "visit"] }
 thiserror = "2.0"
 toml = "1.1"
+tree-sitter = "0.26"
+tree-sitter-gdscript = "=6.1.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

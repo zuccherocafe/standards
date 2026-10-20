@@ -42,6 +42,7 @@
         });
 
       rustScans = standards.packages.${system}.rust-scans;
+      gdscriptScans = standards.packages.${system}.gdscript-scans;
       rustMutants = standards.packages.${system}.rust-mutants;
       dandegate = standards.packages.${system}.dandegate;
       pinAge = standards.packages.${system}.pin-age;
@@ -53,6 +54,7 @@
         packages = [
           rust
           rustScans
+          gdscriptScans
           rustMutants
           dandegate
           pinAge

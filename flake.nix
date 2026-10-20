@@ -39,6 +39,9 @@
       rustScans = workspaceTool "rust-scans";
       dandegate = workspaceTool "dandegate";
 
+      # It reads only the project's files; dandegate runs the after revision's copy over both checkouts.
+      gdscriptScans = workspaceTool "gdscript-scans";
+
       # It runs `cargo mutants` from the shell it is used in. `git`, `systemd-run`, `unshare` and mold's `ld.mold` follow
       # the shell's own tools, so a shell without them, as dandegate runs a step in, still has them.
       rustMutants = pkgs.writeShellScriptBin "rust-mutants" ''
@@ -104,6 +107,7 @@
     {
       packages.${system} = {
         rust-scans = rustScans;
+        gdscript-scans = gdscriptScans;
         rust-mutants = rustMutants;
         pin-age = pinAge;
         design-read = designRead;
@@ -118,6 +122,7 @@
           check
           dandegate
           rustScans
+          gdscriptScans
           rustMutants
           pinAge
           designRead

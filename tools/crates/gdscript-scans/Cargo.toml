@@ -1,0 +1,19 @@
+[package]
+name = "gdscript-scans"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Lists a Godot project's unused public GDScript members, write-only properties and bare-typed signatures"
+
+[dependencies]
+camino = { workspace = true, features = ["serde1"] }
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tree-sitter.workspace = true
+tree-sitter-gdscript.workspace = true
+
+[lints]
+workspace = true
