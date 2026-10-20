@@ -11,7 +11,7 @@
 //! 3. Optional steps chosen with `--with`, needs and live steps (`selection`), run up to `--steps-at-once` at once
 //!    with exclusive steps last (`scheduling`).
 //! 4. A page that stands alone, and earlier reports read back (`durable`).
-//! 5. A Rust workspace's built-in reports (`rust`).
+//! 5. A Rust workspace's built-in reports (`rust`), and a Godot project's GDScript scans (`godot`).
 //! 6. Host programs a step takes from the caller's machine (`host`).
 //! 7. A step's build cache, kept between reports (`caches`), and a step's share of the CPUs (`cpus`).
 //! 8. Every refusal, before any step runs (`invocation`).
@@ -24,6 +24,8 @@ mod comparisons;
 mod cpus;
 #[path = "scenarios/durable.rs"]
 mod durable;
+#[path = "scenarios/godot.rs"]
+mod godot;
 #[path = "scenarios/host.rs"]
 mod host;
 #[path = "scenarios/invocation.rs"]

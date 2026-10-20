@@ -123,6 +123,9 @@ impl fmt::Display for RepoPath {
     }
 }
 
+/// The file that makes a folder a Godot project.
+pub(crate) const GODOT_PROJECT: &str = "project.godot";
+
 /// The after revision's files, and the folders among them holding a `Cargo.toml` with a `[workspace]` table.
 #[derive(Debug, Default)]
 pub(crate) struct Tree {
@@ -164,6 +167,17 @@ impl Tree {
 
     pub(super) fn holds_workspace(&self, folder: &RepoDir) -> bool {
         self.workspaces.contains(folder.as_path())
+    }
+
+    /// The folders holding a Godot project's `project.godot`, `.` for the root.
+    pub(super) fn godot_projects(&self) -> impl Iterator<Item = &Utf8Path> {
+        self.files
+            .iter()
+            .filter(|file| file.file_name() == Some(GODOT_PROJECT))
+            .map(|file| match file.parent() {
+                Some(folder) if !folder.as_str().is_empty() => folder,
+                _ => Utf8Path::new("."),
+            })
     }
 
     /// `written` checked against the tree: a folder written as a file, or a file as a folder, is refused. An absent

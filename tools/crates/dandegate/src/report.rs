@@ -49,7 +49,7 @@ use crate::report::step::{Launch, LaunchError, Outcome, Skip, check_outputs, hos
 use crate::report::store::{Identity, Lookup, Store};
 use crate::revision::git::Repository;
 use crate::revision::{PerSide, Revision, Side};
-use crate::rust;
+use crate::{built_in, rust};
 
 /// The after checkout's folder of the project's own step scripts, which `{adapters}` names.
 pub(crate) const ADAPTERS: &str = "dandegate";
@@ -723,9 +723,6 @@ impl Session<'_> {
                 }
             }
             Work::BuiltIn(report) => {
-                let Some(settings) = self.plan().rust() else {
-                    return Outcome::LaunchFailed("the plan has no Rust workspace".to_owned());
-                };
                 let listings = PerSide::from_fn(|side| {
                     self.folder(&Instance {
                         step: Report::ApiListings.step(),
@@ -742,9 +739,9 @@ impl Session<'_> {
                         "its scratch folder could not be made: {error}"
                     ));
                 }
-                let context = rust::Context {
+                let context = built_in::Context {
                     cpus: self.cpus.enforced(at),
-                    settings,
+                    settings: &(),
                     revisions: &self.request.revisions,
                     checkouts: &self.checkouts,
                     out,
@@ -755,14 +752,16 @@ impl Session<'_> {
                     deadline,
                     host: self.host.as_deref(),
                 };
-                match rust::run(*report, side, &context) {
+                match built_in::run(*report, side, self.plan(), &context) {
                     Ok(()) => Outcome::Reported {
                         outputs: check_outputs(step.outputs(), out),
                     },
-                    Err(rust::Stop::TimedOut) => Outcome::TimedOut {
+                    Err(built_in::Stop::TimedOut) => Outcome::TimedOut {
                         after: step.timeout(),
                     },
-                    Err(error @ rust::Stop::Write(_)) => Outcome::LaunchFailed(rendered(&error)),
+                    Err(error @ (built_in::Stop::Write(_) | built_in::Stop::Unplanned(_))) => {
+                        Outcome::LaunchFailed(rendered(&error))
+                    }
                 }
             }
         }

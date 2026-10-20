@@ -4,10 +4,12 @@
 //! its own pinned tools. Every project has a Nix development shell, so this launcher is fixed, not configured.
 //! dandegate finds `nix` on its own `PATH` first. The shell then starts without that `PATH`, so the command finds only
 //! the tools the revision's shell provides, however the shell sets its `PATH`: a tool the shell lacks is not found, and
-//! the step fails with the shell's error in its log, rather than run a tool the revision does not pin. The rest of the
-//! environment passes through, except `DANDEGATE_REPOSITORY` and `DANDEGATE_MEASURES`, which hold this run's values or
-//! are unset. The host programs `dandegate.toml` names are the one exception to the shell's `PATH`: the command finds
-//! them after the shell's own tools ([`host`]).
+//! the step fails with the shell's error in its log, rather than run a tool the revision does not pin. Two built-in
+//! reports run one revision's tool for both: the API diff runs the after revision's `cargo-public-api` over both
+//! sides' listings, and the GDScript scans run the after revision's `gdscript-scans` over both checkouts
+//! ([`crate::gdscript`]). The rest of the environment passes through, except `DANDEGATE_REPOSITORY` and
+//! `DANDEGATE_MEASURES`, which hold this run's values or are unset. The host programs `dandegate.toml` names are the
+//! one exception to the shell's `PATH`: the command finds them after the shell's own tools ([`host`]).
 //!
 //! A command runs below a supervisor, a copy of dandegate that owns every process the command starts ([`supervise`]),
 //! on the CPUs its step was given, and writes its output to a file. When the command exits, the supervisor stops

@@ -471,6 +471,86 @@ fn the_godot_project_and_its_tests_are_folders_the_after_revision_holds() {
 }
 
 #[test]
+fn the_godot_project_holds_project_godot_and_its_tests_lie_inside_it() {
+    let files = tree(
+        &[
+            "godot/project.godot",
+            "godot/tests/a.gd",
+            "tools/b.gd",
+            "other/c.gd",
+        ],
+        &[],
+    );
+    let refused = |text: &str| within(&files, text).expect_err("a refusal").to_string();
+    assert_eq!(
+        refused("[project.godot]\nproject = \"other/\"\n"),
+        "dandegate.toml:2: [project.godot]: project: \"other/\" holds no project.godot in the after revision"
+    );
+    assert_eq!(
+        refused("[project.godot]\nproject = \"godot/\"\ntests = [\"tools/\"]\n"),
+        "dandegate.toml:3: [project.godot]: tests: \"tools/\" is not inside the project \"godot/\""
+    );
+    let root = tree(&["project.godot", "tests/a.gd"], &[]);
+    assert!(
+        within(
+            &root,
+            "[project.godot]\nproject = \"./\"\ntests = [\"tests/\"]\n"
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn a_godot_project_gets_the_gdscript_scans_reading_its_project_and_tests() {
+    let files = tree(&["godot/project.godot", "godot/tests/a.gd"], &[]);
+    let plan = within(
+        &files,
+        "[project.godot]\nproject = \"godot/\"\ntests = [\"godot/tests/\"]\n",
+    )
+    .expect("a plan");
+    let godot = plan.godot().expect("the Godot project");
+    assert_eq!(godot.project().as_path(), "godot");
+    let tests: Vec<&str> = godot
+        .tests()
+        .iter()
+        .map(|folder| folder.as_path().as_str())
+        .collect();
+    assert_eq!(tests, ["godot/tests"]);
+    let names: Vec<&str> = plan.steps().keys().map(StepName::as_str).collect();
+    assert_eq!(names, ["gdscript-scans"]);
+    let step = &plan.steps()[&Report::GdscriptScans.step()];
+    assert!(step.enabled() && step.reuse() && step.kind() == Kind::Once);
+    assert_eq!(
+        plan.report_settings(Report::GdscriptScans),
+        Some(serde_json::json!({ "project": "godot", "tests": ["godot/tests"] }))
+    );
+    assert_eq!(plan.report_settings(Report::RustScans), None);
+}
+
+#[test]
+fn a_project_with_no_godot_table_gets_no_gdscript_scans_and_a_notice_naming_the_table() {
+    let notices =
+        |plan: &Plan| -> Vec<String> { plan.notices().iter().map(ToString::to_string).collect() };
+    let one = within(&tree(&["godot/project.godot"], &[]), "").expect("a plan");
+    assert!(one.godot().is_none() && one.steps().is_empty());
+    assert_eq!(
+        notices(&one),
+        [
+            "the GDScript scans are off: the after revision has a Godot project in godot/, but dandegate.toml has no \
+             [project.godot] table; add one with project = \"godot/\" and its tests folders to turn them on"
+        ]
+    );
+    let two = within(&tree(&["project.godot", "demo/project.godot"], &[]), "").expect("a plan");
+    assert_eq!(
+        notices(&two),
+        [
+            "the GDScript scans are off: the after revision has Godot projects in demo/, ./, but dandegate.toml has \
+             no [project.godot] table; add one with project = \"<folder>/\" and its tests folders to turn them on"
+        ]
+    );
+}
+
+#[test]
 fn measuring_code_is_written_as_what_it_is_and_may_name_what_the_change_removed() {
     let files = tree(&["probes/a.sh", "tools/clips.sh"], &[]);
     let rules = within(

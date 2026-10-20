@@ -25,18 +25,15 @@ mod lines;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write as _};
-use std::process::{Command, ExitStatus};
-use std::time::Instant;
+use std::fs;
+use std::io;
+use std::process::Command;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 
-use crate::plan::{Report, RustSettings};
-use crate::report::cpus::Cpus;
-use crate::report::rendered;
-use crate::report::step::{Launch, LaunchError, SectionStatus, launch, shown, status_path};
+use crate::built_in::{CommandError, Context, Stop};
+use crate::plan::RustSettings;
 use crate::revision::git::{GitError, Repository};
 use crate::revision::{CommitId, PerSide, Revision, Side};
 use crate::rust::api::{Crate, LISTINGS_FORMAT, Listed, Listings, Workspace};
@@ -224,68 +221,6 @@ pub(crate) fn rust_changed(
         .any(|path| Utf8Path::new(path).extension() == Some("rs")))
 }
 
-/// What a report needs of the run.
-#[derive(Debug)]
-pub(crate) struct Context<'a> {
-    pub(crate) settings: &'a RustSettings,
-    pub(crate) revisions: &'a PerSide<Revision>,
-    pub(crate) checkouts: &'a PerSide<Result<Utf8PathBuf, String>>,
-    /// This step's output folder.
-    pub(crate) out: &'a Utf8Path,
-    /// Each side's api-listings output folder, which the API diff reads.
-    pub(crate) listings: PerSide<Utf8PathBuf>,
-    /// A folder of the run's scratch for this step.
-    pub(crate) scratch: &'a Utf8Path,
-    /// This step's log, which every command's error output joins.
-    pub(crate) log: &'a Utf8Path,
-    pub(crate) env: &'a [(String, String)],
-    pub(crate) deadline: Instant,
-    /// The run's folder of host programs, as [`Launch`] takes it.
-    pub(crate) host: Option<&'a Utf8Path>,
-    /// The CPUs the step runs on, as [`Launch`] takes them.
-    pub(crate) cpus: Option<&'a Cpus>,
-}
-
-/// Why a report stopped before writing its section.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum Stop {
-    #[error("stopped when its time ran out")]
-    TimedOut,
-    #[error("could not write its output")]
-    Write(#[source] io::Error),
-}
-
-/// Why a command a report runs did not succeed.
-#[derive(Debug, thiserror::Error)]
-enum CommandError {
-    #[error("the {side} checkout could not be made: {why}")]
-    NoCheckout { side: &'static str, why: String },
-    #[error("`{command}` failed: {status}")]
-    Failed { command: String, status: ExitStatus },
-    #[error("`{command}` could not run")]
-    Launch {
-        command: String,
-        #[source]
-        source: LaunchError,
-    },
-    #[error("stopped when its time ran out")]
-    TimedOut,
-    #[error("its log or output file could not be opened")]
-    Files(#[source] io::Error),
-}
-
-impl CommandError {
-    /// What the report does with the failure: a timeout or a file it cannot write stops the report, and anything else
-    /// leaves the report's section partial, with why.
-    fn partial(self) -> Result<String, Stop> {
-        match self {
-            Self::TimedOut => Err(Stop::TimedOut),
-            Self::Files(error) => Err(Stop::Write(error)),
-            other => Ok(rendered(&other)),
-        }
-    }
-}
-
 /// Why a side's workspace packages could not be listed.
 #[derive(Debug, thiserror::Error)]
 enum MetadataError {
@@ -308,86 +243,9 @@ impl MetadataError {
     }
 }
 
-/// Run a report for one side, or for both when `side` is none.
-///
-/// # Errors
-/// [`Stop`] when its time runs out or its files cannot be written. A command that fails makes a partial section
-/// instead.
-pub(crate) fn run(report: Report, side: Option<Side>, context: &Context<'_>) -> Result<(), Stop> {
-    match (report, side) {
-        (Report::RustScans, _) => scans(context),
-        (Report::Lines, _) => line_counts(context),
-        (Report::Mutants, _) => mutants(context),
-        (Report::ApiListings, Some(side)) => api_listings(context, side),
-        (Report::ApiListings, None) => api_listings(context, Side::After),
-        (Report::Api, _) => api_diff(context),
-    }
-}
-
-impl Context<'_> {
-    /// Run `command` in `side`'s development shell, in `inside`, a folder of the checkout, with `extra` variables,
-    /// its standard output in `stdout`.
-    fn shell(
-        &self,
-        side: Side,
-        inside: &Utf8Path,
-        command: &[&str],
-        extra: &[(String, String)],
-        stdout: &Utf8Path,
-    ) -> Result<(), CommandError> {
-        let checkout = self.checkouts[side]
-            .as_ref()
-            .map_err(|why| CommandError::NoCheckout {
-                side: side.as_str(),
-                why: why.clone(),
-            })?;
-        let mut log = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(self.log)
-            .map_err(CommandError::Files)?;
-        let command: Vec<String> = command.iter().map(|word| (*word).to_owned()).collect();
-        writeln!(log, "$ {}", shown(&command)).map_err(CommandError::Files)?;
-        let mut env = self.env.to_vec();
-        env.extend_from_slice(extra);
-        let launched = launch(Launch {
-            checkout,
-            directory: &checkout.join(inside),
-            command: &command,
-            env: &env,
-            stdout: File::create(stdout).map_err(CommandError::Files)?,
-            stderr: log,
-            deadline: self.deadline,
-            host: self.host,
-            cpus: self.cpus,
-        });
-        match launched {
-            Ok(status) if status.success() => Ok(()),
-            Ok(status) => Err(CommandError::Failed {
-                command: shown(&command),
-                status,
-            }),
-            Err(LaunchError::TimedOut) => Err(CommandError::TimedOut),
-            Err(source) => Err(CommandError::Launch {
-                command: shown(&command),
-                source,
-            }),
-        }
-    }
-
+impl Context<'_, RustSettings> {
     fn workspace(&self) -> &Utf8Path {
         self.settings.workspace.as_path()
-    }
-
-    fn write(&self, name: &str, text: &str, problems: &[String]) -> Result<(), Stop> {
-        let section = self.out.join(name);
-        fs::write(&section, text).map_err(Stop::Write)?;
-        let status = if problems.is_empty() {
-            SectionStatus::Complete
-        } else {
-            SectionStatus::Incomplete(problems.join("; "))
-        };
-        fs::write(status_path(&section), status.written()).map_err(Stop::Write)
     }
 
     /// `side`'s workspace packages from `cargo metadata`: each package's name, folder relative to the checkout,
@@ -489,7 +347,7 @@ fn tracked_rust(checkout: &Utf8Path) -> Result<BTreeMap<Utf8PathBuf, String>, St
     Ok(files)
 }
 
-fn scans(context: &Context<'_>) -> Result<(), Stop> {
+pub(crate) fn scans(context: &Context<'_, RustSettings>) -> Result<(), Stop> {
     let mut command = vec!["rust-scans", "--workspace", context.workspace().as_str()];
     command.extend(context.settings.scans.iter().map(String::as_str));
     let mut printed = PerSide::<Option<String>>::default();
@@ -554,7 +412,7 @@ fn scans(context: &Context<'_>) -> Result<(), Stop> {
     context.write("scans.md", &text, &problems)
 }
 
-fn line_counts(context: &Context<'_>) -> Result<(), Stop> {
+pub(crate) fn line_counts(context: &Context<'_, RustSettings>) -> Result<(), Stop> {
     let mut problems = Vec::new();
     let mut counted = PerSide::<Option<BTreeMap<String, Lines>>>::default();
     for side in Side::BOTH {
@@ -671,7 +529,7 @@ fn change(before: Option<u64>, after: Option<u64>) -> String {
     }
 }
 
-fn mutants(context: &Context<'_>) -> Result<(), Stop> {
+pub(crate) fn mutants(context: &Context<'_, RustSettings>) -> Result<(), Stop> {
     let before = context.revisions.before.commit().to_string();
     let run = context.out.join("run");
     let mut command = vec![
@@ -712,7 +570,7 @@ fn mutants_section(revisions: &PerSide<Revision>, printed: &str) -> String {
     )
 }
 
-fn api_listings(context: &Context<'_>, side: Side) -> Result<(), Stop> {
+pub(crate) fn api_listings(context: &Context<'_, RustSettings>, side: Side) -> Result<(), Stop> {
     let mut problems = Vec::new();
     let workspace = match context.packages(side) {
         Err(error) => {
@@ -770,7 +628,7 @@ fn api_listings(context: &Context<'_>, side: Side) -> Result<(), Stop> {
 
 /// One library crate's rustdoc JSON and listing, kept in the step's output folder.
 fn list_crate(
-    context: &Context<'_>,
+    context: &Context<'_, RustSettings>,
     side: Side,
     package: &str,
     library: &str,
@@ -825,7 +683,7 @@ fn list_crate(
     Ok(Listed::Listed { items: items.len() })
 }
 
-fn api_diff(context: &Context<'_>) -> Result<(), Stop> {
+pub(crate) fn api_diff(context: &Context<'_, RustSettings>) -> Result<(), Stop> {
     let mut problems = Vec::new();
     // Each side's crates, or why they are unknown: a side whose record cannot be read, or whose workspace could not be
     // listed, has no crates to call added or removed.
@@ -901,7 +759,7 @@ fn api_diff(context: &Context<'_>) -> Result<(), Stop> {
 
 /// One crate's diff: `cargo-public-api diff` when both sides list it, every item removed or added when only one does.
 fn crate_diff(
-    context: &Context<'_>,
+    context: &Context<'_, RustSettings>,
     name: &str,
     sides: &PerSide<Result<BTreeMap<String, Listed>, String>>,
     missing: &mut Vec<String>,

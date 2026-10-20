@@ -11,7 +11,8 @@
 //!
 //! dandegate knows revisions, steps, measures, images, sections, kept results and the page. It knows nothing about a
 //! project's domain. A project's own scripts, its adapters in the after revision's `dandegate/` folder, do that work.
-//! For the Rust workspace `[project.rust]` names, dandegate adds the Rust reports as built-in steps ([`rust`]).
+//! For the Rust workspace `[project.rust]` names, dandegate adds the Rust reports as built-in steps ([`rust`]), and for
+//! the Godot project `[project.godot]` names, the GDScript scans ([`gdscript`]).
 //!
 //! dandegate runs steps on threads, not on an async runtime. It runs up to `--steps-at-once` steps at once, four
 //! unless the command line says otherwise, a step with a CPU share beside them on CPUs of its own, and exclusive steps last, one at a time. It runs every git operation with the
@@ -25,9 +26,13 @@
 //! - [`report`] does one report's work, from the checkouts to the page.
 //! - [`compare`] compares the two sides' measures and images.
 //! - [`page`] writes the HTML.
+//! - [`built_in`] gives the built-in reports the run and sends each to its work.
 //! - [`rust`] runs the built-in Rust reports.
+//! - [`gdscript`] runs the GDScript scans.
 
+mod built_in;
 mod compare;
+mod gdscript;
 mod page;
 mod plan;
 mod report;

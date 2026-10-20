@@ -22,8 +22,9 @@
 //! under `{out}/`. Nothing else is a path field: command words, input defaults, `host` and the Rust reports' arguments
 //! are taken as written.
 //!
-//! When the after revision holds a Cargo workspace but the file has no `[project.rust]`, the plan carries a
-//! [`Notice`] naming the table to add, which the page shows and dandegate prints.
+//! When the after revision holds a Cargo workspace but the file has no `[project.rust]`, or a Godot project's
+//! `project.godot` but no `[project.godot]`, the plan carries a [`Notice`] naming the table to add, which the page
+//! shows and dandegate prints.
 //!
 //! A plan guarantees these facts to the code that reads it:
 //!
@@ -42,7 +43,9 @@
 //!
 //! When `[project.rust]` names a folder holding a Cargo workspace, the plan adds the Rust reports as built-in steps
 //! under names every plan reserves, whether or not it runs them ([`Report`]). `[reports.rust]` without
-//! `[project.rust]` is refused, since it would tune nothing; an empty one is the same as none.
+//! `[project.rust]` is refused, since it would tune nothing; an empty one is the same as none. When `[project.godot]`
+//! names a folder holding `project.godot`, with every `tests` folder inside it, the plan adds the GDScript scans the
+//! same way.
 //!
 //! This module holds the types that the rest of dandegate reads. [`read`] builds them from the file's TOML shapes in
 //! [`raw`]. [`template`] parses each command word's placeholders, [`repo`] holds the repository's paths and tree,
@@ -62,7 +65,7 @@ use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use indexmap::IndexMap;
 
 pub(crate) use crate::plan::error::PlanError;
-pub(crate) use crate::plan::repo::{RepoDir, RepoPath, Tree};
+pub(crate) use crate::plan::repo::{GODOT_PROJECT, RepoDir, RepoPath, Tree};
 pub(crate) use crate::plan::template::{
     Arg, Expansion, PairArg, PairValues, Template, TreeArg, TreeValues,
 };
@@ -273,12 +276,27 @@ pub(crate) struct GodotProject {
     tests: Vec<RepoDir>,
 }
 
+impl GodotProject {
+    /// The folder holding `project.godot` in the after revision.
+    pub(crate) fn project(&self) -> &RepoDir {
+        &self.project
+    }
+
+    /// The folders of test code, each inside the project, which the after revision holds.
+    pub(crate) fn tests(&self) -> &[RepoDir] {
+        &self.tests
+    }
+}
+
 /// What the reader noticed about the steps file that changes no step, which the page shows and dandegate prints.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Notice {
     /// The after revision holds these Cargo workspaces, `.` for the root, but no `[project.rust]` names one, so the
     /// Rust reports are off.
     RustOff(Vec<Utf8PathBuf>),
+    /// The after revision holds a Godot project in these folders, `.` for the root, but the file has no
+    /// `[project.godot]`, so the GDScript scans are off.
+    GodotOff(Vec<Utf8PathBuf>),
 }
 
 impl fmt::Display for Notice {
@@ -301,6 +319,23 @@ impl fmt::Display for Notice {
                     formatter,
                     "the Rust reports are off: the after revision has {noun} in {}, but dandegate.toml has no \
                      [project.rust] table; add one with workspace = {example} to turn them on",
+                    written.join(", ")
+                )
+            }
+            Self::GodotOff(projects) => {
+                let written: Vec<String> =
+                    projects.iter().map(|folder| format!("{folder}/")).collect();
+                let (noun, example) = match written.as_slice() {
+                    [one] => (
+                        "a Godot project",
+                        toml::Value::String(one.clone()).to_string(),
+                    ),
+                    _ => ("Godot projects", "\"<folder>/\"".to_owned()),
+                };
+                write!(
+                    formatter,
+                    "the GDScript scans are off: the after revision has {noun} in {}, but dandegate.toml has no \
+                     [project.godot] table; add one with project = {example} and its tests folders to turn them on",
                     written.join(", ")
                 )
             }
@@ -332,16 +367,37 @@ pub(crate) enum Report {
     ApiListings,
     /// The public API diff of each library crate between the revisions.
     Api,
+    /// The GDScript scans' findings that the change added and removed, read by the after revision's gdscript-scans
+    /// from both checkouts. It fails nothing.
+    GdscriptScans,
+}
+
+/// The `[project]` table whose project a built-in report reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Table {
+    Rust,
+    Godot,
 }
 
 impl Report {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::RustScans,
         Self::Lines,
         Self::Mutants,
         Self::ApiListings,
         Self::Api,
+        Self::GdscriptScans,
     ];
+
+    /// The table that turns the report on.
+    pub(crate) fn table(self) -> Table {
+        match self {
+            Self::RustScans | Self::Lines | Self::Mutants | Self::ApiListings | Self::Api => {
+                Table::Rust
+            }
+            Self::GdscriptScans => Table::Godot,
+        }
+    }
 
     /// The report's step.
     pub(crate) fn step(self) -> StepName {
@@ -361,6 +417,7 @@ impl Report {
             Self::Mutants => "mutants",
             Self::ApiListings => "api-listings",
             Self::Api => "api",
+            Self::GdscriptScans => "gdscript-scans",
         }
     }
 }
@@ -636,10 +693,6 @@ impl Step {
 pub(crate) struct Plan {
     /// Unique, in the file's order.
     host: Vec<HostProgram>,
-    #[expect(
-        dead_code,
-        reason = "no report reads the Godot project yet; the reader checks it"
-    )]
     godot: Option<GodotProject>,
     inputs: IndexMap<InputName, Input>,
     steps: IndexMap<StepName, Step>,
@@ -670,19 +723,25 @@ impl Plan {
         self.rust.as_ref()
     }
 
+    pub(crate) fn godot(&self) -> Option<&GodotProject> {
+        self.godot.as_ref()
+    }
+
     /// The settings of the steps file a built-in report reads, as a value its kept results' identity holds, or none
     /// when the plan does not run it.
     pub(crate) fn report_settings(&self, report: Report) -> Option<serde_json::Value> {
-        match report {
-            Report::RustScans
-            | Report::Lines
-            | Report::Mutants
-            | Report::ApiListings
-            | Report::Api => self.rust.as_ref().map(|settings| {
+        match report.table() {
+            Table::Rust => self.rust.as_ref().map(|settings| {
                 serde_json::json!({
                     "workspace": settings.workspace.as_path().as_str(),
                     "scans": settings.scans,
                     "mutation": settings.mutation,
+                })
+            }),
+            Table::Godot => self.godot.as_ref().map(|godot| {
+                serde_json::json!({
+                    "project": godot.project.as_path().as_str(),
+                    "tests": godot.tests.iter().map(|folder| folder.as_path().as_str()).collect::<Vec<_>>(),
                 })
             }),
         }

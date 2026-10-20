@@ -137,7 +137,7 @@ fn change_rust(fixture: &Fixture) {
 }
 
 /// The section a step wrote, from the page.
-fn section(page: &str, title: &str) -> String {
+pub(crate) fn section(page: &str, title: &str) -> String {
     let start = page
         .find(&format!("<h3>{title}</h3>"))
         .expect("the page has the step's section");

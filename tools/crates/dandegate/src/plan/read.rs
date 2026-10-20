@@ -15,9 +15,9 @@ use crate::plan::raw::{
 use crate::plan::repo::{PathProblem, RepoDir, RepoPath, Tree};
 use crate::plan::template::{Arg, Template};
 use crate::plan::{
-    DEFAULT_TIMEOUT, EnvName, EnvPattern, GodotProject, HostProgram, IDENTITY_ENV, Input,
-    InputName, Kind, MUTANTS_TIMEOUT, MeasureRules, Notice, OutPath, Output, Plan, Recipe, Report,
-    Runs, RustSettings, Step, StepName, Work,
+    DEFAULT_TIMEOUT, EnvName, EnvPattern, GODOT_PROJECT, GodotProject, HostProgram, IDENTITY_ENV,
+    Input, InputName, Kind, MUTANTS_TIMEOUT, MeasureRules, Notice, OutPath, Output, Plan, Recipe,
+    Report, Runs, RustSettings, Step, StepName, Table, Work,
 };
 
 /// The text's line holding byte `offset`, counted from 1.
@@ -89,15 +89,32 @@ impl Reader<'_> {
             .collect()
     }
 
+    /// The Godot project: a folder holding `project.godot`, and test folders inside it.
     fn godot(&self, raw: &RawGodotProject, tree: &Tree) -> Result<GodotProject, PlanError> {
-        Ok(GodotProject {
-            project: self.folder(&raw.project, "[project.godot]: project", tree)?,
-            tests: raw
-                .tests
-                .iter()
-                .map(|text| self.folder(text, "[project.godot]: tests", tree))
-                .collect::<Result<_, _>>()?,
-        })
+        let project = self.folder(&raw.project, "[project.godot]: project", tree)?;
+        let file = if project.as_path() == "." {
+            Utf8PathBuf::from(GODOT_PROJECT)
+        } else {
+            project.as_path().join(GODOT_PROJECT)
+        };
+        if !tree.holds_file(&file) {
+            return Err(self.at(&raw.project, Problem::NotGodotProject(project)));
+        }
+        let mut tests = Vec::new();
+        for text in &raw.tests {
+            let folder = self.folder(text, "[project.godot]: tests", tree)?;
+            if project.as_path() != "." && !folder.as_path().starts_with(project.as_path()) {
+                return Err(self.at(
+                    text,
+                    Problem::TestsOutside {
+                        tests: folder,
+                        project,
+                    },
+                ));
+            }
+            tests.push(folder);
+        }
+        Ok(GodotProject { project, tests })
     }
 
     fn template<A: Arg>(
@@ -482,9 +499,13 @@ impl Plan {
             reports.rust.as_ref(),
             tree,
         )?;
-        if let Some(settings) = &rust {
-            for report in Report::ALL {
-                steps.insert(report.step(), built_in(report, settings));
+        for report in Report::ALL {
+            let on = match report.table() {
+                Table::Rust => rust.is_some(),
+                Table::Godot => godot.is_some(),
+            };
+            if on {
+                steps.insert(report.step(), built_in(report, rust.as_ref()));
             }
         }
         check_needs(&reader, &raw_steps.step, &steps)?;
@@ -505,12 +526,7 @@ impl Plan {
             }
         };
         select(&mut steps, with)?;
-        let workspaces: Vec<Utf8PathBuf> = tree.workspaces().map(Utf8Path::to_owned).collect();
-        let notices = if rust.is_none() && !workspaces.is_empty() {
-            vec![Notice::RustOff(workspaces)]
-        } else {
-            Vec::new()
-        };
+        let notices = notices(tree, rust.is_some(), godot.is_some());
         Ok(Self {
             host,
             godot,
@@ -521,6 +537,21 @@ impl Plan {
             notices,
         })
     }
+}
+
+/// What the reader notices about the tree: a Cargo workspace with no `[project.rust]`, or a Godot project with no
+/// `[project.godot]`.
+fn notices(tree: &Tree, rust: bool, godot: bool) -> Vec<Notice> {
+    let workspaces: Vec<Utf8PathBuf> = tree.workspaces().map(Utf8Path::to_owned).collect();
+    let projects: Vec<Utf8PathBuf> = tree.godot_projects().map(Utf8Path::to_owned).collect();
+    let mut notices = Vec::new();
+    if !rust && !workspaces.is_empty() {
+        notices.push(Notice::RustOff(workspaces));
+    }
+    if !godot && !projects.is_empty() {
+        notices.push(Notice::GodotOff(projects));
+    }
+    notices
 }
 
 /// `--input name=value` applied over the declared defaults.
@@ -589,8 +620,8 @@ fn rust_settings(
     }))
 }
 
-/// A built-in report's step.
-fn built_in(report: Report, settings: &RustSettings) -> Step {
+/// A built-in report's step. `rust` is the Rust reports' settings, which a Rust report has.
+fn built_in(report: Report, rust: Option<&RustSettings>) -> Step {
     let section = |file: &str| Output::Section {
         file: OutPath(Utf8PathBuf::from(file)),
     };
@@ -621,7 +652,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
         Report::Mutants => (
             once(
                 report,
-                Some(collector(settings, &["rust-mutants", "cargo-mutants"])),
+                rust.map(|settings| collector(settings, &["rust-mutants", "cargo-mutants"])),
             ),
             vec![],
             false,
@@ -633,7 +664,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
             Runs::PerRevision(Recipe {
                 work: Work::BuiltIn(report),
                 env: BTreeMap::new(),
-                collect: Some(collector(settings, &["cargo-public-api"])),
+                collect: rust.map(|settings| collector(settings, &["cargo-public-api"])),
             }),
             vec![],
             true,
@@ -648,6 +679,15 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
             false,
             DEFAULT_TIMEOUT,
             vec![section("api.md")],
+        ),
+        // Kept by its commits and the Godot settings, which fix both trees and the after revision's scanner.
+        Report::GdscriptScans => (
+            once(report, None),
+            vec![],
+            false,
+            true,
+            DEFAULT_TIMEOUT,
+            vec![section("gdscript-scans.md")],
         ),
     };
     Step {

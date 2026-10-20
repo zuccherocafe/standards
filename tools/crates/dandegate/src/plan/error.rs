@@ -121,6 +121,10 @@ pub(crate) enum Problem {
         "[project.rust]: workspace: \"{0}\" holds no Cargo.toml with a [workspace] table in the after revision"
     )]
     NotWorkspace(RepoDir),
+    #[error("[project.godot]: project: \"{0}\" holds no project.godot in the after revision")]
+    NotGodotProject(RepoDir),
+    #[error("[project.godot]: tests: \"{tests}\" is not inside the project \"{project}\"")]
+    TestsOutside { tests: RepoDir, project: RepoDir },
     #[error(
         "[reports.rust]: tunes the Rust reports, which run only when [project.rust] names the workspace; add [project.rust] or remove [reports.rust]"
     )]
