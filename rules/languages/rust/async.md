@@ -8,7 +8,7 @@ A project that needs asynchronous I/O, such as a network service, follows this s
 
 ### Keep computation synchronous
 
-Cores take values and return values. They never await, import a runtime, read a clock, perform input or output, or spawn work ([Purity](design.md#purity)). The async shell supplies observations and time, calls the core's bounded synchronous transitions, and carries out the effects they request. A library's public interface offers domain values, and where it must, standard futures or a boundary trait, never a runtime handle or a runtime of its own. A synchronous function that takes substantial CPU time still does not belong on an executor thread. A synchronous core stays replayable and testable on values, and keeps the protocol's vocabulary free of a runtime.
+Cores take values and return values. Beyond what [Purity](design.md#purity) forbids, they never await or import a runtime. The async shell supplies observations and time, calls the core's bounded synchronous transitions, and carries out the effects they request. A library's public interface offers domain values, and where it must, standard futures or a boundary trait, never a runtime handle or a runtime of its own. A synchronous function that takes substantial CPU time still does not belong on an executor thread. A synchronous core stays replayable and testable on values, and keeps the protocol's vocabulary free of a runtime.
 
 Ref: Matthias Endler, [async Rust in practice](https://corrode.dev/blog/async/), on a synchronous core and an async shell.
 

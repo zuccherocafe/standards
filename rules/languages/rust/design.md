@@ -49,7 +49,7 @@ Ref: jiff `SignedDuration` (`crates/jiff/src/signed_duration.rs`); nextest store
 
 ### Invariants
 
-Establish an invariant once and preserve it on every path. An invariant type has private fields in its owning module and one checked constructor, `new(raw) -> Result<Self, ItsOwnError>`. Use `Option` instead when there is one reason to refuse. Every other construction or mutation preserves the invariant. `Deserialize` calls the constructor. `Default` exists only if the default is valid. Mutators and `From` conversions preserve the invariant. `pub(crate)` fields permit construction throughout the crate and are not private. A `const` counterpart that panics exists only where a constant needs it. It panics only during constant evaluation. Use no `new_unchecked` unless a measurement shows that checking has a cost. A function that checks a value returns the checked type, not `()`, so callers retain proof of the check.
+Establish an invariant once and preserve it on every path. An invariant type has private fields in its owning module and one checked constructor, `new(raw) -> Result<Self, ItsOwnError>`. Use `Option` instead when there is one reason to refuse. Every other construction or mutation preserves the invariant. `Deserialize` follows [Deserialising](#deserialising). `Default` exists only if the default is valid. Mutators and `From` conversions preserve the invariant. `pub(crate)` fields permit construction throughout the crate and are not private. A `const` counterpart that panics exists only where a constant needs it. It panics only during constant evaluation. Use no `new_unchecked` unless a measurement shows that checking has a cost. A function that checks a value returns the checked type, not `()` ([Make invalid states unrepresentable](../../general.md#design)).
 
 Before:
 
@@ -213,7 +213,7 @@ A type carries a lifetime only when it represents a borrowed view. The borrow ei
 
 ### Parse once
 
-This section applies `general.md`'s boundary rule to Rust. Parse an authored file, a reader's output, a record read back, or a script-supplied value into domain types at its boundary. Refusals there name the file, line, and field. Past the boundary, no function takes the raw form. In crates that take paths, convert paths to UTF-8 once at entry, using `camino`'s `Utf8PathBuf`.
+[Parse at the boundary](../../general.md#design) governs every Rust input as written. In crates that take paths, convert paths to UTF-8 once at entry, using `camino`'s `Utf8PathBuf`.
 
 Ref: Alexis King, ["Parse, don't validate"](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/); rust-analyzer builds `CrateGraph` through constructing functions (`docs/book/src/contributing/architecture.md`).
 
@@ -245,7 +245,7 @@ Ref: nextest `TestThreads` with `FromStr`, `Display`, and a visitor (`nextest-ru
 
 ### Traits
 
-Do not introduce a trait merely for one implementation. A trait exists where several types implement it or where it inverts a dependency a core must not have. In the latter case, the core declares the trait and hosts implement it without adding the host dependency to the core. An adaptor trait for foreign types at a named boundary is allowed. A test double alone does not justify a trait. When a test needs made-up inputs, put the algorithm in a plain function over values. Both the production type and the test call that function. Production behaviour remains an inherent method.
+Do not introduce a trait merely for one implementation. A trait exists where several types implement it or where it inverts a dependency a core must not have. In the latter case, the core declares the trait and hosts implement it without adding the host dependency to the core. An adaptor trait for foreign types at a named boundary is allowed. A test double alone does not justify a trait, as [Code is not shaped for its tests](../../general.md#checks) says. When a test needs made-up inputs, put the algorithm in a plain function over values that both the test and the production type's inherent method call. Production behaviour remains an inherent method.
 
 Ref: nextest `StoreReader` with two implementations (`nextest-runner/src/record/reader.rs`); guppy's `IntoMietteDiagnostic` adapting foreign errors (`target-spec-miette/src/imp.rs`).
 
@@ -263,7 +263,7 @@ Ref: nextest's `AGENTS.md` ("Use `pub(crate)` and `pub(super)` liberally"); next
 
 ### One type per representation
 
-A concept has one type for each genuinely different representation, such as a persistent name or an index bound to a live collection. Never add a copy, a differently structured duplicate, or a parallel string table. An opaque name needed by several crates lives in their lowest shared crate. An index lives with its issuing collection. A type used by one crate lives there. A conversion between representations is explicit, named, and checked where it can fail.
+Under [One home per concept](../../general.md#design), a concept has one type for each genuinely different representation, such as a persistent name or an index bound to a live collection. An opaque name needed by several crates lives in their lowest shared crate. An index lives with its issuing collection. A type used by one crate lives there.
 
 Ref: nextest-filtering imports `RustBinaryId` from nextest-metadata (`nextest-filtering/src/expression.rs`); rust-analyzer chooses boundary counterparts deliberately (`docs/book/src/contributing/architecture.md`).
 

@@ -6,21 +6,17 @@ Part of the [Rust standard](README.md). The test policy, scenarios, expected val
 
 ### The test policy
 
-A crate's tests come in three layers, written in this order, and a review reads them in the same order.
+A crate's tests come in the three layers of [Test the common scenario first](../../general.md#checks), written in that order, and a review reads them in the same order. Scenarios live in `tests/scenarios.rs` ([Scenarios first](#scenarios-first)), each function's unit tests sit beside that function, and properties follow [Properties](#properties).
 
-1. **Scenarios.** Write one test per use through the public entry point where the crate is used, most common use first. Examples include a command-line build, an import, a played clip, or an unchanged-input rebuild that writes nothing new.
-2. **Function promises.** Write unit tests of each function's promises beside that function, using small made-up inputs.
-3. **Properties.** Test invariants that types cannot express, using values generated from the valid domain or malformed input at a boundary.
-
-Write expected values from the input's source, a specification, or a law, never from a run. A reviewer-accepted snapshot of exact text or structured output whose shape is the promise also counts as authored ([Expected values and snapshots](#expected-values-and-snapshots)). Keep a test that replays a review finding only when real data produces its input. Name it for its promise. For an input nothing real produces, answer the finding with the type or reasoning rather than a test. A scenario in the checks costs seconds. Use the smallest input that reaches the path, such as a code-built character or a fixture with a few files. A minutes-long run over real data belongs in the change report, not the checks. The report shows what changed.
+Expected values follow [Expected values and snapshots](#expected-values-and-snapshots), and a test is kept as [What a test is kept for](#what-a-test-is-kept-for) says. A scenario's smallest input may be a code-built character or a fixture with a few files. A minutes-long run over real data belongs in the change report, not the checks. The report shows what changed.
 
 **Checked by:** review; the mutation report lists mutations the tests miss, and review decides whether each breaks a promise.
 
 ### Scenarios first
 
-Each crate's `tests/scenarios.rs` begins with module documentation listing the crate's uses, most common first. A scenario binary split across files keeps `tests/scenarios.rs` as its root, with its parts in `tests/scenarios/`. Each use has an obvious test through its actual entry boundary. Examples include a command-line build or a solve on made-up input through the public entry point. A small constructor or kernel needs no committed fixture.
+Each crate's `tests/scenarios.rs` begins with module documentation listing the crate's uses, most common first, and holds each use's test ([Test the common scenario first](../../general.md#checks)). A scenario binary split across files keeps `tests/scenarios.rs` as its root, with its parts in `tests/scenarios/`. Examples of a scenario include a command-line build, an import, a played clip, an unchanged-input rebuild that writes nothing new, or a solve on made-up input through the public entry point. A small constructor or kernel needs no committed fixture.
 
-For example, in tdollhouse: the first scenario covers a spring chain trailing a moving parent and settling back, its most common behaviour. Set thresholds where a person would see incorrect behaviour, never at today's values.
+For example, in tdollhouse: the first scenario covers a spring chain trailing a moving parent and settling back, its most common behaviour. Choose its threshold under [Checks fail only on broken results](../../general.md#checks).
 
 ```rust
 /// Hair behind a turning head trails it, swings, and settles where the clip points it.
@@ -38,7 +34,7 @@ Ref: nextest's integration tests drive the real binary on a fixture project; rip
 
 ### Expected values and snapshots
 
-Expected numbers and behaviour are written by hand from the fixture's source, a specification, or a law, never copied from a run. Snapshots with `insta` cover exact text or structured output whose shape is the promise, such as help text, a rendered error, or a listing. A reviewer-accepted snapshot in the diff (`cargo insta review`) is an authored expectation. Never snapshot numbers or behaviour. Keep hand-written expectations and properties for them. The project's change report shows differences.
+Expected values follow [Expected values are authored](../../general.md#checks). Snapshots use `insta`, and a reviewer accepts each one in the diff with `cargo insta review`. Cover numbers and behaviour with [properties](#properties) as well as their hand-written expectations.
 
 ```rust
 // Authored from the fixture's own files: it holds these four animations.
@@ -72,7 +68,7 @@ Ref: jiff's `Arbitrary for Date` through its constructor (`crates/jiff/src/civil
 
 ### What a test is kept for
 
-This section applies `general.md`'s rule to Rust. Name a test for its promise, never for whoever or whatever found it. When a type makes a refusal unreachable, remove its run-time test and keep a `compile_fail` doctest of the static promise. A case table reports the failed input. Use separately named `test-case` rows when independent reporting helps, or a loop whose assertion names the input. Assert on variants. Compare rendered text only where wording is the promise, under the snapshot rule.
+Tests are kept and named as [Keep a test for a promise](../../general.md#checks) says. Answer a review finding whose input nothing real produces with the type or reasoning, not a test. When a type makes a refusal unreachable, the test of the static promise is a `compile_fail` doctest. A case table reports the failed input. Use separately named `test-case` rows when independent reporting helps, or a loop whose assertion names the input. Assert on variants. Compare rendered text only where wording is the promise, under the snapshot rule.
 
 Ref: ripgrep ties regression tests to issues (`tests/regression.rs`); nextest loops over identifier cases (`nextest-runner/src/config/core/identifier.rs`).
 

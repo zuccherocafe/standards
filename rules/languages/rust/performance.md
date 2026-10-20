@@ -6,7 +6,7 @@ Part of the [Rust standard](README.md). Hot paths, zero-cost checks, data layout
 
 ### Hot paths
 
-A crate that runs per frame or per item states that fact, its budget, and its measurement method in its crate documentation. Once warm, per-frame and per-item code allocates nothing. Reuse buffers owned by the caller or by a scratch structure the caller retains. Test this promise with a counting global allocator in a dedicated integration-test binary, so no other test uses the allocator. Obtain the allocator from a small development dependency, so the test needs no `unsafe`. Size collections once from known information with `with_capacity` or `reserve`, rather than growing them per item.
+A crate that runs per frame or per item records its hot path, budget, and measurement method in its crate documentation ([Know the hot paths and their budgets](../../general.md#performance)). Once warm, per-frame and per-item code allocates nothing. Reuse buffers owned by the caller or by a scratch structure the caller retains. Test this promise with a counting global allocator in a dedicated integration-test binary, so no other test uses the allocator. Obtain the allocator from a small development dependency, so the test needs no `unsafe`. Size collections once from known information with `with_capacity` or `reserve`, rather than growing them per item.
 
 Ref: rust-analyzer's "Avoid Allocations", "Push Allocations to the Call Site" and "Avoid Intermediate Collections" (`docs/book/src/contributing/style.md`).
 
@@ -32,7 +32,7 @@ Parallelise independent items in the largest groups that keep every core busy. R
 
 ### Measuring
 
-Measure only release builds with the workspace's own profile. To compare revisions, report instructions retired with `perf stat -e instructions:u`. For budgets, report CPU and wall time with the median, range, and run count. For builds, report peak memory. Profiles use frame pointers (`-C force-frame-pointers=yes`) and line tables in a separate target directory, leaving the measured binary unchanged. Benchmark harnesses are development dependencies of the measured crate, admitted like other test-only dependencies. Prefer divan, or criterion where the project already uses it. Benchmark harnesses are never part of the project's checks.
+Measure only release builds with the workspace's own profile. Under [Measure before claiming](../../general.md#performance), count instructions retired with `perf stat -e instructions:u` to compare revisions, and report a budget's CPU and wall time with the median, range, and run count. For builds, report peak memory. Profiles use frame pointers (`-C force-frame-pointers=yes`) and line tables in a separate target directory, leaving the measured binary unchanged. Benchmark harnesses are development dependencies of the measured crate, admitted like other test-only dependencies. Prefer divan, or criterion where the project already uses it. Benchmark harnesses are never part of the project's checks.
 
 Ref: jiff keeps its Criterion suite in a separate `bench/` crate; ripgrep's `benchsuite/` records runs per machine and date; rust-analyzer's `xtask metrics` records build and analysis times rather than failing on them.
 
