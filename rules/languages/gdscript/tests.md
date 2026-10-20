@@ -6,19 +6,19 @@ Part of the [GDScript standard](README.md). Tests of GDScript code.
 
 ### Plain headless probes
 
-Tests are plain headless scripts using `extends SceneTree`, one check per file named for its subject. Put cases in an inner class whose `run()` returns an exit code. Failure lines state the broken promise, such as "a valid record refused", never a value dump. A runner may batch checks in one process if it restores static state between them ([Static state](lifetime.md#static-state)). Use no test framework. GUT and gdUnit4 mainly add doubles, partial doubles, and stubs that test calls rather than function promises. A framework also adds hundreds of vendored scripts to scan or exclude, another runner and output format, and a dependency pinned per engine minor. Plain scripts lack readable diffs and orphan reports. A small helper supplies readable diffs. Compare `Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)` before a case and after its deferred frees for an orphan report. That report covers detached nodes only, not nodes leaked inside the tree.
+*Default.* Tests are plain headless scripts using `extends SceneTree`, one check per file named for its subject. Put cases in an inner class whose `run()` returns an exit code. Failure lines state the broken promise, such as "a valid record refused", never a value dump. A runner may batch checks in one process if it restores static state between them ([Static state](lifetime.md#static-state)). Use no test framework. GUT and gdUnit4 mainly add doubles, partial doubles, and stubs that test calls rather than function promises. A framework also adds hundreds of vendored scripts to scan or exclude, another runner and output format, and a dependency pinned per engine minor. Plain scripts lack readable diffs and orphan reports. A small helper supplies readable diffs. Compare `Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)` before a case and after its deferred frees for an orphan report. That report covers detached nodes only, not nodes leaked inside the tree.
 
 **Checked by:** the project's checks.
 
 ### The error filter
 
-A test passes only if the engine prints no unexpected error. Each `ERROR:` or `SCRIPT ERROR:` line fails the check unless the case declares that error as intentional. Script errors abandon functions and return defaults that can resemble success ([Errors](errors.md#errors)). Match declared errors to printed errors one to one. An expected error must neither excuse another error nor go missing unnoticed. A check that crashes or does not report fails.
+*Always.* A test passes only if the engine prints no unexpected error. Each `ERROR:` or `SCRIPT ERROR:` line fails the check unless the case declares that error as intentional. Script errors abandon functions and return defaults that can resemble success ([Errors](errors.md#errors)). Match declared errors to printed errors one to one. An expected error must neither excuse another error nor go missing unnoticed. A check that crashes or does not report fails.
 
 **Checked by:** the project's checks.
 
 ### Inputs and expectations
 
-[Checks](../../general.md#checks) governs GDScript tests as written. Build a unit test's made-up input inline, as a `const` record or case table. Real inputs belong to higher test layers. Authored values include counts from made-up inputs, specified lengths, and tolerances at perceptible differences. Compare exact wording when it is the promise, such as `"made_up.json: slots.left.priority: must be a whole number"`. A measurement for people is a printed report line that the change report reads. A case table reports as [What a test is kept for](../rust/tests.md#what-a-test-is-kept-for) says.
+*Always.* [Checks](../../general.md#checks) governs GDScript tests as written. Build a unit test's made-up input inline, as a `const` record or case table. Real inputs belong to higher test layers. Authored values include counts from made-up inputs, specified lengths, and tolerances at perceptible differences. Compare exact wording when it is the promise, such as `"made_up.json: slots.left.priority: must be a whole number"`. A measurement for people is a printed report line that the change report reads. A case table reports as [What a test is kept for](../rust/tests.md#what-a-test-is-kept-for) says.
 
 Before (hypothetical), a value read off a run: `_check(clip.length == 1.2333, "length")`. After, the value the made-up clip was built with: `_check(is_equal_approx(clip.length, FRAMES / RATE), "a clip lasts its frames over its rate")`.
 

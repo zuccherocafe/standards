@@ -6,7 +6,7 @@ GDScript is gradually typed, and the engine's analyser checks it. It has no gene
 
 References name paths in public repositories and pin commits so the line numbers remain valid. The references are the [Godot 4.7 manual](https://docs.godotengine.org/en/4.7/), [godot](https://github.com/godotengine/godot) at `4.7.1-stable` (`a13da4feb`), and its tests in `modules/gdscript/tests/scripts/`. They also include [gdUnit4](https://github.com/godot-gdunit-labs/gdUnit4) at `0b1748a9`, [godot-demo-projects](https://github.com/godotengine/godot-demo-projects) at `b761b4cd`, and [godot-open-rpg](https://github.com/gdquest-demos/godot-open-rpg) at `d59f2f71`. Other references are [phantom-camera](https://github.com/ramokz/phantom-camera) at `21d37624`, [Pixelorama](https://github.com/Orama-Interactive/Pixelorama) at `578d058a`, and [beehave](https://github.com/bitbrain/beehave) at `fe589153`. These references illustrate the patterns discussed below. Where a reference falls short of a rule, the rule identifies that limitation. Examples are short and invented except for [tdollhouse](https://github.com/zuccherocafe/tdollhouse) examples. Introduce those with "for example, in tdollhouse:" and retain them only for what the references do not teach. Behaviour marked "(measured)" was run on Godot `4.7.1.stable.official.a13da4feb`. Every complete GDScript block below compiles under the template's `[debug]` block. Blocks marked "sketch" are fragments.
 
-Each rule ends with a Checked by entry naming the engine, a project check, or review. An engine check means an Error-level warning or a load-time or run-time error caught by the project's error filter. Where the engine checks only part of a rule, the entry names that part.
+Each rule ends with a Checked by entry naming the engine, a project check, or review. An engine check means an Error-level warning or a load-time or run-time error caught by the project's error filter. Where the engine checks only part of a rule, the entry names that part. Each rule's text begins with its kind, as [How strictly a rule applies](../../general.md#how-strictly-a-rule-applies) defines.
 
 The standard is in several files. Read this one first, then each file whose subject a change touches:
 
@@ -22,13 +22,13 @@ The standard is in several files. Read this one first, then each file whose subj
 
 ### The engine is the checker
 
-Each project pins an exact engine build, such as `4.7.1.stable.official.a13da4feb`. Run checks with the editor binary or a debug template, because GDScript warnings exist only in debug builds. The analyser is the compiler of [Describe each check at its real strength](../../general.md#checks). It understands the pinned version's syntax, needs no external maintenance, and stores its settings in `project.godot`. The editor therefore shows the same errors that fail checks. No external linter is a check. gdtoolkit accepts syntax only up to Godot 4.5 and rejects valid 4.7 code. The same rule forbids its size thresholds. The formatter is the only external tool in the checks. It decides layout, not correctness ([Names and order](organisation.md#names-and-order)).
+*Always.* Each project pins an exact engine build, such as `4.7.1.stable.official.a13da4feb`. Run checks with the editor binary or a debug template, because GDScript warnings exist only in debug builds. The analyser is the compiler of [Describe each check at its real strength](../../general.md#checks). It understands the pinned version's syntax, needs no external maintenance, and stores its settings in `project.godot`. The editor therefore shows the same errors that fail checks. No external linter is a check. gdtoolkit accepts syntax only up to Godot 4.5 and rejects valid 4.7 code. The same rule forbids its size thresholds. The formatter is the only external tool in the checks. It decides layout, not correctness ([Names and order](organisation.md#names-and-order)).
 
 **Checked by:** the engine.
 
 ### Engine upgrades
 
-A project upgrades the engine as [Toolchain](../../general.md#toolchain) says. Each upgrade also follows these engine steps:
+*Default.* A project upgrades the engine as [Toolchain](../../general.md#toolchain) says. Each upgrade also follows these engine steps:
 
 1. Move the engine pin in the project's `AGENTS.md`, the engine binary, and the export templates as [Toolchain](../../general.md#toolchain) says, so the checks, editor, and exported program use one build.
 2. Move any GDExtension binding, such as gdext, with its engine-API feature. For a minor release, wait until the binding supports its API. Do not run a binding built against the previous API on the new engine.

@@ -6,7 +6,7 @@ Part of the [GDScript standard](README.md). Types, records, closed sets, invaria
 
 ### Typed everything
 
-Every variable, constant, parameter, return, `for` variable, signal parameter, lambda parameter, and lambda return has a static type. Read no member and call no method absent from the static type. Typed code receives the engine's available checks and editor completion. It is also faster ([Performance](performance.md#performance)). Write `Variant` only where a value genuinely has several possible types. Examples are an unread value inside a parser or an engine API that returns `Variant`.
+*Always.* Every variable, constant, parameter, return, `for` variable, signal parameter, lambda parameter, and lambda return has a static type. Read no member and call no method absent from the static type. Typed code receives the engine's available checks and editor completion. It is also faster ([Performance](performance.md#performance)). Write `Variant` only where a value genuinely has several possible types. Examples are an unread value inside a parser or an engine API that returns `Variant`.
 
 The table shows what Error-level warnings catch and what they do not catch:
 
@@ -38,7 +38,7 @@ Ref: the manual's static typing page, "Global scope methods" and "Cases where yo
 
 ### Inference and the type on the line
 
-`:=` is allowed wherever the analyser infers a type. `inference_on_variant` at Error guarantees that the inferred type is never `Variant`. When a reader cannot see the type on the line and the distinction matters, write the type explicitly. For example, use `var hit: Dictionary = space.intersect_ray(query)`. Also make ambiguous literals explicit. A float is `0.0`, never `0`, because `var speed := 0` infers `int` and later `speed = 0.5` assignments narrow. The style guide says "prefer `:=` when the type is written on the same line". No setting enforces that advice. `inferred_declaration` forbids `:=` almost everywhere, so review checks type visibility.
+*Default.* `:=` is allowed wherever the analyser infers a type. `inference_on_variant` at Error guarantees that the inferred type is never `Variant`. When a reader cannot see the type on the line and the distinction matters, write the type explicitly. For example, use `var hit: Dictionary = space.intersect_ray(query)`. Also make ambiguous literals explicit. A float is `0.0`, never `0`, because `var speed := 0` infers `int` and later `speed = 0.5` assignments narrow. The style guide says "prefer `:=` when the type is written on the same line". No setting enforces that advice. `inferred_declaration` forbids `:=` almost everywhere, so review checks type visibility.
 
 Ref: the style guide, "Static typing" and "Inferred types".
 
@@ -46,7 +46,7 @@ Ref: the style guide, "Static typing" and "Inferred types".
 
 ### A record is a class
 
-Data with named fields passed between functions is a class, never a string-keyed `Dictionary`. Use an inner class, a `class_name` class extending `RefCounted`, or a custom `Resource` when saved or edited in the inspector. Nothing checks dictionary fields. `.get("finshed", false)` silently returns the default for a misspelt key. Dot or subscript access on a missing key causes a script error during the operation. Neither case causes a compile-time warning on a typed `Dictionary`. The parser checks class fields, the editor offers completion, `##` documents them, and their values are typed.
+*Default.* Data with named fields passed between functions is a class, never a string-keyed `Dictionary`. Use an inner class, a `class_name` class extending `RefCounted`, or a custom `Resource` when saved or edited in the inspector. Nothing checks dictionary fields. `.get("finshed", false)` silently returns the default for a misspelt key. Dot or subscript access on a missing key causes a script error during the operation. Neither case causes a compile-time warning on a typed `Dictionary`. The parser checks class fields, the editor offers completion, `##` documents them, and their values are typed.
 
 Before (sketch), a step result as a dictionary, so the shape of `result` is a convention between functions:
 
@@ -85,7 +85,7 @@ Ref: phantom-camera `addons/phantom_camera/scripts/resources/tween_resource.gd` 
 
 ### Closed sets
 
-A closed set is a named enum, never an anonymous `enum { A, B }`, bare `int`, or string compared with `==`. A named enum is a distinct static type. Assigning another enum or an anonymous enum's constant is a compile error. Give every enum variable an explicit default, even when `0` is a member. Enum values remain integers internally, so different enums can compare and add. `int_as_enum_without_cast` requires `as` for integer conversion, and `int_as_enum_without_match` rejects a constant integer absent from the enum. At the boundary, convert an external run-time integer by matching it to a member. Refuse unmatched values.
+*Default.* A closed set is a named enum, never an anonymous `enum { A, B }`, bare `int`, or string compared with `==`. A named enum is a distinct static type. Assigning another enum or an anonymous enum's constant is a compile error. Give every enum variable an explicit default, even when `0` is a member. Enum values remain integers internally, so different enums can compare and add. `int_as_enum_without_cast` requires `as` for integer conversion, and `int_as_enum_without_match` rejects a constant integer absent from the enum. At the boundary, convert an external run-time integer by matching it to a member. Refuse unmatched values.
 
 `match` is not exhaustive, and missing members produce no warning. A `match` on a project-owned enum lists every member and ends with a default arm that asserts. An added member then fails when execution first reaches a missing decision in a debug build. Names sent outside the program, such as status fields or records, use an explicit map with one entry per member. Never derive those names through reflection. `Phase.find_key(phase).to_lower()` silently changes the format when a variant is renamed.
 
@@ -120,7 +120,7 @@ Ref: the engine tests `analyzer/errors/enum_type_checking.gd` and `analyzer/warn
 
 ### What typed GDScript cannot express
 
-Use the agreed workaround for each gap, not a different workaround in each file. These are structural gaps. The maintainers' proposals for non-nullable objects, traits, structs, and a Godot 5 GDScript rewrite explain why the gaps remain in 4.x.
+*Default.* Use the agreed workaround for each gap, not a different workaround in each file. These are structural gaps. The maintainers' proposals for non-nullable objects, traits, structs, and a Godot 5 GDScript rewrite explain why the gaps remain in 4.x.
 
 | Gap | What happens | Workaround |
 |---|---|---|
@@ -144,7 +144,7 @@ Ref: the manual's static typing page ("Type casting", "Safe lines") and GDScript
 
 ### Invariants
 
-A class establishes its invariant in one constructor and preserves it on every path. GDScript has no private members, so methods enforce the invariant by convention. Prefix affected fields with underscores and read them through accessors. Make every change through a method that preserves the invariant. Construct the value through a `static func` that returns an instance or refusal, never through `new()` followed by optional caller assignments. A caller can still write `_low` directly, so review must prevent that access. State this limitation in the class's `##`. Where the engine constructs a class, as with inspector-created `Resource` objects or `duplicate()`, `_init` parameters need defaults. For those classes, the static function is the checked constructor. An exported property preserves its invariant through a setter, including changes from the inspector.
+*Default.* A class establishes its invariant in one constructor and preserves it on every path. GDScript has no private members, so methods enforce the invariant by convention. Prefix affected fields with underscores and read them through accessors. Make every change through a method that preserves the invariant. Construct the value through a `static func` that returns an instance or refusal, never through `new()` followed by optional caller assignments. A caller can still write `_low` directly, so review must prevent that access. State this limitation in the class's `##`. Where the engine constructs a class, as with inspector-created `Resource` objects or `duplicate()`, `_init` parameters need defaults. For those classes, the static function is the checked constructor. An exported property preserves its invariant through a setter, including changes from the inspector.
 
 ```gdscript
 ## A hinge's limits in radians; the low limit never exceeds the high one. Read and change the limits only through
@@ -178,7 +178,7 @@ Ref: godot-open-rpg `src/field/gameboard/gameboard_properties.gd` (a setter enfo
 
 ### Parse once
 
-[Parse at the boundary](../../general.md#design) governs authored files, build records, JSON requests, and native-library values. In GDScript, the boundary is a parser component, not a single function. Its parser object and field readers may exchange raw values. No raw `Dictionary` or `Variant` leaves that component for a consumer. Collect refusals with a field path such as `slots.left.priority` and a line when the reader supplies one. `JSON.parse` reports syntax-error lines through `get_error_line()`, but does not report value locations. For JSON values, the dotted field path supplies the location. `JSON.parse_string` returns `null` on failure without a reason. Use a `JSON` instance.
+*Always.* [Parse at the boundary](../../general.md#design) governs authored files, build records, JSON requests, and native-library values. In GDScript, the boundary is a parser component, not a single function. Its parser object and field readers may exchange raw values. No raw `Dictionary` or `Variant` leaves that component for a consumer. Collect refusals with a field path such as `slots.left.priority` and a line when the reader supplies one. `JSON.parse` reports syntax-error lines through `get_error_line()`, but does not report value locations. For JSON values, the dotted field path supplies the location. `JSON.parse_string` returns `null` on failure without a reason. Use a `JSON` instance.
 
 Check the `Variant` before assignment. If `text` contains an array, `var parsed: Dictionary = JSON.parse_string(text)` fails at assignment with a script error. The refusal never runs. Test a field value's type before binding it to a typed local. That order also satisfies `unsafe_call_argument`:
 
@@ -203,7 +203,7 @@ Ref: gdUnit4 `addons/gdUnit4/src/cmd/CmdArgumentParser.gd` (one entry point, ref
 
 ### JSON numbers are floats
 
-JSON parses every number as `float`. Membership is type-strict, so `400 in [400.0]` is false (measured), and a `Dictionary` keyed by `int` misses a `float` key. Check and convert a whole-number field once at the boundary, as `whole()` does above. JSON cannot retain `Vector3`, `Color`, `StringName`, or class values. The writer and parser agree on one encoding per type, such as three numbers for a vector. Each new field in a record the program reads must have an explicit type expressible in plain JSON.
+*Always.* JSON parses every number as `float`. Membership is type-strict, so `400 in [400.0]` is false (measured), and a `Dictionary` keyed by `int` misses a `float` key. Check and convert a whole-number field once at the boundary, as `whole()` does above. JSON cannot retain `Vector3`, `Color`, `StringName`, or class values. The writer and parser agree on one encoding per type, such as three numbers for a vector. Each new field in a record the program reads must have an explicit type expressible in plain JSON.
 
 Ref: the `JSON` class reference; the manual's "Saving games", "JSON limitations".
 
@@ -211,7 +211,7 @@ Ref: the `JSON` class reference; the manual's "Saving games", "JSON limitations"
 
 ### Typed exports are not validation
 
-When `ResourceLoader` loads a `.tres` or `.tscn`, it constructs each stored value. It converts containers to their declared type and sets each value through the script's property setter. Scalars convert when the engine supports the conversion. Otherwise, the default remains. The following results were measured on 4.7.1 with a hand-written `.tres`:
+*Always.* When `ResourceLoader` loads a `.tres` or `.tscn`, it constructs each stored value. It converts containers to their declared type and sets each value through the script's property setter. Scalars convert when the engine supports the conversion. Otherwise, the default remains. The following results were measured on 4.7.1 with a hand-written `.tres`:
 
 | Stored value | Export | Result |
 |---|---|---|
@@ -245,7 +245,7 @@ Ref: the engine, `scene/resources/resource_format_text.cpp` (container conversio
 
 ### Resources are shared
 
-Loading a resource twice from one path returns one object, so every user sees every mutation. A user that changes a loaded resource changes its own copy made with `duplicate()`. `duplicate()` is shallow. `duplicate(true)` copies nested arrays, dictionaries, and internal sub-resources. Sub-resources saved in their own files remain shared with the original (measured). A deep copy therefore does not isolate external sub-resources. Copy the resources that will change. State which parts remain shared in `##`. An inner class extending `Resource` does not serialise its properties, so an inner class never extends `Resource` for saving. A saved resource is its own file.
+*Always.* Loading a resource twice from one path returns one object, so every user sees every mutation. A user that changes a loaded resource changes its own copy made with `duplicate()`. `duplicate()` is shallow. `duplicate(true)` copies nested arrays, dictionaries, and internal sub-resources. Sub-resources saved in their own files remain shared with the original (measured). A deep copy therefore does not isolate external sub-resources. Copy the resources that will change. State which parts remain shared in `##`. An inner class extending `Resource` does not serialise its properties, so an inner class never extends `Resource` for saving. A saved resource is its own file.
 
 Ref: `Resource.duplicate` and `Resource.duplicate_deep` in the class reference; the manual's "Resources", "Nodes and resources".
 

@@ -13,6 +13,7 @@ If the person you work for is not a maintainer of this repository, tell them to 
 ## Editing
 
 - **Rename a file or a heading only with every link to it.** Projects and reviews link to files and headings by URL, and these standards have no numbered releases. The commit that renames a file or heading updates every link in this repository, and its message names the old and new paths so each project can update its `AGENTS.md`. Add new headings freely. To retire a rule, delete it. Say so in the commit message.
+- **Give each rule its kind.** A new rule's text begins with its kind, Always, Default, or Weigh, as [How strictly a rule applies](rules/general.md#how-strictly-a-rule-applies) defines.
 - **State the rule and its reason.** Each rule says what to do and why. Use neutral wording, such as "the maintainer", never a person's name. Include no decision numbers, references to reviews or discussions, or "decided on" lines.
 - **Describe the current state only.** Include no history or phrases such as "previously" or "changed from".
 - **Keep examples short.** Show a before-and-after example in a few lines. Cite its public repository by path. Introduce an example from a zucchero✿café project with "for example, in <project>:". Keep the example only where it teaches something the references do not.

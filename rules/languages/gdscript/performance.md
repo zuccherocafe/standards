@@ -4,7 +4,7 @@ Part of the [GDScript standard](README.md). Per-frame code.
 
 ## Performance
 
-The general.md performance rules apply. These are the costs particular to GDScript.
+*Default.* The general.md performance rules apply. These are the costs particular to GDScript.
 
 - **Typed code is faster.** The analyser emits typed instructions for operands whose types are known at compile time. Untyped arithmetic and calls use `Variant` dispatch. The gain is greatest for engine calls and smallest for attribute access.
 - **Dictionary and by-name reads cost lookups.** A dictionary read hashes a key. A property read through `Object.get` or `Variant` searches the script and ClassDB at each inheritance level. A record avoids both ([A record is a class](design.md#a-record-is-a-class)).

@@ -6,7 +6,7 @@ Part of the [GDScript standard](README.md). Classes, files, names, duck typing a
 
 ### One job per class
 
-A script is a class. Each class has one job stated by its first `##` line. Files are sized, merged, and grouped by subject as [Modules](../rust/design.md#modules) in the Rust standard says, with inner classes as the cooperating types that may share a file, such as a record and parser or a check and its cases. Behaviour follows [Methods on the owner](../rust/design.md#methods-on-the-owner), where a pure function over plain values is a `static func` in the class whose job it serves.
+*Default.* A script is a class. Each class has one job stated by its first `##` line. Files are sized, merged, and grouped by subject as [Modules](../rust/design.md#modules) in the Rust standard says, with inner classes as the cooperating types that may share a file, such as a record and parser or a check and its cases. Behaviour follows [Methods on the owner](../rust/design.md#methods-on-the-owner), where a pure function over plain values is a `static func` in the class whose job it serves.
 
 Data classes extend `RefCounted`, which is freed when its last reference ends. Use `Resource` only for data saved or edited in the inspector. Use `Node` only for an object in the scene tree. Never use bare `Object`, which needs manual `free()`. A class that needs an autoload or scene tree cannot be tested alone. Pass collaborators through `configure(...)` or a scene-set `@export var x: Type`, rather than looking them up.
 
@@ -16,7 +16,7 @@ Ref: the manual's "When and how to avoid using nodes for everything" and "Scene 
 
 ### Names and order
 
-Files and folders use `snake_case` because exports are case-sensitive even when the editor's file system is not. A file need not repeat its class prefix. Classes and nodes use `PascalCase`. Functions and variables use `snake_case`. Constants and enum members use `CONSTANT_CASE`. Enums use singular `PascalCase`. A leading underscore marks a member private to its class or a virtual called by the engine. Another instance of that class may use it. Signals use past-tense names, such as `door_opened`. Within each member group, put public members before private members. Engine virtuals include `_init`, `_enter_tree`, `_ready`, `_process`, and `_physics_process`. Follow the style guide's member order:
+*Default.* Files and folders use `snake_case` because exports are case-sensitive even when the editor's file system is not. A file need not repeat its class prefix. Classes and nodes use `PascalCase`. Functions and variables use `snake_case`. Constants and enum members use `CONSTANT_CASE`. Enums use singular `PascalCase`. A leading underscore marks a member private to its class or a virtual called by the engine. Another instance of that class may use it. Signals use past-tense names, such as `door_opened`. Within each member group, put public members before private members. Engine virtuals include `_init`, `_enter_tree`, `_ready`, `_process`, and `_physics_process`. Follow the style guide's member order:
 
 1. `@tool`, `@icon`, and `@abstract`
 2. `class_name`
@@ -44,7 +44,7 @@ Ref: the style guide, "Naming conventions", "Code order" and "Formatting"; the f
 
 ### class_name and inner classes
 
-`class_name` registers a type in a global namespace shared with the engine, addons, and other project classes. A shipped class name therefore carries the project's prefix. `shadowed_global_identifier` detects a local that reuses a global name, not competing script class names. Every script used as a type by another file has a `class_name`. Entry scripts, such as checks or `--script` commands, have none and load by path, keeping them out of the global class cache. A test helper is used as a type through `const Helper := preload("res://…")`. A Godot 5 proposal removes `preload`. Such a migration would affect each of those constants.
+*Default.* `class_name` registers a type in a global namespace shared with the engine, addons, and other project classes. A shipped class name therefore carries the project's prefix. `shadowed_global_identifier` detects a local that reuses a global name, not competing script class names. Every script used as a type by another file has a `class_name`. Entry scripts, such as checks or `--script` commands, have none and load by path, keeping them out of the global class cache. A test helper is used as a type through `const Helper := preload("res://…")`. A Godot 5 proposal removes `preload`. Such a migration would affect each of those constants.
 
 An inner class implements a record or helper used by its outer class and that class's callers. External callers name it through the outer class. Saving follows [Resources are shared](design.md#resources-are-shared). A script naming a native-extension class fails to load without the library. Confine such access through `ClassDB` to as few files as possible. List those files in the project's `AGENTS.md`.
 
@@ -54,7 +54,7 @@ Ref: the GDScript reference, "Registering named classes" and "Inner classes"; ["
 
 ### No duck typing
 
-Where the type is known, do not use by-name access that the analyser cannot see, except for the two documented cases below. The prohibited forms are `has_method`, `call("name")`, object `get("name")` or `set("name")`, `emit_signal(name)`, and `connect(name, …)`. A rename or typo can compile and fail only at execution. A missing method or property causes a script error, while a guarded `has_method` can skip the call. Test and bind the type with `is`, or declare an `@abstract` base. Two by-name cases are legitimate and require a comment explaining why. One is an engine API with path keys, such as `AnimationTree.set("parameters/…")`. The other is a native-extension class that a file may not name.
+*Default.* Where the type is known, do not use by-name access that the analyser cannot see, except for the two documented cases below. The prohibited forms are `has_method`, `call("name")`, object `get("name")` or `set("name")`, `emit_signal(name)`, and `connect(name, …)`. A rename or typo can compile and fail only at execution. A missing method or property causes a script error, while a guarded `has_method` can skip the call. Test and bind the type with `is`, or declare an `@abstract` base. Two by-name cases are legitimate and require a comment explaining why. One is an engine API with path keys, such as `AnimationTree.set("parameters/…")`. The other is a native-extension class that a file may not name.
 
 Before (sketch), where every node of that name is known to be a `MaskRig`:
 
@@ -80,7 +80,7 @@ Ref: ["A Peek Under the Hood: Technical Learnings from Halls of Torment"](https:
 
 ### Signals
 
-Declare typed signal parameters. Emit signals with `name.emit(...)` and connect them with `name.connect(callable)`. The analyser does not check `emit` arguments against the declaration. Emit each signal from one place using typed local arguments. Type connected lambdas, as in `func(count: int) -> void:`. A signal payload is a record class, not a `Dictionary`, except on a documented external interface. A signal declared in one class but emitted only from another carries `@warning_ignore("unused_signal")` with its reason.
+*Default.* Declare typed signal parameters. Emit signals with `name.emit(...)` and connect them with `name.connect(callable)`. The analyser does not check `emit` arguments against the declaration. Emit each signal from one place using typed local arguments. Type connected lambdas, as in `func(count: int) -> void:`. A signal payload is a record class, not a `Dictionary`, except on a documented external interface. A signal declared in one class but emitted only from another carries `@warning_ignore("unused_signal")` with its reason.
 
 Emission is synchronous. Connected callables run in connection order before `emit` returns. A handler can re-enter the emitter, so handlers determine the emitter's state after emission. Change state before emitting. Never rely on that state afterwards. A connection to an object's method ends when the object is freed. If a callable outlives an object it reads, such as a lambda capturing a node, its creator disconnects it when that object's lifetime ends. Parents initiate work by calling children. Children report events by signalling parents.
 
@@ -98,7 +98,7 @@ Ref: the manual's "Using signals" and the GDScript reference, "Signals"; `Signal
 
 ## Documentation
 
-Write documentation in `##` comments under [Documentation lives beside what it documents](../../general.md#writing). After `extends`, each class starts with a `##` comment whose first line is a one-line brief. Every public member of a class used by other code has a `##` comment. Public means no leading underscore. A member's `##` also gives its units and its failure behaviour, including refusal returns or `errors` values. `##` supplies editor help and export tooltips. BBCode references such as `[method read]`, `[member errors]`, and `[param at]` create links. A project's comment check exempts `##` from the cap of [Comments inside code stay short](../../general.md#writing), which covers comments inside a function body or top-level script code. Comment a private member with `#` only for a constraint the code cannot show ([Comments state constraints](../../general.md#writing)).
+*Default.* Write documentation in `##` comments under [Documentation lives beside what it documents](../../general.md#writing). After `extends`, each class starts with a `##` comment whose first line is a one-line brief. Every public member of a class used by other code has a `##` comment. Public means no leading underscore. A member's `##` also gives its units and its failure behaviour, including refusal returns or `errors` values. `##` supplies editor help and export tooltips. BBCode references such as `[method read]`, `[member errors]`, and `[param at]` create links. A project's comment check exempts `##` from the cap of [Comments inside code stay short](../../general.md#writing), which covers comments inside a function body or top-level script code. Comment a private member with `#` only for a constraint the code cannot show ([Comments state constraints](../../general.md#writing)).
 
 [Comments state constraints](../../general.md#writing) applies to a comment that states a type, such as "float ≥ 0, key light energy" above a `Variant` export. Where `Variant` is deliberate ([Typed exports are not validation](design.md#typed-exports-are-not-validation)), the `##` states the authored type and the refusal that enforces it.
 

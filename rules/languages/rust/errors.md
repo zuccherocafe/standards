@@ -6,7 +6,7 @@ Part of the [Rust standard](README.md). Who fixes an error, panics by crate kind
 
 ### Who fixes it
 
-Decide an error's form by who can fix it.
+*Default.* Decide an error's form by who can fix it.
 
 - **The author or environment can fix it.** Return a typed `Err` at the boundary, with one variant per remedy. Cases include an authored file, a model, a missing file, or a failed process.
 - **A reader program returns malformed output.** Use one detail variant per module that reads it.
@@ -34,6 +34,8 @@ impl Curve {
 
 ### Panics by crate kind
 
+*Always.*
+
 | Crate | A broken internal promise | Lints |
 |---|---|---|
 | On a real-time or engine path (called every frame or from a script) | no intentional panic: every state handled, a caller's mistake returned as a value | `#![deny(clippy::expect_used, clippy::panic, clippy::unwrap_used)]` in `lib.rs`; `indexing_slicing` on |
@@ -49,7 +51,7 @@ Ref: nextest's two-tier error model (`AGENTS.md`) and its many `expect` calls in
 
 ### One error per operation
 
-Use one error type per operation a caller performs across a boundary. The layer that knows the context attaches it once. Name the error after the operation, such as `ReadGlbError` or `BuildError`. Internal helpers return their operation's error, never a crate-wide enum or `Result<Result<…>>`. Shared context is a struct around a `kind`. A core attaches the frame or position it knows. Its caller attaches the item, the shell attaches the file, and the parser attaches the line. Keep each error small. Box a large or rare cause (`clippy::result_large_err`). Report several independent refusals as one non-empty list.
+*Default.* Use one error type per operation a caller performs across a boundary. The layer that knows the context attaches it once. Name the error after the operation, such as `ReadGlbError` or `BuildError`. Internal helpers return their operation's error, never a crate-wide enum or `Result<Result<…>>`. Shared context is a struct around a `kind`. A core attaches the frame or position it knows. Its caller attaches the item, the shell attaches the file, and the parser attaches the line. Keep each error small. Box a large or rare cause (`clippy::result_large_err`). Report several independent refusals as one non-empty list.
 
 Before, a refusal hidden in the success type:
 
@@ -77,13 +79,13 @@ Ref: nextest's per-operation errors and `ConfigParseError { config_file, tool, k
 
 ### Where a refusal sits
 
-Place a refusal where it is cheapest and clearest for the author. Refuse as soon as the needed facts are known, before expensive work the refusal would waste. The order of independent refusals is not a promise. A change may move a refusal earlier or later to make it cheaper or clearer. Its description lists every move. No test fixes which independent fault is reported first. Never let a fault pass unrefused or make a refusal unreachable. A refusal's wording may improve for its reader, and the change lists that improvement too. Where a project has codes, a code stays stable unless the change explains why it changes.
+*Always.* Place a refusal where it is cheapest and clearest for the author. Refuse as soon as the needed facts are known, before expensive work the refusal would waste. The order of independent refusals is not a promise. A change may move a refusal earlier or later to make it cheaper or clearer. Its description lists every move. No test fixes which independent fault is reported first. Never let a fault pass unrefused or make a refusal unreachable. A refusal's wording may improve for its reader, and the change lists that improvement too. Where a project has codes, a code stays stable unless the change explains why it changes.
 
 **Checked by:** review of the change's list of moved refusals.
 
 ### Messages and codes
 
-`Display` supplies its own message fragment. Put the cause in `source()`. A message is lowercase with no trailing period and reads after "failed to" or "{path}: ". A cause is never both inline and a source. Only the renderer walks the chain, once. Where a project has error codes, they belong to each binary's top error and to errors matched by non-Rust readers. Core errors carry typed variants for Rust callers to match. Never put a code inside `Display`. The renderer prints it once, and nothing reads a code back from text. A binding to another language returns code and message in separate fields.
+*Default.* `Display` supplies its own message fragment. Put the cause in `source()`. A message is lowercase with no trailing period and reads after "failed to" or "{path}: ". A cause is never both inline and a source. Only the renderer walks the chain, once. Where a project has error codes, they belong to each binary's top error and to errors matched by non-Rust readers. Core errors carry typed variants for Rust callers to match. Never put a code inside `Display`. The renderer prints it once, and nothing reads a code back from text. A binding to another language returns code and message in separate fields.
 
 ```rust
 #[derive(Debug, thiserror::Error)]

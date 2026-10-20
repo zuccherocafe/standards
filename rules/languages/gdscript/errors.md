@@ -8,7 +8,7 @@ GDScript has no exceptions. A run-time script error prints `SCRIPT ERROR`, aband
 
 ### Refusals are values
 
-Decide an error's form by who can fix it, as the [Rust standard](../rust/errors.md#who-fixes-it) does.
+*Default.* Decide an error's form by who can fix it, as the [Rust standard](../rust/errors.md#who-fixes-it) does.
 
 - **The author or environment can fix it.** Return a refusal value for an authored file, missing file, failed process, or external request. One option is a record with an `errors: PackedStringArray` field. Set it through a named static constructor, such as `static func refused(reasons: PackedStringArray) -> ImportInput`, so construction occurs in one place. Alternatively, return the typed record or `null` from a parse function and store reasons in the caller-supplied parser object. A program-matched refusal, such as an interface refusal or protocol error, carries a stable `snake_case` code beside its message in separate fields ([Messages and codes](../rust/errors.md#messages-and-codes)). A human-readable refusal names its place as [Parse at the boundary](../../general.md#design) says.
 - **Our own code breaks a promise.** Use a type that rules out the failure. Otherwise, use `assert` with a message. Its error fails checks, and a release build strips the assertion.
@@ -43,7 +43,7 @@ Ref: gdUnit4 `addons/gdUnit4/src/core/GdUnitResult.gd` (a result object, with it
 
 ### Report at the host's edge
 
-`push_error` belongs at the host that decides which refusals reach a person. Hosts include editor plugins, shipped scenes, test benches, and command-line entry points. A library function never both logs a refusal and returns `null`. That combination gives its caller no reason and leaves only a log line. `printerr` and `print` are not error channels.
+*Default.* `push_error` belongs at the host that decides which refusals reach a person. Hosts include editor plugins, shipped scenes, test benches, and command-line entry points. A library function never both logs a refusal and returns `null`. That combination gives its caller no reason and leaves only a log line. `printerr` and `print` are not error channels.
 
 Before (sketch):
 
@@ -60,7 +60,7 @@ After: `assemble` returns an `Assembled` record with `errors`, and the host that
 
 ### Assert is never for input
 
-Release builds remove `assert`, including its condition and message. Never use it to check input, cause a side effect, or provide the only protection before using an invalid value. It states a promise internal to the code, such as an asserting default arm or a precondition between one class's functions. In tests, use the probe's check helper to report failure. `assert` is not a test assertion.
+*Always.* Release builds remove `assert`, including its condition and message. Never use it to check input, cause a side effect, or provide the only protection before using an invalid value. It states a promise internal to the code, such as an asserting default arm or a precondition between one class's functions. In tests, use the probe's check helper to report failure. `assert` is not a test assertion.
 
 Ref: the GDScript reference, "Assert keyword".
 
@@ -68,6 +68,6 @@ Ref: the GDScript reference, "Assert keyword".
 
 ### Engine errors are checked
 
-An engine call that can fail reports failure as an `Error`, `null` with a separate reason, or an empty value. `ResourceSaver.save`, `DirAccess.make_dir_recursive_absolute`, and `JSON.parse` return `Error`. `FileAccess.open` returns `null`, with its reason available through `FileAccess.get_open_error()`. Bind the result at the call site. Test it there. Convert failure into a refusal naming the path. With `return_value_discarded` off, review must catch a discarded `Error`. A signal connection's `Error` and an `Array.append`'s `bool` may be discarded.
+*Always.* An engine call that can fail reports failure as an `Error`, `null` with a separate reason, or an empty value. `ResourceSaver.save`, `DirAccess.make_dir_recursive_absolute`, and `JSON.parse` return `Error`. `FileAccess.open` returns `null`, with its reason available through `FileAccess.get_open_error()`. Bind the result at the call site. Test it there. Convert failure into a refusal naming the path. With `return_value_discarded` off, review must catch a discarded `Error`. A signal connection's `Error` and an `Array.append`'s `bool` may be discarded.
 
 **Checked by:** review.
