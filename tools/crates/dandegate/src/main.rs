@@ -13,8 +13,8 @@
 //! project's domain. A project's own scripts, its adapters in the after revision's `dandegate/` folder, do that work.
 //! For the Rust workspace `[project.rust]` names, dandegate adds the Rust reports as built-in steps ([`rust`]).
 //!
-//! dandegate runs steps on threads, not on an async runtime. It runs up to four steps at once, a step with a CPU
-//! share beside them on CPUs of its own, and exclusive steps last, one at a time. It runs every git operation with the
+//! dandegate runs steps on threads, not on an async runtime. It runs up to `--steps-at-once` steps at once, four
+//! unless the command line says otherwise, a step with a CPU share beside them on CPUs of its own, and exclusive steps last, one at a time. It runs every git operation with the
 //! `git` command and every step under `nix develop`, below a copy of itself started as `dandegate --supervise --
 //! <command>`, which owns every process the step starts and sets the CPUs it runs on. When `dandegate.toml` names host
 //! programs, the shell starts the step through another copy, `dandegate --host-programs <folder> -- <command>`, which
@@ -38,6 +38,7 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Write as _};
+use std::num::NonZeroUsize;
 use std::process::ExitCode;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -77,12 +78,22 @@ struct Arguments {
     /// Run every step afresh, replacing what is kept.
     #[arg(long)]
     no_reuse: bool,
+    /// How many steps run at once, besides a step on CPUs of its own; at least 1.
+    #[arg(long, value_name = "COUNT", default_value = "4", value_parser = steps_at_once)]
+    steps_at_once: NonZeroUsize,
     /// A gate log or file of MEASURE lines for the after side. Steps find it in `DANDEGATE_MEASURES`.
     #[arg(long, value_name = "FILE")]
     measures: Option<Utf8PathBuf>,
     /// An earlier report folder, its measures.json, or a gate log, for the before side's measures.
     #[arg(long, value_name = "REPORT|FILE")]
     previous: Option<Utf8PathBuf>,
+}
+
+/// `--steps-at-once`' count: a whole number of at least 1.
+fn steps_at_once(text: &str) -> Result<NonZeroUsize, String> {
+    let count: usize = text.parse().map_err(|error| format!("{error}"))?;
+    NonZeroUsize::new(count)
+        .ok_or_else(|| "0 steps at once would run nothing; give 1 or more".to_owned())
 }
 
 const LONG_ABOUT: &str = "\
@@ -93,6 +104,10 @@ It reads dandegate.toml from the after revision and runs its steps in each check
 compares the images, measures and sections the steps write, and writes <out>/index.html, with every file it links \
 inside <out>. dandegate keeps each step's complete success in .cache/dandegate/ and reuses it while its identity \
 holds. A step's {cache} folder, under .cache/dandegate/builds/, is kept from one report to the next.
+
+It runs up to --steps-at-once steps at once, 4 by default, and a step with a CPU share beside them. Each step can \
+start several compilers, so a report run under a memory cap may need fewer at once; the limit trades a cold report's \
+length for its peak memory.
 
 It prints DANDEGATE-INCOMPLETE, DANDEGATE-NOTICE, DANDEGATE-MEASURE-CODE, DANDEGATE-WORSE, DANDEGATE-REUSED and \
 DANDEGATE-STEP-FAILED lines, then a DANDEGATE line naming the page. It exits with 0 whenever it writes the page, \
@@ -272,6 +287,7 @@ fn accept(
         plan,
         out,
         no_reuse: arguments.no_reuse,
+        steps_at_once: arguments.steps_at_once,
         measures_file,
         imported: PerSide { before, after },
         executable,

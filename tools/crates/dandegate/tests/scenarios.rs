@@ -8,8 +8,8 @@
 //!    sections dandegate compares on one page (`invocation`, `comparisons`).
 //! 2. The same report again, which reuses the kept results and misses whenever what they depend on changes (`reuse`,
 //!    `receipts`).
-//! 3. Optional steps chosen with `--with`, needs and live steps (`selection`), run up to four at once with exclusive
-//!    steps last (`scheduling`).
+//! 3. Optional steps chosen with `--with`, needs and live steps (`selection`), run up to `--steps-at-once` at once
+//!    with exclusive steps last (`scheduling`).
 //! 4. A page that stands alone, and earlier reports read back (`durable`).
 //! 5. A Rust workspace's built-in reports (`rust`).
 //! 6. Host programs a step takes from the caller's machine (`host`).

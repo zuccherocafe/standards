@@ -10,7 +10,8 @@
 //! - `[reports]` tunes the built-in reports: `[reports.measures]` names the measuring code (`code`, `exclude`,
 //!   `code-measures`), and `[reports.rust]` gives the Rust reports their arguments (`scans`, `mutation`).
 //! - `[steps]` holds what the project adds: `[steps.inputs]` and each `[[steps.step]]`, with its
-//!   `[steps.step.identity]`.
+//!   `[steps.step.identity]`. Ordinary steps run up to the command line's `--steps-at-once` at a time, four by
+//!   default; a step with `cpus` runs beside them on CPUs of its own, and an `exclusive` one alone, after them.
 //!
 //! The path fields are `[project.rust]`'s `workspace`, `[project.godot]`'s `project` and `tests`,
 //! `[reports.measures]`' `code` and `exclude`, and each step output's `folder`, `expected`, `from` and `file`. In each,

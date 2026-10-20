@@ -1,6 +1,6 @@
-//! Steps run side by side, up to four at once, with exclusive steps last and alone. Every process a step starts ends
-//! with its step: when it runs out of time, when it exits and leaves children behind, and when dandegate itself is
-//! stopped.
+//! Steps run side by side, four at once unless `--steps-at-once` says otherwise, with exclusive steps last and alone.
+//! Every process a step starts ends with its step: when it runs out of time, when it exits and leaves children behind,
+//! and when dandegate itself is stopped.
 
 use std::fmt::Write as _;
 
@@ -159,6 +159,59 @@ fn independent_steps_run_four_at_once_and_exclusive_steps_last_and_alone() {
             "{name} ran beside another: {events:?}"
         );
     }
+}
+
+/// Holds each step a little, so a second step started beside it would overlap it.
+const PAUSED: &str = r#". "$(dirname "$0")/lib.sh"
+event "start $1"
+sleep 0.3
+event "finish $1"
+"#;
+
+#[test]
+fn with_one_step_at_once_no_two_steps_overlap_and_zero_is_refused() {
+    let fixture = Fixture::new("one-at-once");
+    fixture.write("dandegate/paused.sh", PAUSED);
+    let mut plan = String::new();
+    for index in 1..=4 {
+        let _ = write!(
+            plan,
+            "[[steps.step]]\nname = \"paused{index}\"\nruns = \"once\"\n\
+             run = [\"sh\", \"{{adapters}}/paused.sh\", \"paused{index}\"]\n\n"
+        );
+    }
+    fixture.write("dandegate.toml", &plan);
+    let only = fixture.commit("only");
+
+    let run = fixture.run("out", &["--before", &only, "--steps-at-once", "1"]);
+    run.page();
+    assert_eq!(run.printed("DANDEGATE-STEP-FAILED"), Vec::<String>::new());
+    let events = fixture.events();
+    assert_eq!(events.len(), 8, "{events:?}");
+    for pair in events.chunks(2) {
+        let name = pair[0].strip_prefix("start ").expect("a start first");
+        assert_eq!(
+            pair[1],
+            format!("finish {name}"),
+            "two steps overlapped: {events:?}"
+        );
+    }
+
+    let zero = fixture.outside("zero");
+    let refused = fixture
+        .command(&[
+            "--before",
+            &only,
+            "--out",
+            zero.to_str().expect("UTF-8"),
+            "--steps-at-once",
+            "0",
+        ])
+        .output()
+        .expect("the binary starts");
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("0 steps at once would run nothing"));
+    assert!(!zero.exists());
 }
 
 /// The workspace's rust-mutants as its source now stands, built by the Cargo running these tests, which reports where

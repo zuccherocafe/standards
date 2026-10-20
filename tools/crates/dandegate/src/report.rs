@@ -14,7 +14,7 @@
 //! 6. Remove the checkouts, keep the build caches within their bound and let go of them ([`cache`]).
 //! 7. Compare the two sides, and write the page, `measures.json` and the printed lines.
 //!
-//! [`schedule`] orders the steps and runs up to four at once. [`step`] runs one command and records what happened to a
+//! [`schedule`] orders the steps and runs up to `--steps-at-once` of them at once. [`step`] runs one command and records what happened to a
 //! step. [`store`] keeps complete successes. [`identity`] lists what a kept result depends on. [`summary`] compares the
 //! two sides and writes the page. [`cache`] holds the build caches that `{cache}` names, and [`cpus`] shares the CPUs
 //! out.
@@ -30,6 +30,7 @@ mod summary;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write as _};
+use std::num::NonZeroUsize;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -62,6 +63,8 @@ pub(crate) struct Request {
     /// The new output folder, already made.
     pub(crate) out: Utf8PathBuf,
     pub(crate) no_reuse: bool,
+    /// How many ordinary steps run at once.
+    pub(crate) steps_at_once: NonZeroUsize,
     /// `--measures`' file, absolute.
     pub(crate) measures_file: Option<Utf8PathBuf>,
     /// The measures `--previous` and `--measures` give each side.
@@ -202,7 +205,12 @@ pub(crate) fn report(request: &Request) -> Finished {
         }
     }
     let starts = session.starts();
-    let outcomes = run_all(&session.graph, starts, &|at| session.execute(at));
+    let outcomes = run_all(
+        &session.graph,
+        starts,
+        session.request.steps_at_once,
+        &|at| session.execute(at),
+    );
     session.remove_checkouts();
     if let Some(builds) = session.builds.take() {
         for line in builds.bound(BOUND) {

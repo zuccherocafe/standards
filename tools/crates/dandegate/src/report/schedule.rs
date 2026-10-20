@@ -4,14 +4,16 @@
 //! and a once step runs once for both sides. An instance waits for the instances of the steps it needs, on the sides it
 //! uses. [`crate::plan`] says which needs each kind of step can have.
 //!
-//! The scheduler starts each instance whose needs have finished, up to four at once, each on its own thread. When a
-//! need did not succeed, the scheduler skips the instance and records which need failed. An instance on CPUs of its own
-//! starts as soon as its needs have finished and is not one of the four, since it takes nothing from them. Instances
+//! The scheduler starts each instance whose needs have finished, up to the report's steps at once (`--steps-at-once`,
+//! four unless the command line says otherwise), each on its own thread. When a need did not succeed, the scheduler
+//! skips the instance and records which need failed. An instance on CPUs of its own starts as soon as its needs have
+//! finished and is not counted among them, since it takes no CPU from them. Instances
 //! that run alone, exclusive ones and those whose CPU share did not fit, wait until every other instance has finished,
 //! then run one at a time, so a step that measures time runs alone. An instance whose outcome dandegate knows
 //! beforehand, because it is disabled, unneeded or reused, takes no thread.
 
 use std::fmt;
+use std::num::NonZeroUsize;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::mpsc;
 use std::thread;
@@ -19,9 +21,6 @@ use std::thread;
 use crate::plan::{Kind, Plan, StepName};
 use crate::report::step::{Outcome, Skip};
 use crate::revision::Side;
-
-/// How many instances run at once.
-const PARALLEL: usize = 4;
 
 /// Where an instance runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -246,7 +245,7 @@ impl Graph {
 /// How an instance shares the machine with the others.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Lane {
-    /// One of up to four at once, on the CPUs no share holds.
+    /// One of the ordinary instances running at once, up to the report's limit, on the CPUs no share holds.
     Ordinary,
     /// On CPUs of its own, beside the ordinary instances.
     Own,
@@ -271,11 +270,16 @@ enum State {
     Done(Outcome),
 }
 
-/// Every instance's outcome, running those that run with `run`.
+/// Every instance's outcome, running those that run with `run`, at most `at_once` ordinary instances at a time.
 ///
 /// # Panics
 /// When `run` panics for an instance: once every other running instance has finished, the panic goes on from here.
-pub(crate) fn run_all<F>(graph: &Graph, starts: PerInstance<Start>, run: &F) -> PerInstance<Outcome>
+pub(crate) fn run_all<F>(
+    graph: &Graph,
+    starts: PerInstance<Start>,
+    at_once: NonZeroUsize,
+    run: &F,
+) -> PerInstance<Outcome>
 where
     F: Fn(InstanceId) -> Outcome + Sync,
 {
@@ -335,7 +339,7 @@ where
                             .iter()
                             .filter(|(_, lane)| *lane == Lane::Ordinary)
                             .count();
-                        ordinary + starting_ordinary < PARALLEL
+                        ordinary + starting_ordinary < at_once.get()
                     }
                 };
                 if room && graph.needs(at).iter().all(|&need| done(&states[need])) {
@@ -405,11 +409,17 @@ mod tests {
         let bad = graph.ids().next();
         let finished = AtomicBool::new(false);
         let caught = panic::catch_unwind(AssertUnwindSafe(|| {
-            run_all(&graph, graph.each(|_| Start::Run(Lane::Ordinary)), &|at| {
-                assert_ne!(Some(at), bad, "a bug in one step's work");
-                finished.store(true, Ordering::SeqCst);
-                Outcome::Disabled
-            })
+            let at_once = NonZeroUsize::new(4).expect("not zero");
+            run_all(
+                &graph,
+                graph.each(|_| Start::Run(Lane::Ordinary)),
+                at_once,
+                &|at| {
+                    assert_ne!(Some(at), bad, "a bug in one step's work");
+                    finished.store(true, Ordering::SeqCst);
+                    Outcome::Disabled
+                },
+            )
         }));
         let payload = caught.expect_err("the panic goes on");
         let message = payload
