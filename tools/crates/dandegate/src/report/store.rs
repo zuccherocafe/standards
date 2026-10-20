@@ -1,6 +1,6 @@
 //! Keeps each complete, successful step's folder in the repository's ignored `.cache/dandegate/results/`, under the
-//! identity of everything the result depends on. A later report of the same revision reuses the kept result instead of
-//! running the step again.
+//! identity of everything the result depends on. A later report of the same revisions reuses the kept result instead of
+//! running the step again. A step kept by content is found by what it reads instead ([`Identity`]).
 //!
 //! An entry is a folder named by its identity's digest. It holds `receipt.json`, with a format number, the identity and
 //! every file's SHA-256, and `files/`, a copy of the step's folder. dandegate writes an entry under a staging name that
@@ -58,15 +58,26 @@ fn hex(bytes: &[u8]) -> String {
         })
 }
 
-/// The commits a result follows from: its revision's, or both of a once step's.
+/// What a result follows from of the two revisions: its revision's commit, both of a once step's, or, for a step kept
+/// by content, the digests of the content it reads, so a new commit of the same content still finds it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "runs", rename_all = "kebab-case")]
-pub(crate) enum Commits {
-    Revision { commit: String },
-    Pair { before: String, after: String },
+pub(crate) enum Revisions {
+    Revision {
+        commit: String,
+    },
+    Pair {
+        before: String,
+        after: String,
+    },
+    /// The SHA-256 of the diff the step reads, and of the after revision's tree listing outside the adapters folder.
+    Content {
+        diff: String,
+        tree: String,
+    },
 }
 
-impl Commits {
+impl Revisions {
     pub(crate) fn revision(commit: &CommitId) -> Self {
         Self::Revision {
             commit: commit.to_string(),
@@ -107,20 +118,23 @@ pub(crate) struct NeedIdentity {
 
 /// Everything a kept result depends on:
 ///
-/// - The commits, which also fix each revision's development shell through its `flake.lock`.
+/// - The commits, which also fix each revision's development shell through its `flake.lock`. A step kept by content,
+///   the mutation report, holds the digests of the diff it reads and of the after revision's tree instead: every file
+///   but the adapters', the `flake.lock` included. A report of other commits with the same content reuses it.
 /// - The step as written, with placeholders by name.
 /// - Each instance it needs, directly or through others, which a reused result skips: by place and name, its step as
 ///   written, the environment variables its patterns match and its collector's lines.
 /// - The input values those steps use, with the content of any file a value names.
-/// - Every file of the after revision's adapters folder.
+/// - Every file of the after revision's adapters folder, except for a step kept by content, which runs none of them.
 /// - The environment variables the step's patterns match, and its collector's lines.
 /// - dandegate's own executable.
 /// - The host programs the plan names, by name: the plan comes from the after revision, so the before commit does not
 ///   fix them.
+/// - For a built-in Rust report, the Rust settings of the steps file: the workspace and each report's arguments.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct Identity {
     pub(crate) dandegate: String,
-    pub(crate) commits: Commits,
+    pub(crate) revisions: Revisions,
     pub(crate) step: serde_json::Value,
     pub(crate) needs: BTreeMap<String, NeedIdentity>,
     pub(crate) inputs: BTreeMap<String, InputIdentity>,
@@ -130,6 +144,9 @@ pub(crate) struct Identity {
     /// The host programs the plan names, as written, left out when it names none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) host: Vec<String>,
+    /// The Rust settings, left out for a step that is not a built-in Rust report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) rust: Option<serde_json::Value>,
 }
 
 impl Identity {

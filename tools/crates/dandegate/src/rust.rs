@@ -6,7 +6,11 @@
 //! - `lines` counts each crate's production and test lines at both revisions. It finds the crates with `cargo
 //!   metadata`.
 //! - `mutants` runs the mutation report on the Rust that changed since the before commit. It runs in the after
-//!   checkout, which has the history the report diffs, and does not run when no Rust differs.
+//!   checkout, which has the history the report diffs, and does not run when no Rust differs. dandegate keeps its
+//!   result by content ([`crate::report::store::Identity`]) and writes a reused section again for the report that
+//!   reuses it. Reuse rests on a contract: the build and the tests read only the repository's files and the variables
+//!   the identity holds, and the adapters folder holds only the report's own step scripts. A project whose tests read
+//!   anything else runs its reports with `--no-reuse`.
 //! - `api-listings` lists each library crate's public items at one revision. It uses the nightly and the
 //!   `cargo-public-api` that the revision's development shell pins, and builds in a target folder of its own. dandegate
 //!   keeps and reuses its result like any step's, under the identity that its toolchain collector prints.
@@ -27,6 +31,7 @@ use std::process::{Command, ExitStatus};
 use std::time::Instant;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use serde::{Deserialize, Serialize};
 
 use crate::plan::{Report, RustSettings};
 use crate::report::rendered;
@@ -36,15 +41,19 @@ use crate::revision::{CommitId, PerSide, Revision, Side};
 use crate::rust::api::{Crate, LISTINGS_FORMAT, Listed, Listings, Workspace};
 use crate::rust::lines::{Lines, crate_lines};
 
-/// The api-listings step's identity collector, run with `bash -c` in a checkout's development shell, given the
-/// workspace folder: the compiler, rustdoc and Cargo builds, Cargo's merged configuration there, and the digest of
-/// each program Cargo runs, `cargo-public-api` and any wrapper included. A program is the one Cargo chooses: its
-/// variable (`RUSTC`, `RUSTDOC`, `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`), then its `build` setting, which Cargo's
-/// own variables also set, then the default. Each value is taken in an assignment of its own, so any command that
-/// fails, or a setting it cannot place, fails the collector, and the step runs fresh and keeps nothing.
+/// The identity collector of the reports that build the workspace, api-listings and mutants, run with `bash -c` in the
+/// measured checkout's development shell, given the workspace folder and the programs the report runs besides Cargo's:
+/// `cargo-public-api` for the listings, `rust-mutants` and `cargo-mutants` for the mutation report. It prints the
+/// compiler, rustdoc and Cargo builds, Cargo's merged configuration there, a digest of the `CARGO*`, `RUST*` and
+/// `LD_LIBRARY_PATH` variables as the shell sets them, and the digest of each program's content: those given, and each
+/// one Cargo runs, any wrapper included. A program Cargo runs is the one Cargo chooses: its variable (`RUSTC`,
+/// `RUSTDOC`, `RUSTC_WRAPPER`, `RUSTC_WORKSPACE_WRAPPER`), then its `build` setting, which Cargo's own variables also
+/// set, then the default. Each value is taken in an assignment of its own, so any command that fails, or a setting it
+/// cannot place, fails the collector, and the step runs fresh and keeps nothing.
 pub(crate) const TOOLCHAIN_COLLECTOR: &str = r#"set -euo pipefail
 shopt -s inherit_errexit
 cd "$1"
+shift
 # Cargo's setting build.<name>: a program's name or absolute path, or nothing when it is not set.
 configured() {
   local value inner
@@ -87,12 +96,15 @@ rustdoc_version=$("$rustdoc" -vV)
 cargo_version=$(cargo -vV)
 configuration=$(cargo -Zunstable-options config get --format json-value)
 configuration_digest=$(printf '%s\n' "$configuration" | sha256sum)
+# grep's status 1 is no variable matched, an empty selection; any other failure fails the collector.
+variables=$(env -0 | LC_ALL=C sort -z | { grep -zE '^(CARGO|RUST)[^=]*=|^LD_LIBRARY_PATH=' || [ $? -eq 1 ]; } | sha256sum)
 printf 'rustc=%s\n' "${rustc_version//$'\n'/ }"
 printf 'rustdoc=%s\n' "${rustdoc_version//$'\n'/ }"
 printf 'cargo=%s\n' "${cargo_version//$'\n'/ }"
 printf 'cargo-configuration=%s\n' "${configuration_digest%% *}"
-for pair in "rustc=$rustc" "rustdoc=$rustdoc" cargo=cargo cargo-public-api=cargo-public-api \
-  "rustc-wrapper=$wrapper" "rustc-workspace-wrapper=$workspace_wrapper"; do
+printf 'variables=%s\n' "${variables%% *}"
+for pair in "rustc=$rustc" "rustdoc=$rustdoc" cargo=cargo "rustc-wrapper=$wrapper" \
+  "rustc-workspace-wrapper=$workspace_wrapper"; do
   name=${pair%%=*}
   program=${pair#*=}
   if [ -n "$program" ]; then
@@ -100,7 +112,62 @@ for pair in "rustc=$rustc" "rustdoc=$rustdoc" cargo=cargo cargo-public-api=cargo
     printf '%s-digest=%s\n' "$name" "$sum"
   fi
 done
+for program in "$@"; do
+  sum=$(digest "$program")
+  printf '%s-digest=%s\n' "$program" "$sum"
+done
 "#;
+
+/// The file beside a mutation report's log that names the commits its section was written for, so a reused section can
+/// be written again for the revisions that reuse it.
+const LABELS: &str = "revisions.json";
+
+/// The commits a section was written for.
+#[derive(Debug, Serialize, Deserialize)]
+struct Labels {
+    before: String,
+    after: String,
+}
+
+impl Labels {
+    fn of(revisions: &PerSide<Revision>) -> Self {
+        Self {
+            before: revisions.before.commit().to_string(),
+            after: revisions.after.commit().to_string(),
+        }
+    }
+}
+
+/// Record, in the mutation report's step folder `folder`, the commits its section names.
+///
+/// # Errors
+/// The write's error.
+pub(crate) fn label(folder: &Utf8Path, revisions: &PerSide<Revision>) -> io::Result<()> {
+    let text = serde_json::to_string_pretty(&Labels::of(revisions)).map_err(io::Error::other)?;
+    fs::write(folder.join(LABELS), text + "\n")
+}
+
+/// Write a reused mutation report's section again in its step folder `folder`, for `revisions`: rust-mutants' output
+/// with the commits it was run on replaced by these, under this run's heading. Nothing else of the result changes,
+/// since it was kept for content these revisions hold too.
+///
+/// # Errors
+/// An error when the labels or the output cannot be read or written.
+pub(crate) fn relabel(folder: &Utf8Path, revisions: &PerSide<Revision>) -> io::Result<()> {
+    let text = fs::read_to_string(folder.join(LABELS))?;
+    let old: Labels = serde_json::from_str(&text).map_err(io::Error::other)?;
+    let new = Labels::of(revisions);
+    let out = folder.join("out");
+    let printed = fs::read_to_string(out.join(MUTANTS_PRINTED))?
+        .replace(&old.before, &new.before)
+        .replace(&old.after, &new.after);
+    fs::write(out.join(MUTANTS_PRINTED), &printed)?;
+    fs::write(
+        out.join(MUTANTS_SECTION),
+        mutants_section(revisions, &printed),
+    )?;
+    label(folder, revisions)
+}
 
 /// Every folder of `commit`'s tree holding a `Cargo.toml` with a `[workspace]` table, `.` for the root. `files` are
 /// the tree's files.
@@ -614,18 +681,31 @@ fn mutants(context: &Context<'_>) -> Result<(), Stop> {
         "--",
     ];
     command.extend(context.settings.mutation.iter().map(String::as_str));
-    let printed = context.out.join("mutants.txt");
+    let printed = context.out.join(MUTANTS_PRINTED);
     let problems = match context.shell(Side::After, Utf8Path::new("."), &command, &[], &printed) {
         Ok(()) => Vec::new(),
         Err(error) => vec![error.partial()?],
     };
     let text = fs::read_to_string(&printed).map_err(Stop::Write)?;
-    let section = format!(
+    context.write(
+        MUTANTS_SECTION,
+        &mutants_section(context.revisions, &text),
+        &problems,
+    )
+}
+
+/// What rust-mutants printed, in the mutants step's output folder.
+const MUTANTS_PRINTED: &str = "mutants.txt";
+/// The mutants step's section, in its output folder.
+const MUTANTS_SECTION: &str = "mutants.md";
+
+/// The mutation report's section for `revisions`, around what rust-mutants printed.
+fn mutants_section(revisions: &PerSide<Revision>, printed: &str) -> String {
+    format!(
         "# Mutation report\n\nThese are the mutants of the Rust that changed since {}, tested in {}. Judge each \
          missed mutant and diagnose each timed-out one. `run/rust-mutants/` holds every list.\n\n```text\n{}```\n",
-        context.revisions.before, context.revisions.after, text
-    );
-    context.write("mutants.md", &section, &problems)
+        revisions.before, revisions.after, printed
+    )
 }
 
 fn api_listings(context: &Context<'_>, side: Side) -> Result<(), Stop> {

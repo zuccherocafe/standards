@@ -20,7 +20,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rustix::process::{Pid, Signal, kill_process};
 
-/// The stand-in for `nix develop [--unset PATH] <checkout> -c <command>`, given the stand-in shell's folder.
+/// The stand-in for `nix develop [--unset PATH] <checkout> -c <command>`, given the stand-in shell's folder. It sources
+/// the folder's `.env`, when there is one, as a shell sets its own variables.
 fn nix(shell: &Path) -> String {
     format!(
         r#"#!/bin/sh
@@ -32,7 +33,8 @@ printf '%s\n' "$1" >> "$EVENTS/nix"
 shift
 [ "$1" = -c ] || {{ echo "the stand-in nix needs -c" >&2; exit 98; }}
 shift
-export PATH="{}${{inherited:+:$inherited}}"
+export PATH="{0}${{inherited:+:$inherited}}"
+if [ -f "{0}/.env" ]; then . "{0}/.env"; fi
 exec "$@"
 "#,
         shell.display()
@@ -40,7 +42,7 @@ exec "$@"
 }
 
 /// The system tools the stand-in shell links, each where the tests find it.
-const SHELL_TOOLS: &str = "sh bash git cp cat grep sleep dirname mkdir rm cut tr sha256sum kill env ls mv \
+const SHELL_TOOLS: &str = "sh bash git cp cat grep sleep dirname mkdir rm cut tr sha256sum kill env ls mv sort \
                            touch head sed wc true printf cargo rustc rustdoc";
 
 /// The shell functions step scripts share, `dandegate/lib.sh` in every fixture: `event <words>` records an event;
@@ -142,6 +144,12 @@ impl Fixture {
     /// Put an executable stand-in called `name` in the stand-in development shell.
     pub(crate) fn tool(&self, name: &str, script: &str) {
         self.program_in("shell", name, script);
+    }
+
+    /// Make the stand-in development shell set variables, as a shell's own exports do: `script` runs in the shell
+    /// before each command.
+    pub(crate) fn write_shell_env(&self, script: &str) {
+        fs::write(self.root.join("shell/.env"), script).expect("the stand-in shell is writable");
     }
 
     /// Put an executable stand-in called `name` first on the binary's own `PATH`, outside the development shell.

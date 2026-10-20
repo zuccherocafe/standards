@@ -583,16 +583,16 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
     let section = |file: &str| Output::Section {
         file: OutPath(Utf8PathBuf::from(file)),
     };
-    let once = |reportable| {
+    let once = |reportable, collect| {
         Runs::Once(Recipe {
             work: Work::Rust(reportable),
             env: BTreeMap::new(),
-            collect: None,
+            collect,
         })
     };
     let (runs, needs, optional, reuse, timeout, outputs) = match report {
         Report::Scans => (
-            once(report),
+            once(report, None),
             vec![],
             false,
             false,
@@ -600,7 +600,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
             vec![section("scans.md")],
         ),
         Report::Lines => (
-            once(report),
+            once(report, None),
             vec![],
             false,
             false,
@@ -608,10 +608,13 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
             vec![section("lines.md")],
         ),
         Report::Mutants => (
-            once(report),
+            once(
+                report,
+                Some(collector(settings, &["rust-mutants", "cargo-mutants"])),
+            ),
             vec![],
             false,
-            false,
+            true,
             MUTANTS_TIMEOUT,
             vec![section("mutants.md")],
         ),
@@ -619,18 +622,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
             Runs::PerRevision(Recipe {
                 work: Work::Rust(report),
                 env: BTreeMap::new(),
-                collect: Some(
-                    [
-                        "bash",
-                        "-c",
-                        crate::rust::TOOLCHAIN_COLLECTOR,
-                        "collect",
-                        settings.workspace.as_path().as_str(),
-                    ]
-                    .into_iter()
-                    .map(Template::text)
-                    .collect(),
-                ),
+                collect: Some(collector(settings, &["cargo-public-api"])),
             }),
             vec![],
             true,
@@ -639,7 +631,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
             vec![section("listings.md")],
         ),
         Report::Api => (
-            once(report),
+            once(report, None),
             vec![Report::ApiListings.step()],
             true,
             false,
@@ -658,6 +650,22 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
         identity_env: default_identity_env(),
         outputs,
     }
+}
+
+/// A built-in report's identity collector, [`crate::rust::TOOLCHAIN_COLLECTOR`], given the workspace folder and the
+/// programs the report runs besides Cargo's.
+fn collector<A: Arg>(settings: &RustSettings, programs: &[&str]) -> Vec<Template<A>> {
+    [
+        "bash",
+        "-c",
+        crate::rust::TOOLCHAIN_COLLECTOR,
+        "collect",
+        settings.workspace.as_path().as_str(),
+    ]
+    .into_iter()
+    .chain(programs.iter().copied())
+    .map(Template::text)
+    .collect()
 }
 
 /// Every need names a step of a kind its step can wait for, no ordinary step needs an exclusive one, and there is no

@@ -11,8 +11,11 @@ cat fixture/scans.txt
 [ ! -f fixture/scans.fail ]
 "#;
 
+/// Prints the commit it mutates since, as rust-mutants does, and one missed mutant.
 const MUTANTS: &str = r#"#!/bin/sh
 printf 'mutants %s\n' "$*" >> "$EVENTS/events"
+base=$(printf '%s\n' "$@" | sed -n '/^--base$/{n;p;}')
+echo "rust_mutants: 1 Rust files changed since $base"
 echo "missed, to judge: crates/alpha/src/lib.rs:2:5: replace alpha -> u8 with 0"
 echo "caught: 3 missed: 1 timeout: 0 unviable: 0"
 "#;
@@ -60,6 +63,7 @@ const ALPHA_BEFORE: &str = "pub fn alpha() -> u8 {\n    1\n}\n\n#[cfg(test)]\nmo
 pub(crate) fn workspace(fixture: &Fixture) {
     fixture.tool("rust-scans", SCANS);
     fixture.tool("rust-mutants", MUTANTS);
+    fixture.tool("cargo-mutants", "#!/bin/sh\n");
     fixture.tool("cargo", CARGO);
     fixture.tool("cargo-public-api", PUBLIC_API);
     fixture.write(
@@ -417,6 +421,189 @@ fn a_side_whose_crates_cannot_be_found_has_none_removed(fixture: &Fixture, after
     );
 }
 
+/// How many times the stand-in rust-mutants ran since the events were last cleared.
+fn mutants_ran(fixture: &Fixture) -> usize {
+    fixture
+        .events()
+        .iter()
+        .filter(|event| event.starts_with("mutants "))
+        .count()
+}
+
+#[test]
+fn the_mutation_report_is_reused_by_content_and_misses_when_anything_it_reads_changes() {
+    let fixture = Fixture::new("mutants-reuse");
+    workspace(&fixture);
+    fixture.write("data/table.txt", "1\n");
+    fixture.write(
+        "crates/alpha/src/lib.rs",
+        "pub fn alpha() -> u8 {\n    0\n}\n",
+    );
+    let older = fixture.commit("older");
+    workspace(&fixture);
+    let before = fixture.commit("before");
+    change_rust(&fixture);
+    let after = fixture.commit("after");
+    let report = |out: &str, before: &str, after: &str, env: &[(&str, &str)]| {
+        fixture.clear_events();
+        let run = fixture.run_with(out, &["--before", before, "--after", after], env);
+        run.page();
+        let reused = run
+            .printed("DANDEGATE-REUSED")
+            .iter()
+            .any(|line| line.starts_with("both mutants"));
+        assert_eq!(
+            reused,
+            mutants_ran(&fixture) == 0,
+            "{:?}",
+            noted(&run, "both mutants")
+        );
+        (run, reused)
+    };
+
+    let (cold, reused) = report("cold", &before, &after, &[]);
+    assert!(!reused);
+    assert!(noted(&cold, "both mutants").contains(&"kept for reuse".to_owned()));
+    assert!(report("same", &before, &after, &[]).1);
+
+    // New commits of the same content, the after one changing only an adapter: the result is reused, and its section
+    // names this report's revisions.
+    let again = fixture
+        .git(&["commit-tree", &format!("{before}^{{tree}}"), "-m", "again"])
+        .trim()
+        .to_owned();
+    fixture.write("dandegate/extra.sh", "# an adapter of no step\n");
+    let adapters = fixture.commit("adapters");
+    let (relabelled, reused) = report("adapters", &again, &adapters, &[]);
+    assert!(reused);
+    let section = relabelled.file("steps/both/mutants/out/mutants.md");
+    assert!(
+        section.contains(&format!(
+            "changed since {again} ({again}), tested in {adapters} ({adapters})"
+        )),
+        "{section}"
+    );
+    assert!(
+        section.contains(&format!(
+            "rust_mutants: 1 Rust files changed since {again}\n"
+        )),
+        "{section}"
+    );
+    assert!(
+        !section.contains(&before) && !section.contains(&after),
+        "{section}"
+    );
+
+    // Each thing the result follows from, changed alone, misses: the diff, through another before revision; a file
+    // outside the workspace that a test may read; the report's options; the build's environment, as dandegate gets it
+    // and as the shell sets it; a program it runs; and a compiler wrapper changed at the same path.
+    assert!(!report("diff", &older, &adapters, &[]).1);
+    fixture.write("data/table.txt", "2\n");
+    let data = fixture.commit("data");
+    assert!(!report("data", &again, &data, &[]).1);
+    fixture.write(
+        "dandegate.toml",
+        "[project.rust]\nworkspace = \"./\"\n[reports.rust]\nscans = [\"--core\", \"alpha\"]\n\
+         mutation = [\"--timeout\", \"9\"]\n",
+    );
+    let options = fixture.commit("options");
+    assert!(!report("options", &again, &options, &[]).1);
+    assert!(report("options-again", &again, &options, &[]).1);
+    assert!(!report("env", &again, &options, &[("RUST_MIN_STACK", "8388608")]).1);
+    fixture.write_shell_env("export RUST_MIN_STACK=4194304\n");
+    assert!(!report("shell-env", &again, &options, &[]).1);
+    assert!(report("shell-env-again", &again, &options, &[]).1);
+    fixture.tool("rust-mutants", &format!("{MUTANTS}# another build\n"));
+    assert!(!report("program", &again, &options, &[]).1);
+    let wrapper = fixture.outside("rustc-wrapper");
+    let wrapper_path = wrapper.to_str().expect("UTF-8");
+    let write_wrapper = |text: &str| {
+        std::fs::write(&wrapper, format!("#!/bin/sh\n# {text}\nexec \"$@\"\n")).expect("a wrapper");
+        std::fs::set_permissions(
+            &wrapper,
+            std::os::unix::fs::PermissionsExt::from_mode(0o755),
+        )
+        .expect("executable");
+    };
+    write_wrapper("one");
+    let environment = [("RUSTC_WRAPPER", wrapper_path)];
+    assert!(!report("wrapper", &again, &options, &environment).1);
+    assert!(report("wrapper-again", &again, &options, &environment).1);
+    write_wrapper("two");
+    assert!(!report("wrapper-changed", &again, &options, &environment).1);
+}
+
+#[test]
+fn rust_in_the_adapters_folder_runs_the_mutation_report_fresh_and_keeps_nothing() {
+    let fixture = Fixture::new("mutants-adapters");
+    workspace(&fixture);
+    let before = fixture.commit("before");
+    change_rust(&fixture);
+    fixture.write("dandegate/helper/src/lib.rs", "pub fn helper() {}\n");
+    let after = fixture.commit("after");
+    for out in ["first", "second"] {
+        fixture.clear_events();
+        let run = fixture.run(out, &["--before", &before, "--after", &after]);
+        run.page();
+        assert_eq!(mutants_ran(&fixture), 1, "{out}");
+        let notes = noted(&run, "both mutants");
+        assert!(
+            notes.iter().any(|note| note.starts_with(
+                "runs fresh and is not kept: dandegate/helper/src/lib.rs is Rust or a Cargo manifest in the \
+                 adapters folder"
+            )),
+            "{notes:?}"
+        );
+    }
+}
+
+#[test]
+fn a_kept_mutation_report_misses_when_a_file_outside_the_workspace_changes_and_not_for_an_adapter()
+{
+    let fixture = Fixture::new("mutants-outside");
+    fixture.tool("rust-scans", SCANS);
+    fixture.tool("rust-mutants", MUTANTS);
+    fixture.tool("cargo-mutants", "#!/bin/sh\n");
+    fixture.write(
+        "rust/Cargo.toml",
+        "[workspace]\nmembers = [\"crates/*\"]\nresolver = \"3\"\n",
+    );
+    fixture.write(
+        "rust/crates/alpha/Cargo.toml",
+        "[package]\nname = \"alpha\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    );
+    fixture.write("rust/crates/alpha/src/lib.rs", "pub fn f() {}\n");
+    fixture.write("fixture/scans.txt", "H1: 0\n");
+    fixture.write("data/table.txt", "1\n");
+    fixture.write("dandegate.toml", "[project.rust]\nworkspace = \"rust/\"\n");
+    let before = fixture.commit("before");
+    fixture.write(
+        "rust/crates/alpha/src/lib.rs",
+        "pub fn f() {}\npub fn g() {}\n",
+    );
+    let after = fixture.commit("after");
+    let reused = |out: &str, after: &str| {
+        fixture.clear_events();
+        let run = fixture.run(out, &["--before", &before, "--after", after]);
+        run.page();
+        assert_eq!(
+            run.printed("DANDEGATE-REUSED")
+                .iter()
+                .any(|line| line.starts_with("both mutants")),
+            mutants_ran(&fixture) == 0
+        );
+        mutants_ran(&fixture) == 0
+    };
+    assert!(!reused("cold", &after));
+    // The diff, taken in the workspace, is the same each time; only the tree outside it changes.
+    fixture.write("dandegate/extra.sh", "# an adapter of no step\n");
+    let adapter = fixture.commit("adapter");
+    assert!(reused("adapter", &adapter));
+    fixture.write("data/table.txt", "2\n");
+    let data = fixture.commit("data");
+    assert!(!reused("data", &data));
+}
+
 /// What a step's identity note says, from the report's log.
 fn noted(run: &crate::support::Run, instance: &str) -> Vec<String> {
     let lead = format!("=== {instance}: ");
@@ -486,9 +673,14 @@ fn a_toolchain_that_cannot_be_identified_runs_the_listings_fresh_and_keeps_nothi
     for (case, env) in [
         ("configuration", ("CARGO_CONFIG_FAILS", "1")),
         ("wrapper", ("RUSTC_WRAPPER", "/nowhere/wrapper")),
+        ("filter", ("UNUSED", "")),
     ] {
         let fixture = Fixture::new(case);
         workspace(&fixture);
+        if case == "filter" {
+            // A filter of the variables that reads all it is given, then fails, as grep does on an error.
+            fixture.tool("grep", "#!/bin/sh\ncat > /dev/null\nexit 2\n");
+        }
         let only = fixture.commit("only");
         for out in ["first", "second"] {
             let run = fixture.run_with(out, &["--before", &only, "--with", "api"], &[env]);

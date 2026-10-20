@@ -140,6 +140,35 @@ impl Repository {
             .collect())
     }
 
+    /// Every entry of `commit`'s tree outside the folder `left_out`, as `git ls-tree -r -z` prints it: each file's
+    /// mode, object name and path, so the listing changes exactly when a file's content, mode or path does.
+    ///
+    /// # Errors
+    /// [`GitError`] when the tree cannot be read.
+    pub(crate) fn tree_outside(
+        &self,
+        commit: &CommitId,
+        left_out: &str,
+    ) -> Result<Vec<u8>, GitError> {
+        let listed = self.git(&["ls-tree", "-r", "-z", "--full-tree", commit.as_str()])?;
+        let prefix = format!("{left_out}/");
+        let mut kept = Vec::with_capacity(listed.len());
+        for entry in listed
+            .split(|&byte| byte == 0)
+            .filter(|entry| !entry.is_empty())
+        {
+            let path = entry
+                .iter()
+                .position(|&byte| byte == b'\t')
+                .map_or(&entry[..0], |tab| &entry[tab + 1..]);
+            if !path.starts_with(prefix.as_bytes()) {
+                kept.extend_from_slice(entry);
+                kept.push(0);
+            }
+        }
+        Ok(kept)
+    }
+
     /// The files that differ between two commits under any of `paths`, every path when none is given. Each path is
     /// literal, a file or a folder with everything below it, never a pattern: git's wildcards, brackets and pathspec
     /// magic match only themselves.
@@ -211,6 +240,33 @@ impl Repository {
     fn git(&self, arguments: &[&str]) -> Result<Vec<u8>, GitError> {
         git_in(&self.root, arguments)
     }
+}
+
+/// The diff rust-mutants reads, taken with its options: the working tree at `folder` since `base`, relative to the
+/// folder, with plain `a/` and `b/` prefixes. The repository's folder `left_out` is left out of it, wherever it is.
+///
+/// # Errors
+/// [`GitError`] when git cannot run or refuses the commit.
+pub(crate) fn diff_since(
+    folder: &Utf8Path,
+    base: &CommitId,
+    left_out: &str,
+) -> Result<Vec<u8>, GitError> {
+    git_in(
+        folder,
+        &[
+            "diff",
+            "--relative",
+            "--no-color",
+            "--no-ext-diff",
+            "--src-prefix=a/",
+            "--dst-prefix=b/",
+            base.as_str(),
+            "--",
+            ".",
+            &format!(":(top,exclude,literal){left_out}"),
+        ],
+    )
 }
 
 /// What `git` prints run in `folder`.

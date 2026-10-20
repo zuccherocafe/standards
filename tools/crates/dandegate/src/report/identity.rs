@@ -7,13 +7,15 @@ use std::time::Instant;
 
 use camino::Utf8Path;
 
+use crate::plan::Report;
 use crate::report::schedule::{InstanceId, PerInstance, Place};
 use crate::report::step::{Launch, RESERVED, launch, shown};
 use crate::report::store::{
-    Commits, Contribution, Identity, InputIdentity, NeedIdentity, file_sha256,
+    Contribution, Identity, InputIdentity, NeedIdentity, Revisions, file_sha256, sha256,
 };
-use crate::report::{Prepared, Session, Target, rendered};
+use crate::report::{ADAPTERS, Prepared, Session, Target, rendered};
 use crate::revision::Side;
+use crate::revision::git::diff_since;
 
 impl Session<'_> {
     /// Everything the instance's result follows from, given what each instance contributes, or why it cannot be named.
@@ -25,16 +27,21 @@ impl Session<'_> {
         let instance = self.graph.instance(at);
         let step = self.step(at);
         let dandegate = self.request.executable.clone()?;
-        let adapters = self
-            .adapter_files
-            .clone()
-            .map_err(|why| format!("the adapters cannot be listed: {why}"))?;
-        let commits = match instance.place {
-            Place::Revision(side) => Commits::revision(self.request.revisions[side].commit()),
-            Place::Pair => Commits::pair(
-                self.request.revisions.before.commit(),
-                self.request.revisions.after.commit(),
-            ),
+        let (revisions, adapters) = if step.report().is_some_and(Report::kept_by_content) {
+            (self.content()?, BTreeMap::new())
+        } else {
+            let revisions = match instance.place {
+                Place::Revision(side) => Revisions::revision(self.request.revisions[side].commit()),
+                Place::Pair => Revisions::pair(
+                    self.request.revisions.before.commit(),
+                    self.request.revisions.after.commit(),
+                ),
+            };
+            let adapters = self
+                .adapter_files
+                .clone()
+                .map_err(|why| format!("the adapters cannot be listed: {why}"))?;
+            (revisions, adapters)
         };
         let contributed = |of: InstanceId| match &contributions[of] {
             Some(Ok(contribution)) => Ok(contribution.clone()),
@@ -84,9 +91,19 @@ impl Session<'_> {
                 ))
             })
             .collect::<Result<_, String>>()?;
+        let rust = step
+            .report()
+            .and_then(|_| self.plan().rust())
+            .map(|settings| {
+                serde_json::json!({
+                    "workspace": settings.workspace.as_path().as_str(),
+                    "scans": settings.scans,
+                    "mutation": settings.mutation,
+                })
+            });
         Ok(Identity {
             dandegate,
-            commits,
+            revisions,
             step: step.written(),
             needs,
             inputs,
@@ -99,6 +116,44 @@ impl Session<'_> {
                 .iter()
                 .map(|program| program.as_str().to_owned())
                 .collect(),
+            rust,
+        })
+    }
+
+    /// What a step kept by content reads of the revisions: the diff rust-mutants takes in the after checkout's
+    /// workspace since the before commit, and the after commit's tree, whose files a test may read wherever they are.
+    /// Both leave out the adapters folder, which by contract holds only the report's own step scripts: no Rust report
+    /// runs them, and nothing the build or the tests read lives there. Rust or a Cargo manifest there breaks that
+    /// contract in a way dandegate can see, so then the step is not kept.
+    fn content(&self) -> Result<Revisions, String> {
+        let settings = self.plan().rust().ok_or("the plan has no Rust workspace")?;
+        let adapters = self
+            .adapter_files
+            .as_ref()
+            .map_err(|why| format!("the adapters cannot be listed: {why}"))?;
+        let rust = adapters.keys().find(|path| {
+            let path = Utf8Path::new(path);
+            path.extension() == Some("rs") || path.file_name() == Some("Cargo.toml")
+        });
+        if let Some(path) = rust {
+            return Err(format!(
+                "{path} is Rust or a Cargo manifest in the adapters folder, which holds only the report's step \
+                 scripts, so the mutation report's identity cannot leave that folder out"
+            ));
+        }
+        let workspace = self
+            .checkout(Side::After)?
+            .join(settings.workspace.as_path());
+        let diff = diff_since(&workspace, self.request.revisions.before.commit(), ADAPTERS)
+            .map_err(|error| format!("its diff cannot be taken: {error}"))?;
+        let tree = self
+            .request
+            .repository
+            .tree_outside(self.request.revisions.after.commit(), ADAPTERS)
+            .map_err(|error| format!("the after tree cannot be listed: {error}"))?;
+        Ok(Revisions::Content {
+            diff: sha256(&diff),
+            tree: sha256(&tree),
         })
     }
 

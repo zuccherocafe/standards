@@ -43,6 +43,9 @@ use crate::revision::git::Repository;
 use crate::revision::{PerSide, Revision, Side};
 use crate::rust;
 
+/// The after checkout's folder of the project's own step scripts, which `{adapters}` names.
+pub(crate) const ADAPTERS: &str = "dandegate";
+
 /// Everything a report needs, accepted and resolved.
 #[derive(Debug)]
 pub(crate) struct Request {
@@ -126,7 +129,7 @@ pub(crate) fn report(request: &Request) -> Finished {
         .after
         .as_ref()
         .map_or_else(|_| cache.join("scratch"), Clone::clone)
-        .join("dandegate");
+        .join(ADAPTERS);
     let mut env = vec![("DANDEGATE_REPOSITORY".to_owned(), root.to_string())];
     if let Some(file) = &request.measures_file {
         env.push(("DANDEGATE_MEASURES".to_owned(), file.to_string()));
@@ -143,7 +146,7 @@ pub(crate) fn report(request: &Request) -> Finished {
         checkouts,
         adapter_files: request
             .repository
-            .blobs(request.revisions.after.commit(), "dandegate")
+            .blobs(request.revisions.after.commit(), ADAPTERS)
             .map_err(|error| error.to_string()),
         scratch,
         adapters,
@@ -401,28 +404,49 @@ impl Session<'_> {
             if step.report() == Some(Report::Mutants) && rust_changed == Some(false) {
                 return Start::Decided(Outcome::Skipped(Skip::NoRustChanged));
             }
-            if let Some(entry) = &found[at] {
-                let folder = self.folder(self.graph.instance(at));
-                match Store::restore(entry, &folder) {
-                    Ok(()) => {
-                        self.note(at, format!("reused {entry}"));
-                        let outputs = check_outputs(step.outputs(), &folder.join("out"));
-                        return Start::Decided(Outcome::Reused {
-                            entry: entry.clone(),
-                            outputs,
-                        });
-                    }
-                    Err(error) => {
-                        let why =
-                            format!("runs fresh: the kept result could not be copied: {error}");
-                        self.note(at, why);
-                    }
-                }
+            if let Some(entry) = &found[at]
+                && let Some(reused) = self.reuse(at, entry)
+            {
+                return Start::Decided(reused);
             }
             Start::Run {
                 exclusive: step.exclusive(),
             }
         })
+    }
+
+    /// The kept result `entry` copied into the instance's folder, its section written again for these revisions when
+    /// it was kept by content, or none when that fails and the instance runs fresh.
+    fn reuse(&self, at: InstanceId, entry: &Utf8Path) -> Option<Outcome> {
+        let step = self.step(at);
+        let folder = self.folder(self.graph.instance(at));
+        let restored = Store::restore(entry, &folder).and_then(|()| {
+            if step.report().is_some_and(Report::kept_by_content) {
+                rust::relabel(&folder, &self.request.revisions).inspect_err(|_| {
+                    // A section still naming the revisions it was kept for would misname these.
+                    let _ = fs::remove_dir_all(&folder);
+                })
+            } else {
+                Ok(())
+            }
+        });
+        match restored {
+            Ok(()) => {
+                self.note(at, format!("reused {entry}"));
+                let outputs = check_outputs(step.outputs(), &folder.join("out"));
+                Some(Outcome::Reused {
+                    entry: entry.to_owned(),
+                    outputs,
+                })
+            }
+            Err(error) => {
+                self.note(
+                    at,
+                    format!("runs fresh: the kept result could not be copied: {error}"),
+                );
+                None
+            }
+        }
     }
 
     /// `command` with its placeholders filled in, and the recipe's environment.
@@ -487,9 +511,20 @@ impl Session<'_> {
         if let Some(Ok(identity)) = &self.identities[at]
             && outcome.complete()
         {
-            match self.store.keep(identity, &folder) {
+            let labelled = if self.step(at).report().is_some_and(Report::kept_by_content) {
+                rust::label(&folder, &self.request.revisions)
+                    .map_err(|error| format!("its revisions could not be recorded: {error}"))
+            } else {
+                Ok(())
+            };
+            let kept = labelled.and_then(|()| {
+                self.store
+                    .keep(identity, &folder)
+                    .map_err(|error| rendered(&error))
+            });
+            match kept {
                 Ok(()) => self.note(at, "kept for reuse".to_owned()),
-                Err(error) => self.note(at, format!("not kept: {}", rendered(&error))),
+                Err(why) => self.note(at, format!("not kept: {why}")),
             }
         } else if let Some(Ok(_)) = &self.identities[at] {
             self.note(at, "not kept: only a complete success is kept".to_owned());

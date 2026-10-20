@@ -345,6 +345,12 @@ impl Report {
         StepName(self.name().into())
     }
 
+    /// Whether the report's kept result is found by the content it reads rather than by its commits
+    /// ([`crate::report::store::Identity`] says what that content is).
+    pub(crate) fn kept_by_content(self) -> bool {
+        matches!(self, Self::Mutants)
+    }
+
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Scans => "scans",
