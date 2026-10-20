@@ -9,7 +9,7 @@ The project's `AGENTS.md` is the authority for everything specific to it: its to
 
 ## Check the machine
 
-The machine needs Lix with the `nix-command` and `flakes` features, git, and `gh` with SSH access to GitHub. If one is missing, stop and report it: installing them is the owner's choice. Every other tool comes from the project's development shell. To clone before that shell exists, run jj once from nixpkgs with `nix shell nixpkgs#jujutsu`.
+The machine needs Lix with the `nix-command` and `flakes` features, and git. If one is missing, stop and report it: installing them is the owner's choice. Every other tool comes from the project's development shell. To clone before that shell exists, run jj once from nixpkgs with `nix shell nixpkgs#jujutsu`.
 
 ## Clone it
 

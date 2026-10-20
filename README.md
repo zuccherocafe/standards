@@ -4,7 +4,7 @@ These are the engineering standards for zucchero✿café projects. They cover ho
 
 ## Before you start
 
-Install [Lix](https://lix.systems/install/) with the `nix-command` and `flakes` features enabled, git, and the GitHub CLI `gh`, signed in with SSH access to GitHub. Every other tool, jj included, comes from each project's development shell.
+Install [Lix](https://lix.systems/install/) with the `nix-command` and `flakes` features enabled, and git. Every other tool, jj included, comes from each project's development shell.
 
 ## Reading them
 
