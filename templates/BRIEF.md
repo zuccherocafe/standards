@@ -8,13 +8,15 @@
 
 <State the date, repository, base revision, and branch name. Name the writer and the review process.>
 
-**Size.** <State `small`, `normal`, or `design`. A `small` change is one commit of about 200 lines that adds no type, gets one review, and needs no brief review. A `design` change adds or changes a format, a type, an API, or a dependency. A `design` brief links its [design read](../skills/design-read/SKILL.md).>
+**Size.** <State `small`, `normal`, or `design`. A `small` change is one commit of about 200 lines that adds no type, gets one review, and needs no [brief review](../skills/change-review/SKILL.md#read-the-brief-evidence-and-diff) unless its `Design read` line links a read. A `normal` change is the work outside `small` that is not `design`. A `design` change adds or changes a format, a type, an API, or a dependency, so a redesign of that size goes to the maintainer.>
+
+**Design read.** <<path, or none (reason)>, as [When a read is due](../skills/design-read/SKILL.md#when-a-read-is-due) decides.>
 
 **Concept.** <State the one thing this change makes true, in a sentence the reviewer can check.>
 
 **Closes.** <Identify the tracked items this change finishes by identifier. Identify separately any items it advances without finishing.>
 
-**Decided.** <List each decision the change implements and the document that records it. The writer does not reopen those decisions.>
+**Decided.** <List each decision the change implements and its reason. The writer does not reopen those decisions.>
 
 ## Read first
 
@@ -60,7 +62,7 @@
 
 ## Questions the writer settles
 
-<List choices left to the writer and each choice's deciding constraint. The writer records each choice and its reason. For questions of intent beyond those choices, the writer asks rather than guesses.>
+<List choices left to the writer and each choice's deciding constraint. The writer records each choice and its reason as [Record the reasons for decisions](../skills/change-write/SKILL.md#record-the-reasons-for-decisions) requires. For questions of intent beyond those choices, the writer asks rather than guesses.>
 
 ## Rules
 

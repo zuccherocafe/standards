@@ -18,6 +18,7 @@ If the person you work for is not a maintainer of this project, tell them to rea
 
 The [standards skills](https://github.com/zuccherocafe/standards/tree/main/skills) define each role's work. A tool that loads skills loads them by name. Other agents read the file for their role before starting, as follows:
 
+- To read an area's design or update its area file: [design-read](https://github.com/zuccherocafe/standards/blob/main/skills/design-read/SKILL.md).
 - To write a change from a brief: [change-write](https://github.com/zuccherocafe/standards/blob/main/skills/change-write/SKILL.md).
 - To review a change: [change-review](https://github.com/zuccherocafe/standards/blob/main/skills/change-review/SKILL.md).
 - To check fixes and land a change: [change-land](https://github.com/zuccherocafe/standards/blob/main/skills/change-land/SKILL.md).
@@ -29,6 +30,7 @@ The skills' quick and full checks refer to commands in this file's Checks sectio
 
 | Topic | Document |
 |---|---|
+| Design reads | `docs/design-reads/` |
 | <topic> | <document> |
 
 ## Toolchain

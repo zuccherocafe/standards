@@ -24,7 +24,7 @@ No second review or check follows. After the check, triage what remains and deci
 
 - If no must-fix finding remains, read the declines again and proceed to [Decide whether to rebase](#decide-whether-to-rebase).
 - Must-fix findings that remain after the check suggest the design is wrong. Either send the writer the few that matter and read their fixes yourself, or decide on a redesign.
-- Ask the maintainer only when a redesign changes a format, a type, an API, or a dependency.
+- Ask the maintainer only when a redesign is of `design` size as [`templates/BRIEF.md`](../../templates/BRIEF.md) defines `Size`.
 
 Never fix the change's code yourself.
 

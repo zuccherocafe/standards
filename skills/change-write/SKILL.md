@@ -9,7 +9,7 @@ Each change has a brief based on the standards' `templates/BRIEF.md`. You build 
 
 ## Before you write code
 
-1. Read the entire brief. Then read everything under "Read first": the standards sections, decisions to implement, and earlier review findings to preserve. A design-sized brief must link a [design read](../design-read/SKILL.md). Stop if it does not, or if the check in that skill fails.
+1. Read the entire brief. Then read everything under "Read first": the standards sections, decisions to implement, and earlier review findings to preserve. Stop if the brief's `Design read:` line is missing, says `none` where the [design-read](../design-read/SKILL.md#when-a-read-is-due) trigger applies, or names a read that fails that skill's check.
 2. Read the project's `AGENTS.md` and its standards: `general.md`, the language standard, and `review.md`.
 3. Open every site the brief names. Find each by its symbol, not its line, since other changes land while you work.
 4. Do not reopen a decision under "Decided". If the brief leaves a required question of intent unanswered, stop. Report `QUESTION:` rather than guess.
@@ -23,13 +23,17 @@ Each change has a brief based on the standards' `templates/BRIEF.md`. You build 
 
 ## Commit one concept at a time
 
-1. Follow the brief's "Do" list. Make one commit per concept in an order that keeps every commit's quick checks passing.
+1. Follow the brief's "Do" list. Make one commit per concept in an order that keeps every commit's quick checks passing. Commit the linked design read and update the area file as [Keep the area file current](../design-read/SKILL.md#keep-the-area-file-current) requires.
 2. Run the quick checks before every commit. Run the full checks at the change's tip after its last commit, and again after every rebase.
 3. Stage files by explicit path. Modify only files assigned to the change. In a shared file such as `AGENTS.md` or a README, change only your lines.
 4. Write each message as [general.md's Version control](../../rules/general.md#version-control) says, with no attribution trailer.
 5. Follow [Checks](../../rules/general.md#checks). Add or widen a check above a unit test only when the brief records the maintainer's approval. Never pin today's value or a count in a check; no approval allows it.
 6. Move a refusal only as [A refusal sits where it is cheapest](../../rules/general.md#design) says.
 7. Give every property test a fixed seed and disable failure persistence. Rerunning must reproduce a failure, and no test action may leave a file in the repository.
+
+## Record the reasons for decisions
+
+Put the reason for each decision under the brief's "Decided", and for each question you settle that a maintainer would need, where a maintainer would look when wondering about it: the documentation beside the rule or code it shaped ([Documentation lives beside what it documents](../../rules/general.md#writing)), or the commit body for a one-off ([Write scoped, imperative commit messages](../../rules/general.md#version-control)). A decision not to do something goes in the documentation of what it would have changed.
 
 ## Keep the evidence
 

@@ -1,23 +1,10 @@
-# <area> design read
+# <Area> design read
 
 <!-- Fill and check this read as [`skills/design-read/SKILL.md`](../skills/design-read/SKILL.md) says. Delete this comment. -->
 
-- Area: <what was read, in one line>
-- Revision: <the full commit id of the code read>
-- Previous: <the previous read's path relative to this file, or "none" for a first read>
-- Inspected: <the contracts, folders or files read, in one line>
-
-**Answer.** <State what must happen before the phase starts, what the phase's brief settles, and what goes to the maintainer.>
-
-## After the last phase
-
-<Say what the last phase changed in this area since the previous read: which disagreements it resolved and which it left. Required when `Previous` names a read.>
-
-## Disagreements
-
-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
-|---|---|---|---|---|---|---|
-| <read>-D1 | <the concept the models disagree on> | <the phase, brief or person that settles it> | `<file>` `<symbol>`; ... | <what goes wrong while it stands> | <the condition that ends it> | new |
+- Area: <what the area covers, one line>
+- Last full read: <the full commit id at which the area was last read in full>
+- Inspected: <the contracts, folders or files read, one line>
 
 ## Models in play
 
@@ -31,6 +18,12 @@
 
 - <A transition started and not finished, and what still uses the old path.>
 
-## What later phases need
+## What later work needs
 
 - <The planned work that touches this area next, and what it needs from the models here.>
+
+## Disagreements
+
+| Concept | Owner | Sites | Consequence | Done when |
+|---|---|---|---|---|
+| <short noun phrase, unique in the file> | <subsystem, module or maintainer> | `<file>` `<symbol>`; ... | <what goes wrong while it stands> | <the condition that ends it> |
