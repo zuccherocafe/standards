@@ -2,7 +2,8 @@
 //! reads in light and dark themes, and links only to files inside the output folder.
 //!
 //! The page's sections, in order, are what makes the report incomplete, the host programs not found, the reader's
-//! notices about the steps file, the measuring-code warning, the measures that got worse, every step's outcome, what dandegate reused or kept, the steps'
+//! notices about the steps file, the measuring-code warning, the measures that got worse, every step's outcome with how
+//! long it ran and, when the report shared the CPUs out, the CPUs it ran on, what dandegate reused or kept, the steps'
 //! sections, every measure, and the images.
 
 use std::fmt::Write as _;
@@ -24,6 +25,8 @@ pub(crate) struct Shown {
     pub(crate) reuse: Option<String>,
     /// The CPUs it ran on, when the report shared them out.
     pub(crate) cpus: Option<String>,
+    /// How long it ran, when it ran in this report.
+    pub(crate) time: Option<String>,
 }
 
 /// One linked section.
@@ -267,7 +270,7 @@ fn steps(html: &mut String, shown: &[Shown]) {
     html.push_str("<h2 id=\"steps\">Steps</h2>\n");
     // The CPUs show only when the report shared them out.
     let shared = shown.iter().any(|shown| shown.cpus.is_some());
-    let mut header = vec!["Side", "Step", "Outcome", "Log"];
+    let mut header = vec!["Side", "Step", "Outcome", "Time", "Log"];
     if shared {
         header.push("CPUs");
     }
@@ -282,6 +285,7 @@ fn steps(html: &mut String, shown: &[Shown]) {
                 escape(&shown.place),
                 escape(&shown.step),
                 escape(&shown.outcome),
+                escape(shown.time.as_deref().unwrap_or_default()),
                 log,
             ];
             if shared {

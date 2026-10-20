@@ -127,9 +127,8 @@ fn independent_steps_run_four_at_once_and_exclusive_steps_last_and_alone() {
             "{name} started early: {instances:?}"
         );
         // Nothing was launched or ended between its launch and its end.
-        assert_eq!(
-            instances[start + 1],
-            format!("{name}: exited 0"),
+        assert!(
+            instances[start + 1].starts_with(&format!("{name}: exited 0 in ")),
             "{name} ran beside another: {instances:?}"
         );
     }

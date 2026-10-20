@@ -331,3 +331,58 @@ env = ["DANDEGATE_*"]
         )
     );
 }
+
+/// Whether `text` is a duration as the page and log show one: seconds, to a tenth.
+fn is_seconds(text: &str) -> bool {
+    text.strip_suffix(" s")
+        .and_then(|number| number.split_once('.'))
+        .is_some_and(|(whole, tenth)| {
+            !whole.is_empty()
+                && whole.chars().all(|digit| digit.is_ascii_digit())
+                && tenth.len() == 1
+                && tenth.chars().all(|digit| digit.is_ascii_digit())
+        })
+}
+
+#[test]
+fn each_step_that_runs_has_its_duration_in_the_log_and_on_the_page() {
+    let fixture = Fixture::new("durations");
+    fixture.write(
+        "dandegate.toml",
+        &format!(
+            "{PROJECT}\n[[steps.step]]\nname = \"spare\"\nruns = \"once\"\noptional = true\nrun = [\"true\"]\n"
+        ),
+    );
+    fixture.write("fixture/notes/notes.md", "# Notes\n");
+    fixture.write("fixture/notes/notes.md.status", "complete\n");
+    let only = fixture.commit("only");
+    let run = fixture.run("out", &["--before", &only]);
+    let page = run.page();
+    let log = run.file("report.log");
+    for instance in ["before visual", "after visual", "both notes"] {
+        let lead = format!("=== {instance}: ");
+        let line = log
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix(&lead)
+                    .filter(|rest| rest.contains(" in "))
+            })
+            .unwrap_or_else(|| panic!("{instance} has no outcome line: {log}"));
+        let (_, took) = line.rsplit_once(" in ").expect("a duration");
+        assert!(is_seconds(took), "{line}");
+        let (place, step) = instance.split_once(' ').expect("a place and a step");
+        let row = format!("<td>{place}</td><td>{step}</td><td>");
+        let cells = &page[page.find(&row).expect("the step's row") + row.len()..];
+        let cells: Vec<&str> = cells
+            .split("</tr>")
+            .next()
+            .expect("the row")
+            .split("</td><td>")
+            .collect();
+        assert!(is_seconds(cells[1]), "{instance}: {cells:?}");
+    }
+    assert!(
+        page.contains("<td>both</td><td>spare</td><td>not selected</td><td></td>"),
+        "a step that did not run has no duration: {page}"
+    );
+}

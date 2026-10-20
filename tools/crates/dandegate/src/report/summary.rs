@@ -11,7 +11,7 @@ use crate::page::{self, Images, Page, Section, Shown};
 use crate::plan::Output;
 use crate::report::schedule::{Instance, PerInstance, Place};
 use crate::report::step::{Outcome, OutputCheck, expected_names};
-use crate::report::{Finished, Session};
+use crate::report::{Finished, Session, seconds};
 use crate::revision::{PerSide, Side};
 
 impl Session<'_> {
@@ -61,6 +61,10 @@ impl Session<'_> {
             })
             .collect();
         let notes = self.notes.lock().map_or_default(|notes| notes.clone());
+        let durations = self
+            .durations
+            .lock()
+            .map_or_default(|durations| durations.clone());
         let steps: Vec<Shown> = outcomes
             .iter()
             .map(|(at, outcome)| (at, self.graph.instance(at), outcome))
@@ -73,6 +77,7 @@ impl Session<'_> {
                     .then(|| relative(&self.request.out, &self.folder(instance).join("log.txt"))),
                 reuse: notes.get(&at).map(|notes| notes.join("; ")),
                 cpus: self.cpus.label(at),
+                time: durations.get(&at).map(|&took| seconds(took)),
             })
             .collect();
         let notices: Vec<String> = self

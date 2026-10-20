@@ -10,7 +10,7 @@
 //! 2. Share the CPUs between the enabled steps with a CPU share and the others ([`cpus`]).
 //! 3. For each reusable step, work out its identity, running its collector, and look for a kept result.
 //! 4. Decide which steps run. A step that only other steps need runs only when one of them runs fresh.
-//! 5. Run the steps, and keep each complete success.
+//! 5. Run the steps, timing each, and keep each complete success.
 //! 6. Remove the checkouts, keep the build caches within their bound and let go of them ([`cache`]).
 //! 7. Compare the two sides, and write the page, `measures.json` and the printed lines.
 //!
@@ -32,7 +32,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write as _};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -109,6 +109,8 @@ struct Session<'a> {
     /// The CPUs each instance runs on.
     cpus: Allocation,
     notes: Mutex<BTreeMap<InstanceId, Vec<String>>>,
+    /// How long each instance that ran took, from its start to its outcome.
+    durations: Mutex<BTreeMap<InstanceId, Duration>>,
 }
 
 /// What a report printed, and whether its page was written.
@@ -187,6 +189,7 @@ pub(crate) fn report(request: &Request) -> Finished {
         builds: builds.and_then(Result::ok),
         cpus,
         notes: Mutex::new(BTreeMap::new()),
+        durations: Mutex::new(BTreeMap::new()),
     };
     if let Some(why) = busy {
         for (at, cache) in session.caches.iter() {
@@ -584,6 +587,7 @@ impl Session<'_> {
 
     /// Run one instance and keep its result when it is a complete success.
     fn execute(&self, at: InstanceId) -> Outcome {
+        let started = Instant::now();
         let instance = self.graph.instance(at);
         self.log.write(&format!(
             "=== {} {}: started\n",
@@ -610,10 +614,15 @@ impl Session<'_> {
         if let Ok(mut log) = OpenOptions::new().append(true).open(&log_path) {
             let _ = writeln!(log, "--- {outcome}");
         }
+        let took = started.elapsed();
+        if let Ok(mut durations) = self.durations.lock() {
+            durations.insert(at, took);
+        }
         self.log.write(&format!(
-            "=== {} {}: {outcome}\n{}",
+            "=== {} {}: {outcome} in {}\n{}",
             instance.place,
             instance.step,
+            seconds(took),
             fs::read_to_string(&log_path).unwrap_or_default()
         ));
         if let Some(Ok(identity)) = &self.identities[at]
@@ -769,6 +778,11 @@ impl Session<'_> {
             let _ = fs::remove_dir_all(scratch);
         }
     }
+}
+
+/// A duration as the log and the page show it: seconds, to a tenth.
+pub(crate) fn seconds(duration: Duration) -> String {
+    format!("{:.1} s", duration.as_secs_f64())
 }
 
 /// An error and each of its causes, once, on one line.
