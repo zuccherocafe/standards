@@ -8,6 +8,8 @@
 
 <State the date, repository, base revision, and branch name. Name the writer and the review process.>
 
+**Size.** <small, normal, or design. A small change is one commit of about 200 lines that adds no type, and gets one review and no review of its brief. A design change adds or changes a format, a type, an API, or a dependency.>
+
 **Concept.** <State the one thing this change makes true, in a sentence the reviewer can check.>
 
 **Closes.** <Identify the tracked items this change finishes by identifier. Identify separately any items it advances without finishing.>
@@ -46,7 +48,11 @@
 
 ## Evidence
 
-<State where the writer leaves the evidence. Include check logs per commit and at the tip, a comparison of written files, and a report of differences. List every moved, new, or removed refusal with its reason.>
+<State where the writer leaves the evidence. Check logs per commit and at the tip are the default. Pick any other evidence the change-write skill lists that this change needs, such as a report of differences or the list of moved refusals.>
+
+## Where this is going
+
+<Name the known needs that touch this change's area, and say whether its design serves each one or closes it off.>
 
 ## Not this change
 
