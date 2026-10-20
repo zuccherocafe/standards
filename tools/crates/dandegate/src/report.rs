@@ -722,7 +722,7 @@ impl Session<'_> {
                     Err(error) => Outcome::LaunchFailed(rendered(&error)),
                 }
             }
-            Work::Rust(report) => {
+            Work::BuiltIn(report) => {
                 let Some(settings) = self.plan().rust() else {
                     return Outcome::LaunchFailed("the plan has no Rust workspace".to_owned());
                 };

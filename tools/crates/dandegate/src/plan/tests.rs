@@ -73,12 +73,14 @@ fn a_name_is_lowercase_letters_digits_and_hyphens_unique_and_not_reserved() {
         refusal(&format!("{MINIMAL}\n{MINIMAL}")),
         "dandegate.toml:6: step \"visual\" is declared twice"
     );
-    for reserved in ["scans", "lines", "mutants", "api", "api-listings"] {
+    for reserved in ["rust-scans", "lines", "mutants", "api", "api-listings"] {
         assert_eq!(
             refusal(&format!(
                 "[[steps.step]]\nname = \"{reserved}\"\nrun = [\"x\"]\n"
             )),
-            format!("dandegate.toml:2: step \"{reserved}\" is a name dandegate's Rust reports use")
+            format!(
+                "dandegate.toml:2: step \"{reserved}\" is a name dandegate's built-in reports use"
+            )
         );
     }
 }
@@ -310,7 +312,10 @@ fn the_rust_reports_run_on_the_workspace_project_rust_names() {
     assert_eq!(settings.scans, ["--core", "a"]);
     assert_eq!(settings.mutation, Vec::<String>::new());
     let names: Vec<&str> = plan.steps().keys().map(StepName::as_str).collect();
-    assert_eq!(names, ["scans", "lines", "mutants", "api-listings", "api"]);
+    assert_eq!(
+        names,
+        ["rust-scans", "lines", "mutants", "api-listings", "api"]
+    );
     let api = &plan.steps()[&Report::Api.step()];
     assert!(!api.enabled() && api.kind() == Kind::Once);
     assert!(plan.steps()[&Report::ApiListings.step()].reuse());

@@ -1,7 +1,7 @@
 //! Runs the Rust reports as built-in steps under reserved names. dandegate adds them when `dandegate.toml` names the
 //! Cargo workspace; [`crate::plan`] describes the file.
 //!
-//! - `scans` runs rust-scans in each checkout, and shows both sides' counts and the after side's findings. It is a
+//! - `rust-scans` runs rust-scans in each checkout, and shows both sides' counts and the after side's findings. It is a
 //!   review aid and fails nothing.
 //! - `lines` counts each crate's production and test lines at both revisions. It finds the crates with `cargo
 //!   metadata`.
@@ -315,7 +315,7 @@ impl MetadataError {
 /// instead.
 pub(crate) fn run(report: Report, side: Option<Side>, context: &Context<'_>) -> Result<(), Stop> {
     match (report, side) {
-        (Report::Scans, _) => scans(context),
+        (Report::RustScans, _) => scans(context),
         (Report::Lines, _) => line_counts(context),
         (Report::Mutants, _) => mutants(context),
         (Report::ApiListings, Some(side)) => api_listings(context, side),

@@ -92,16 +92,9 @@ impl Session<'_> {
                 ))
             })
             .collect::<Result<_, String>>()?;
-        let rust = step
+        let settings = step
             .report()
-            .and_then(|_| self.plan().rust())
-            .map(|settings| {
-                serde_json::json!({
-                    "workspace": settings.workspace.as_path().as_str(),
-                    "scans": settings.scans,
-                    "mutation": settings.mutation,
-                })
-            });
+            .and_then(|report| self.plan().report_settings(report));
         Ok(Identity {
             dandegate,
             revisions,
@@ -117,7 +110,7 @@ impl Session<'_> {
                 .iter()
                 .map(|program| program.as_str().to_owned())
                 .collect(),
-            rust,
+            settings,
             cpus: self.cpus_followed(at),
         })
     }

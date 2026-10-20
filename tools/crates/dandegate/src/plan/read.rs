@@ -589,20 +589,20 @@ fn rust_settings(
     }))
 }
 
-/// A Rust report's step.
+/// A built-in report's step.
 fn built_in(report: Report, settings: &RustSettings) -> Step {
     let section = |file: &str| Output::Section {
         file: OutPath(Utf8PathBuf::from(file)),
     };
     let once = |reportable, collect| {
         Runs::Once(Recipe {
-            work: Work::Rust(reportable),
+            work: Work::BuiltIn(reportable),
             env: BTreeMap::new(),
             collect,
         })
     };
     let (runs, needs, optional, reuse, timeout, outputs) = match report {
-        Report::Scans => (
+        Report::RustScans => (
             once(report, None),
             vec![],
             false,
@@ -631,7 +631,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
         ),
         Report::ApiListings => (
             Runs::PerRevision(Recipe {
-                work: Work::Rust(report),
+                work: Work::BuiltIn(report),
                 env: BTreeMap::new(),
                 collect: Some(collector(settings, &["cargo-public-api"])),
             }),

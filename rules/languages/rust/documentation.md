@@ -26,7 +26,7 @@ Ref: nextest `TestRunnerBuilder::build` takes its required inputs under `#[expec
 
 ### Report scans
 
-*Always.* `rust-scans` ([tools/crates/rust-scans/](../../../tools/crates/rust-scans/), exported by the standards' flake) parses each workspace member's `src/` as Rust syntax and provides four scans for cases that lints cannot detect. Run them from the development shell as review aids; dandegate's built-in `scans` step runs them on both revisions of a change report with the arguments in `dandegate.toml`'s `[reports.rust]` table, and they cause no check failures:
+*Always.* `rust-scans` ([tools/crates/rust-scans/](../../../tools/crates/rust-scans/), exported by the standards' flake) parses each workspace member's `src/` as Rust syntax and provides four scans for cases that lints cannot detect. Run them from the development shell as review aids; dandegate's built-in `rust-scans` step runs them on both revisions of a change report with the arguments in `dandegate.toml`'s `[reports.rust]` table, and they cause no check failures:
 
 - **H1 (purity).** Reports file, process, environment, and clock paths in project-named core crates ([Purity](design.md#purity)).
 - **H2 (units).** Reports primitive fields and parameters whose names end in a unit, outside named numerical kernels and test code ([Quantities](design.md#quantities)). Pass `--unit` to add a project's own units to the built-in ones.

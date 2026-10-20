@@ -133,7 +133,8 @@ pub(crate) struct NeedIdentity {
 /// - dandegate's own executable.
 /// - The host programs the plan names, by name: the plan comes from the after revision, so the before commit does not
 ///   fix them.
-/// - For a built-in Rust report, the Rust settings of the steps file: the workspace and each report's arguments.
+/// - For a built-in report, the settings of the steps file it reads: for a Rust report, the workspace and each report's
+///   arguments.
 /// - For the mutation report, whose job budget follows them, and for a step that names `{cpus}`, the CPUs it runs on;
 ///   the same for each instance it needs.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -149,9 +150,9 @@ pub(crate) struct Identity {
     /// The host programs the plan names, as written, left out when it names none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) host: Vec<String>,
-    /// The Rust settings, left out for a step that is not a built-in Rust report.
+    /// The settings a built-in report reads, left out for a step that is not one.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) rust: Option<serde_json::Value>,
+    pub(crate) settings: Option<serde_json::Value>,
     /// The CPUs the step runs on, left out for a step whose result does not follow them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) cpus: Option<String>,

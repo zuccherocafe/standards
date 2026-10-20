@@ -41,8 +41,8 @@
 //! after side, or after steps. A once step can need any step, on every side that step runs.
 //!
 //! When `[project.rust]` names a folder holding a Cargo workspace, the plan adds the Rust reports as built-in steps
-//! under reserved names ([`Report`]). `[reports.rust]` without `[project.rust]` is refused, since it would tune
-//! nothing; an empty one is the same as none.
+//! under names every plan reserves, whether or not it runs them ([`Report`]). `[reports.rust]` without
+//! `[project.rust]` is refused, since it would tune nothing; an empty one is the same as none.
 //!
 //! This module holds the types that the rest of dandegate reads. [`read`] builds them from the file's TOML shapes in
 //! [`raw`]. [`template`] parses each command word's placeholders, [`repo`] holds the repository's paths and tree,
@@ -319,11 +319,11 @@ pub(crate) struct RustSettings {
     pub(crate) mutation: Vec<String>,
 }
 
-/// A Rust report, run as a step under its reserved name.
+/// A built-in report, run as a step under its reserved name, which names the report's language or tool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Report {
     /// Both revisions' rust-scans findings and counts, side by side. It fails nothing.
-    Scans,
+    RustScans,
     /// Each crate's production and test lines at both revisions.
     Lines,
     /// The mutation report of the Rust changed since the before commit, in the after checkout.
@@ -336,7 +336,7 @@ pub(crate) enum Report {
 
 impl Report {
     const ALL: [Self; 5] = [
-        Self::Scans,
+        Self::RustScans,
         Self::Lines,
         Self::Mutants,
         Self::ApiListings,
@@ -356,7 +356,7 @@ impl Report {
 
     pub(crate) fn name(self) -> &'static str {
         match self {
-            Self::Scans => "scans",
+            Self::RustScans => "rust-scans",
             Self::Lines => "lines",
             Self::Mutants => "mutants",
             Self::ApiListings => "api-listings",
@@ -370,8 +370,8 @@ impl Report {
 pub(crate) enum Work<A> {
     /// The project's command, run in the measured checkout's development shell.
     Command(Vec<Template<A>>),
-    /// A built-in Rust report.
-    Rust(Report),
+    /// A built-in report.
+    BuiltIn(Report),
 }
 
 /// A step's command and the values it fills in, typed by the placeholders its kind has.
@@ -393,7 +393,7 @@ impl<A: Arg> Recipe<A> {
 
     fn report(&self) -> Option<Report> {
         match &self.work {
-            Work::Rust(report) => Some(*report),
+            Work::BuiltIn(report) => Some(*report),
             Work::Command(_) => None,
         }
     }
@@ -406,7 +406,7 @@ impl<A: Arg> Recipe<A> {
     fn templates(&self) -> impl Iterator<Item = &Template<A>> {
         let run = match &self.work {
             Work::Command(run) => &run[..],
-            Work::Rust(_) => &[],
+            Work::BuiltIn(_) => &[],
         };
         run.iter()
             .chain(self.env.values())
@@ -566,7 +566,7 @@ impl Step {
         }
     }
 
-    /// The built-in Rust report the step runs, if it is one.
+    /// The built-in report the step runs, if it is one.
     pub(crate) fn report(&self) -> Option<Report> {
         match &self.runs {
             Runs::PerRevision(recipe) | Runs::After(recipe) => recipe.report(),
@@ -592,7 +592,7 @@ impl Step {
                 Work::Command(run) => {
                     serde_json::json!({ "run": run.iter().map(Template::written).collect::<Vec<_>>() })
                 }
-                Work::Rust(report) => serde_json::json!({ "rust": report.name() }),
+                Work::BuiltIn(report) => serde_json::json!({ "built-in": report.name() }),
             };
             let env: BTreeMap<&str, String> = recipe
                 .env()
@@ -668,6 +668,24 @@ impl Plan {
 
     pub(crate) fn rust(&self) -> Option<&RustSettings> {
         self.rust.as_ref()
+    }
+
+    /// The settings of the steps file a built-in report reads, as a value its kept results' identity holds, or none
+    /// when the plan does not run it.
+    pub(crate) fn report_settings(&self, report: Report) -> Option<serde_json::Value> {
+        match report {
+            Report::RustScans
+            | Report::Lines
+            | Report::Mutants
+            | Report::ApiListings
+            | Report::Api => self.rust.as_ref().map(|settings| {
+                serde_json::json!({
+                    "workspace": settings.workspace.as_path().as_str(),
+                    "scans": settings.scans,
+                    "mutation": settings.mutation,
+                })
+            }),
+        }
     }
 
     pub(crate) fn notices(&self) -> &[Notice] {

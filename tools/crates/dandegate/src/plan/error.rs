@@ -54,7 +54,7 @@ pub(crate) enum Problem {
     StepName(BadName),
     #[error("step {0:?} is declared twice")]
     DuplicateStep(String),
-    #[error("step {0:?} is a name dandegate's Rust reports use")]
+    #[error("step {0:?} is a name dandegate's built-in reports use")]
     Reserved(String),
     #[error("step \"{0}\": run: names no command")]
     EmptyRun(StepName),

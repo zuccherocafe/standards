@@ -160,7 +160,7 @@ fn a_root_level_rust_workspace_gets_scans_line_counts_and_the_mutation_report() 
     let page = run.page();
     assert_eq!(run.printed("DANDEGATE-INCOMPLETE"), Vec::<String>::new());
 
-    let scans = section(&page, "scans (both)");
+    let scans = section(&page, "rust-scans (both)");
     assert!(
         scans.contains("| H1 | 1 | 0 |\n| H2 | 0 | 1 |\n"),
         "{scans}"
@@ -170,7 +170,7 @@ fn a_root_level_rust_workspace_gets_scans_line_counts_and_the_mutation_report() 
         "{scans}"
     );
     assert!(
-        run.file("steps/both/scans/out/before.txt")
+        run.file("steps/both/rust-scans/out/before.txt")
             .starts_with("H1 crates/alpha")
     );
     assert_eq!(
@@ -281,18 +281,18 @@ fn scans_that_fail_on_one_side_leave_a_partial_section_and_fail_nothing() {
     assert_eq!(
         run.printed("DANDEGATE-INCOMPLETE"),
         [
-            "both scans: scans.md is incomplete: the before side's scans did not finish: `rust-scans --workspace . \
+            "both rust-scans: scans.md is incomplete: the before side's scans did not finish: `rust-scans --workspace . \
              --core alpha` failed: exit status: 1"
         ]
     );
-    let scans = section(&page, "scans (both)");
+    let scans = section(&page, "rust-scans (both)");
     assert!(
         scans.contains("```text\nH2 crates/alpha/src/lib.rs:3: reach_metres: f64\n```"),
         "{scans}"
     );
     assert!(
-        run.exists("steps/both/scans/out/before.txt")
-            && run.exists("steps/both/scans/out/after.txt")
+        run.exists("steps/both/rust-scans/out/before.txt")
+            && run.exists("steps/both/rust-scans/out/after.txt")
     );
 }
 
