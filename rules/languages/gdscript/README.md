@@ -22,7 +22,7 @@ The standard is in several files. Read this one first, then each file whose subj
 
 ### The engine is the checker
 
-Each project pins an exact engine build, such as `4.7.1.stable.official.a13da4feb`. Run checks with the editor binary or a debug template, because GDScript warnings exist only in debug builds. The analyser is the compiler in `general.md`'s sense. It understands the pinned version's syntax, needs no external maintenance, and stores its settings in `project.godot`. The editor therefore shows the same errors that fail checks. No external linter is a check. gdtoolkit accepts syntax only up to Godot 4.5 and rejects valid 4.7 code. Its size thresholds are forbidden by `general.md`. The formatter is the only external tool in the checks. It decides layout, not correctness ([Names and order](organisation.md#names-and-order)).
+Each project pins an exact engine build, such as `4.7.1.stable.official.a13da4feb`. Run checks with the editor binary or a debug template, because GDScript warnings exist only in debug builds. The analyser is the compiler of [Describe each check at its real strength](../../general.md#checks). It understands the pinned version's syntax, needs no external maintenance, and stores its settings in `project.godot`. The editor therefore shows the same errors that fail checks. No external linter is a check. gdtoolkit accepts syntax only up to Godot 4.5 and rejects valid 4.7 code. The same rule forbids its size thresholds. The formatter is the only external tool in the checks. It decides layout, not correctness ([Names and order](organisation.md#names-and-order)).
 
 **Checked by:** the engine.
 
@@ -30,11 +30,11 @@ Each project pins an exact engine build, such as `4.7.1.stable.official.a13da4fe
 
 A project upgrades the engine as [Toolchain](../../general.md#toolchain) says. Each upgrade also follows these engine steps:
 
-1. Move the engine pin in the project's `AGENTS.md`, the engine binary, and the export templates together. Record their versions and digests in the development shell's flake ([Toolchain](../../general.md#toolchain)). The checks, editor, and exported program must use one build.
-2. When upgrading the engine, move any GDExtension binding, such as gdext, and its engine-API feature together. For a minor release, wait until the binding supports its API. Do not run a binding built against the previous API on the new engine.
+1. Move the engine pin in the project's `AGENTS.md`, the engine binary, and the export templates as [Toolchain](../../general.md#toolchain) says, so the checks, editor, and exported program use one build.
+2. Move any GDExtension binding, such as gdext, with its engine-API feature. For a minor release, wait until the binding supports its API. Do not run a binding built against the previous API on the new engine.
 3. Re-import the project, so every cache is rebuilt by the new engine.
-4. Compare the release's warning list with the previous list. Set every new warning to Error or off ([An engine upgrade reviews the warning list](warnings.md#an-engine-upgrade-reviews-the-warning-list)).
-5. Re-check every recorded engine workaround. Remove each workaround fixed by the release, together with its note.
+4. Review the warning list as [An engine upgrade reviews the warning list](warnings.md#an-engine-upgrade-reviews-the-warning-list) says.
+5. Re-check every recorded engine workaround, and remove each one the release fixes as [Toolchain](../../general.md#toolchain) says.
 6. Run the formatter's `--check`, since the formatter's pin may move with the engine's syntax.
 
 **Checked by:** review of the upgrade change against these steps; the project's checks.

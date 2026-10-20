@@ -6,7 +6,7 @@ Part of the [GDScript standard](README.md). Types, records, closed sets, invaria
 
 ### Typed everything
 
-Every variable, constant, parameter, return, `for` variable, signal parameter, lambda parameter, and lambda return has a static type. Read no member and call no method absent from the static type. Typed code receives the engine's available checks and editor completion. It also uses faster typed instructions when the analyser knows operand types. Write `Variant` only where a value genuinely has several possible types. Examples are an unread value inside a parser or an engine API that returns `Variant`.
+Every variable, constant, parameter, return, `for` variable, signal parameter, lambda parameter, and lambda return has a static type. Read no member and call no method absent from the static type. Typed code receives the engine's available checks and editor completion. It is also faster ([Performance](performance.md#performance)). Write `Variant` only where a value genuinely has several possible types. Examples are an unread value inside a parser or an engine API that returns `Variant`.
 
 The table shows what Error-level warnings catch and what they do not catch:
 
@@ -46,7 +46,7 @@ Ref: the style guide, "Static typing" and "Inferred types".
 
 ### A record is a class
 
-Data with named fields passed between functions is a class, never a string-keyed `Dictionary`. Use an inner class, a `class_name` class extending `RefCounted`, or a custom `Resource` when saved or edited in the inspector. Nothing checks dictionary fields. `.get("finshed", false)` silently returns the default for a misspelt key. Dot or subscript access on a missing key causes a script error during the operation. Neither case causes a compile-time warning on a typed `Dictionary`, and each read needs a hash lookup. The parser checks class fields, the editor offers completion, `##` documents them, and their values are typed.
+Data with named fields passed between functions is a class, never a string-keyed `Dictionary`. Use an inner class, a `class_name` class extending `RefCounted`, or a custom `Resource` when saved or edited in the inspector. Nothing checks dictionary fields. `.get("finshed", false)` silently returns the default for a misspelt key. Dot or subscript access on a missing key causes a script error during the operation. Neither case causes a compile-time warning on a typed `Dictionary`. The parser checks class fields, the editor offers completion, `##` documents them, and their values are typed.
 
 Before (sketch), a step result as a dictionary, so the shape of `result` is a convention between functions:
 
@@ -131,8 +131,8 @@ Use the agreed workaround for each gap, not a different workaround in each file.
 | **Invariant typed arrays** | `Array[Node3D]` does not fit `Array[Node]`. An untyped `Array` holding integers does not fit `Array[int]` when assigned at run time. | Fill a typed array with `.assign()`, which copies and converts. Build typed containers through their typed field, never by assigning an untyped variable to them. |
 | **`as` returns null** | `node as Node3D` returns `null` on mismatch without an error or warning. | If the value must have a particular type, use a typed declaration such as `var mesh: MeshInstance3D = node`, so a mismatch causes a run-time error. Use `as` only when `null` is an expected outcome, and test it on the next line. For a `Variant`, test with `is` first, then assign to a typed local. |
 | **No exhaustive `match`** | A missing enum member falls through a `match` without a diagnostic. | Use the default arm that asserts ([Closed sets](#closed-sets)). |
-| **Untyped signal emission** | The analyser does not check `emit` arguments against the declaration. A wrong type fails at the receiver at run time (measured). | Declare typed signal parameters as documentation. Emit each signal from one place, with typed locals ([Signals](organisation.md#signals)). |
-| **No typed nested containers** | `Array[Array[int]]` is a syntax error | A record class for the inner value |
+| **Untyped signal emission** | The analyser does not check `emit` arguments against the declaration. A wrong type fails at the receiver at run time (measured). | Declare typed signal parameters as documentation, and emit as [Signals](organisation.md#signals) says. |
+| **No typed nested containers** | `Array[Array[int]]` is a syntax error | A record class for the inner value ([A record is a class](#a-record-is-a-class)) |
 | **No private members** | A leading underscore is a convention. | Methods keep the invariants, and review checks those methods ([Invariants](#invariants)). |
 | **Freed objects** | A reference to a freed node compares `== null` and still has `TYPE_OBJECT`. Applying `is` to it raises an error (measured). | Where `null` has meaning, test `typeof(value) == TYPE_NIL`. Enter an object branch only after `typeof(value) == TYPE_OBJECT` and `is_instance_valid` pass, before any class test, in one helper that every caller uses. |
 
@@ -178,7 +178,7 @@ Ref: godot-open-rpg `src/field/gameboard/gameboard_properties.gd` (a setter enfo
 
 ### Parse once
 
-This section applies `general.md`'s boundary rule to GDScript. Parse authored files, build records, JSON requests, and native-library values into typed objects where they enter. Every refusal names the file, line, and field there. The boundary is a parser component, not a single function. Its parser object and field readers may exchange raw values. No raw `Dictionary` or `Variant` leaves that component for a consumer. Collect refusals with a field path such as `slots.left.priority` and a line when the reader supplies one. `JSON.parse` reports syntax-error lines through `get_error_line()`, but does not report value locations. For JSON values, the dotted field path supplies the location. `JSON.parse_string` returns `null` on failure without a reason. Use a `JSON` instance.
+[Parse at the boundary](../../general.md#design) governs authored files, build records, JSON requests, and native-library values. In GDScript, the boundary is a parser component, not a single function. Its parser object and field readers may exchange raw values. No raw `Dictionary` or `Variant` leaves that component for a consumer. Collect refusals with a field path such as `slots.left.priority` and a line when the reader supplies one. `JSON.parse` reports syntax-error lines through `get_error_line()`, but does not report value locations. For JSON values, the dotted field path supplies the location. `JSON.parse_string` returns `null` on failure without a reason. Use a `JSON` instance.
 
 Check the `Variant` before assignment. If `text` contains an array, `var parsed: Dictionary = JSON.parse_string(text)` fails at assignment with a script error. The refusal never runs. Test a field value's type before binding it to a typed local. That order also satisfies `unsafe_call_argument`:
 
@@ -232,12 +232,12 @@ A supplied resource can contain code. A `.tres` can embed a GDScript sub-resourc
 
 These conversion and code-execution risks determine when typed exports are safe to load. Safety here does not prove domain invariants, which the class must still preserve. The following cases distinguish safe and unsafe sources:
 
-- **Safe generated resource.** Only the project's own tool, such as a bake or build, writes the resource from parsed values. It is typed, trusted generated output under `general.md`. Typed exports load what the tool wrote.
+- **Safe generated resource.** Only the project's own tool, such as a bake or build, writes the resource from parsed values. It is typed, trusted generated output under [Generated output is typed and trusted](../../general.md#design). Typed exports load what the tool wrote.
 - **Safe inspector-edited resource.** A person edits the resource only in the inspector, which writes declared types.
 - **Unsafe text-edited resource.** A person writes or edits the resource as text, and the program loads it through `ResourceLoader`. The resource itself is the authored boundary. Its exports are `Variant`, with `##` comments stating authored types. A `validate()` refuses each incorrect type by field before anything reads the values. The root fix is a plain record parsed into typed resources by the project's parser, as for any authored file. Keep the `Variant` form only while the project itself authors the resource.
 - **Never load an external resource through `ResourceLoader`.** External resources include downloads, users' saves, and imported packages. Outside data uses a plain format parsed by the project, never a resource passed to `ResourceLoader`.
 
-Never edit generated resources by hand. Never add a hand-written resource where a typed generated one exists.
+Never add a hand-written resource where a typed generated one exists.
 
 Ref: the engine, `scene/resources/resource_format_text.cpp` (container conversion while loading) and `modules/gdscript/gdscript.cpp` `GDScriptInstance::set`; the manual's "Resources", "Creating your own resources"; the [godot-safe-resource-loader](https://github.com/derkork/godot-safe-resource-loader) README, on embedded scripts.
 
@@ -245,7 +245,7 @@ Ref: the engine, `scene/resources/resource_format_text.cpp` (container conversio
 
 ### Resources are shared
 
-Loading a resource twice from one path returns one object, so every user sees every mutation. A user that changes a loaded resource changes its own copy made with `duplicate()`. `duplicate()` is shallow. `duplicate(true)` copies nested arrays, dictionaries, and internal sub-resources. Sub-resources saved in their own files remain shared with the original (measured). A deep copy therefore does not isolate external sub-resources. Copy the resources that will change. State which parts remain shared in `##`. An inner class extending `Resource` does not serialise its properties. A saved resource is its own file.
+Loading a resource twice from one path returns one object, so every user sees every mutation. A user that changes a loaded resource changes its own copy made with `duplicate()`. `duplicate()` is shallow. `duplicate(true)` copies nested arrays, dictionaries, and internal sub-resources. Sub-resources saved in their own files remain shared with the original (measured). A deep copy therefore does not isolate external sub-resources. Copy the resources that will change. State which parts remain shared in `##`. An inner class extending `Resource` does not serialise its properties, so an inner class never extends `Resource` for saving. A saved resource is its own file.
 
 Ref: `Resource.duplicate` and `Resource.duplicate_deep` in the class reference; the manual's "Resources", "Nodes and resources".
 

@@ -6,7 +6,7 @@ Part of the [GDScript standard](README.md). Classes, files, names, duck typing a
 
 ### One job per class
 
-A script is a class. Each class has one job stated by its first `##` line. Cooperating inner classes may share a file, such as a record and parser or a check and its cases. A large job may occupy a large file. `general.md` imposes no size thresholds. Merge a file too small to stand alone into its owner. Group flat directories by subject. Behaviour that reads one class's data is a method on that class. A pure function over plain values is a `static func` in the class whose job it serves.
+A script is a class. Each class has one job stated by its first `##` line. Files are sized, merged, and grouped by subject as [Modules](../rust/design.md#modules) in the Rust standard says, with inner classes as the cooperating types that may share a file, such as a record and parser or a check and its cases. Behaviour follows [Methods on the owner](../rust/design.md#methods-on-the-owner), where a pure function over plain values is a `static func` in the class whose job it serves.
 
 Data classes extend `RefCounted`, which is freed when its last reference ends. Use `Resource` only for data saved or edited in the inspector. Use `Node` only for an object in the scene tree. Never use bare `Object`, which needs manual `free()`. A class that needs an autoload or scene tree cannot be tested alone. Pass collaborators through `configure(...)` or a scene-set `@export var x: Type`, rather than looking them up.
 
@@ -46,7 +46,7 @@ Ref: the style guide, "Naming conventions", "Code order" and "Formatting"; the f
 
 `class_name` registers a type in a global namespace shared with the engine, addons, and other project classes. A shipped class name therefore carries the project's prefix. `shadowed_global_identifier` detects a local that reuses a global name, not competing script class names. Every script used as a type by another file has a `class_name`. Entry scripts, such as checks or `--script` commands, have none and load by path, keeping them out of the global class cache. A test helper is used as a type through `const Helper := preload("res://…")`. A Godot 5 proposal removes `preload`. Such a migration would affect each of those constants.
 
-An inner class implements a record or helper used by its outer class and that class's callers. External callers name it through the outer class. An inner class never extends `Resource` for saving. A script naming a native-extension class fails to load without the library. Confine such access through `ClassDB` to as few files as possible. List those files in the project's `AGENTS.md`.
+An inner class implements a record or helper used by its outer class and that class's callers. External callers name it through the outer class. Saving follows [Resources are shared](design.md#resources-are-shared). A script naming a native-extension class fails to load without the library. Confine such access through `ClassDB` to as few files as possible. List those files in the project's `AGENTS.md`.
 
 Ref: the GDScript reference, "Registering named classes" and "Inner classes"; ["Migrate GDScript to the GDExtension mechanism"](https://github.com/godotengine/godot-proposals/issues/14652) (godot-proposals #14652), for `preload`'s removal.
 
@@ -98,9 +98,9 @@ Ref: the manual's "Using signals" and the GDScript reference, "Signals"; `Signal
 
 ## Documentation
 
-This section applies `general.md`'s documentation rule to GDScript. After `extends`, each class starts with a `##` comment containing a one-line brief. Then describe its job, what it never knows, and its design at the required length. Every public member of a class used by other code has a `##` comment. Public means no leading underscore. Document its purpose, invariants, units, and failure behaviour, including refusal returns or `errors` values. `##` supplies editor help and export tooltips. BBCode references such as `[method read]`, `[member errors]`, and `[param at]` create links. Documentation comments have no line cap. Comments inside a function body or top-level script code are at most six lines under `general.md`. A project's comment check exempts `##`. Comment a private member with `#` only for a constraint the code cannot show.
+Write documentation in `##` comments under [Documentation lives beside what it documents](../../general.md#writing). After `extends`, each class starts with a `##` comment whose first line is a one-line brief. Every public member of a class used by other code has a `##` comment. Public means no leading underscore. A member's `##` also gives its units and its failure behaviour, including refusal returns or `errors` values. `##` supplies editor help and export tooltips. BBCode references such as `[method read]`, `[member errors]`, and `[param at]` create links. A project's comment check exempts `##` from the cap of [Comments inside code stay short](../../general.md#writing), which covers comments inside a function body or top-level script code. Comment a private member with `#` only for a constraint the code cannot show ([Comments state constraints](../../general.md#writing)).
 
-A comment stating a type, such as "float ≥ 0 — key light energy" above a `Variant` export, indicates a type that admits invalid values. Where `Variant` is deliberate ([Typed exports are not validation](design.md#typed-exports-are-not-validation)), the `##` states the authored type and the refusal that enforces it.
+[Comments state constraints](../../general.md#writing) applies to a comment that states a type, such as "float ≥ 0, key light energy" above a `Variant` export. Where `Variant` is deliberate ([Typed exports are not validation](design.md#typed-exports-are-not-validation)), the `##` states the authored type and the refusal that enforces it.
 
 ```gdscript
 class_name ValueParser

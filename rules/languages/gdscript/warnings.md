@@ -39,7 +39,7 @@ Ref: ProjectSettings, `debug/gdscript/warnings/directory_rules`; `modules/gdscri
 
 ### Every script is compiled by the checks
 
-A script compiles when something loads it. Import compiles required scripts, such as autoloads, but not every script. A script that no check loads may have an undetected parse error. After import, the project's checks load every `.gd` file once in one process. They fail on any engine error line or script that cannot instantiate. A broken script prints `ERROR: Failed to load script`, which fails the project's error filter. `load()` still returns a non-null `GDScript`, so `can_instantiate()` supplies a second signal rather than testing for null. Loading executes static initialisers ([Static state](lifetime.md#static-state)), which must be safe outside the game. The runner is typed because the settings also apply to it. Under `general.md`, this check is above a unit test and needs maintainer approval. It catches compilation failures and Error-level warnings in scripts no unit test loads.
+A script compiles when something loads it. Import compiles required scripts, such as autoloads, but not every script. A script that no check loads may have an undetected parse error. After import, the project's checks load every `.gd` file once in one process. They fail on any engine error line or script that cannot instantiate. A broken script prints `ERROR: Failed to load script`, which fails the project's error filter. `load()` still returns a non-null `GDScript`, so `can_instantiate()` supplies a second signal rather than testing for null. Loading executes static initialisers ([Static state](lifetime.md#static-state)), which must be safe outside the game. The runner is typed because the settings also apply to it. This check is above a unit test and needs maintainer approval ([A check above a unit test needs the maintainer's approval](../../general.md#checks)). It catches compilation failures and Error-level warnings in scripts no unit test loads.
 
 Ref: `godot --headless --check-only` (one script per process; the alternative when there are few scripts).
 
@@ -47,15 +47,13 @@ Ref: `godot --headless --check-only` (one script per process; the alternative wh
 
 ### Exceptions to a warning
 
-Put `@warning_ignore("one_warning")` on the narrowest statement, with a preceding comment naming the constraint code cannot show. Use one warning per annotation. On a `func`, the annotation covers only its signature and parameters, not its body (measured). Place it there only for a signature warning. Never use `@warning_ignore_start` or `@warning_ignore_restore`. An unmatched start extends to the file's end, and a region can hide new code inside it. Ignores also work at Error, so exceptions can weaken a strict warning table. The engine reports neither useless ignores nor missing reasons. A text scan therefore lists every annotation for review. Under `general.md`, the scan reports only until approved as a check by the maintainer. The engine does reject a misspelt warning name as a parse error.
+Put `@warning_ignore("one_warning")` on the narrowest statement, with a preceding comment giving its reason under [Describe each check at its real strength](../../general.md#checks). Use one warning per annotation. On a `func`, the annotation covers only its signature and parameters, not its body (measured). Place it there only for a signature warning. Never use `@warning_ignore_start` or `@warning_ignore_restore`. An unmatched start extends to the file's end, and a region can hide new code inside it. Ignores also work at Error, so exceptions can weaken a strict warning table. The engine reports neither useless ignores nor missing reasons. A text scan therefore lists every annotation for review, as a report under the same rule. The engine does reject a misspelt warning name as a parse error.
 
 ```gdscript
 # A majority of an even vote count is more than half, rounded down.
 @warning_ignore("integer_division")
 var majority := votes.size() / 2 + 1
 ```
-
-A reason that describes a state or a mode ("when the chain is missing") points at a missing type, as in general.md.
 
 Ref: `modules/gdscript/gdscript_parser.cpp` `warning_ignore_annotation` (what an ignore covers on each statement kind); `@GDScript` class reference, `@warning_ignore`.
 
