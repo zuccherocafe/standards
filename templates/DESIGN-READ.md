@@ -1,6 +1,6 @@
 # <area> design read
 
-<!-- Fill and check this read as `skills/design-read/SKILL.md` says. Delete this comment. -->
+<!-- Fill and check this read as [`skills/design-read/SKILL.md`](../skills/design-read/SKILL.md) says. Delete this comment. -->
 
 - Area: <what was read, in one line>
 - Revision: <the full commit id of the code read>

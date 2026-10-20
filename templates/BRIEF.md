@@ -8,7 +8,7 @@
 
 <State the date, repository, base revision, and branch name. Name the writer and the review process.>
 
-**Size.** <State `small`, `normal`, or `design`. A `small` change is one commit of about 200 lines that adds no type, gets one review, and needs no brief review. A `design` change adds or changes a format, a type, an API, or a dependency.>
+**Size.** <State `small`, `normal`, or `design`. A `small` change is one commit of about 200 lines that adds no type, gets one review, and needs no brief review. A `design` change adds or changes a format, a type, an API, or a dependency. A `design` brief links its [design read](../skills/design-read/SKILL.md).>
 
 **Concept.** <State the one thing this change makes true, in a sentence the reviewer can check.>
 

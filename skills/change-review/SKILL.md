@@ -9,7 +9,7 @@ You are the one independent reviewer of a change you did not write. Review it ag
 
 ## Read the brief, evidence, and diff
 
-1. Read the review brief. Then read the change's brief, its named decisions, and the writer's report.
+1. Read the review brief. Then read the change's brief, its named decisions, and the writer's report. In a brief review of a design-sized brief, run the [design-read](../design-read/SKILL.md#sample-the-area-in-a-brief-review) skill's check and sample.
 2. Before reading code, read the full check log at the tip and any other evidence the brief picked, such as the change report, public API diff, `refusals.txt`, and line counts. The checks are the acceptance signal. Do not rerun what the evidence already shows.
 3. Read the diff against the base with `git diff`. Then read the change at its tip with `git show`. Read every changed function in full, and the code the change calls.
 4. Treat repositories as read-only. To build or run something, first clone into a new scratch folder. Work inside the project's development shell at its resource limits. Stop every process you start by its process ID. Delete the clone afterwards. Never commit.

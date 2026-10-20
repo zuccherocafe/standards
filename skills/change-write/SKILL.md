@@ -9,7 +9,7 @@ Each change has a brief based on the standards' `templates/BRIEF.md`. You build 
 
 ## Before you write code
 
-1. Read the entire brief. Then read everything under "Read first": the standards sections, decisions to implement, and earlier review findings to preserve.
+1. Read the entire brief. Then read everything under "Read first": the standards sections, decisions to implement, and earlier review findings to preserve. A design-sized brief must link a [design read](../design-read/SKILL.md). Stop if it does not, or if the check in that skill fails.
 2. Read the project's `AGENTS.md` and its standards: `general.md`, the language standard, and `review.md`.
 3. Open every site the brief names. Find each by its symbol, not its line, since other changes land while you work.
 4. Do not reopen a decision under "Decided". If the brief leaves a required question of intent unanswered, stop. Report `QUESTION:` rather than guess.
