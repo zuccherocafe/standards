@@ -1,6 +1,5 @@
-//! Runs the Rust reports as built-in steps under reserved names. dandegate adds them when the after revision has a
-//! Cargo workspace, which is the one `Cargo.toml` in the repository with a `[workspace]` table, unless `[rust]` names
-//! another folder.
+//! Runs the Rust reports as built-in steps under reserved names. dandegate adds them when `dandegate.toml` names the
+//! Cargo workspace; [`crate::plan`] describes the file.
 //!
 //! - `scans` runs rust-scans in each checkout, and shows both sides' counts and the after side's findings. It is a
 //!   review aid and fails nothing.
@@ -103,27 +102,29 @@ for pair in "rustc=$rustc" "rustdoc=$rustdoc" cargo=cargo cargo-public-api=cargo
 done
 "#;
 
-/// Every folder of `commit`'s tree holding a `Cargo.toml` with a `[workspace]` table, `.` for the root.
+/// Every folder of `commit`'s tree holding a `Cargo.toml` with a `[workspace]` table, `.` for the root. `files` are
+/// the tree's files.
 ///
 /// # Errors
-/// [`GitError`] when the tree cannot be read.
+/// [`GitError`] when a manifest cannot be read.
 pub(crate) fn workspaces(
     repository: &Repository,
     commit: &CommitId,
+    files: &[String],
 ) -> Result<Vec<Utf8PathBuf>, GitError> {
     let mut found = Vec::new();
-    for path in repository.files(commit)? {
+    for path in files {
         if path != "Cargo.toml" && !path.ends_with("/Cargo.toml") {
             continue;
         }
-        let Some(bytes) = repository.file_at(commit, &path)? else {
+        let Some(bytes) = repository.file_at(commit, path)? else {
             continue;
         };
         let manifest = String::from_utf8(bytes)
             .ok()
             .and_then(|text| toml::from_str::<toml::Table>(&text).ok());
         if manifest.is_some_and(|table| table.get("workspace").is_some_and(toml::Value::is_table)) {
-            let folder = Utf8Path::new(&path)
+            let folder = Utf8Path::new(path)
                 .parent()
                 .map_or_default(Utf8Path::as_str);
             found.push(Utf8PathBuf::from(if folder.is_empty() {
@@ -148,7 +149,7 @@ pub(crate) fn rust_changed(
     let changed = repository.changed(
         revisions.before.commit(),
         revisions.after.commit(),
-        &[settings.workspace.as_str()],
+        &[settings.workspace.as_path().as_str()],
     )?;
     Ok(changed
         .iter()
@@ -304,7 +305,7 @@ impl Context<'_> {
     }
 
     fn workspace(&self) -> &Utf8Path {
-        &self.settings.workspace
+        self.settings.workspace.as_path()
     }
 
     fn write(&self, name: &str, text: &str, problems: &[String]) -> Result<(), Stop> {

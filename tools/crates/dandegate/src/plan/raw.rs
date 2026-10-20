@@ -9,11 +9,71 @@ use toml::Spanned;
 #[serde(deny_unknown_fields)]
 pub(super) struct RawPlan {
     #[serde(default)]
+    pub(super) project: RawProject,
+    #[serde(default)]
+    pub(super) reports: RawReports,
+    #[serde(default)]
+    pub(super) steps: RawSteps,
+}
+
+/// `[project]`: what the project is, one table for each language it holds.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RawProject {
+    #[serde(default)]
     pub(super) host: Vec<Spanned<String>>,
+    pub(super) rust: Option<Spanned<RawRustProject>>,
+    pub(super) godot: Option<Spanned<RawGodotProject>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RawRustProject {
+    pub(super) workspace: Spanned<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RawGodotProject {
+    pub(super) project: Spanned<String>,
+    #[serde(default)]
+    pub(super) tests: Vec<Spanned<String>>,
+}
+
+/// `[reports]`: how the built-in reports are tuned.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RawReports {
+    pub(super) measures: Option<Spanned<RawMeasures>>,
+    pub(super) rust: Option<Spanned<RawRustReports>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub(super) struct RawMeasures {
+    #[serde(default)]
+    pub(super) code: Vec<Spanned<String>>,
+    #[serde(default)]
+    pub(super) exclude: Vec<Spanned<String>>,
+    #[serde(default)]
+    pub(super) code_measures: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RawRustReports {
+    #[serde(default)]
+    pub(super) scans: Vec<String>,
+    #[serde(default)]
+    pub(super) mutation: Vec<String>,
+}
+
+/// `[steps]`: what the project adds.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RawSteps {
     #[serde(default)]
     pub(super) inputs: BTreeMap<Spanned<String>, Spanned<RawInput>>,
-    pub(super) measures: Option<Spanned<RawMeasures>>,
-    pub(super) rust: Option<Spanned<RawRust>>,
     #[serde(default)]
     pub(super) step: Vec<Spanned<RawStep>>,
 }
@@ -23,27 +83,6 @@ pub(super) struct RawPlan {
 pub(super) struct RawInput {
     pub(super) default: String,
     pub(super) help: String,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RawMeasures {
-    #[serde(default)]
-    pub(super) code: Vec<String>,
-    #[serde(default)]
-    pub(super) exclude: Vec<String>,
-    #[serde(default)]
-    pub(super) code_measures: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RawRust {
-    #[serde(default)]
-    pub(super) scans: Vec<String>,
-    pub(super) workspace: Option<Spanned<String>>,
-    #[serde(default)]
-    pub(super) mutation: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

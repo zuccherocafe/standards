@@ -357,6 +357,7 @@ mod tests {
     use camino::Utf8Path;
 
     use super::*;
+    use crate::plan::Tree;
 
     fn graph(text: &str) -> Graph {
         let plan = Plan::read(
@@ -364,7 +365,7 @@ mod tests {
             Utf8Path::new("dandegate.toml"),
             &[],
             &[],
-            &[],
+            &Tree::default(),
         )
         .expect("a plan");
         Graph::new(&plan)
@@ -373,8 +374,8 @@ mod tests {
     #[test]
     fn a_panic_in_one_instance_goes_on_once_the_others_have_finished() {
         let graph = graph(
-            "[[step]]\nname = \"bad\"\nruns = \"once\"\nrun = [\"x\"]\n\n\
-             [[step]]\nname = \"good\"\nruns = \"once\"\nrun = [\"x\"]\n",
+            "[[steps.step]]\nname = \"bad\"\nruns = \"once\"\nrun = [\"x\"]\n\n\
+             [[steps.step]]\nname = \"good\"\nruns = \"once\"\nrun = [\"x\"]\n",
         );
         let bad = graph.ids().next();
         let finished = AtomicBool::new(false);

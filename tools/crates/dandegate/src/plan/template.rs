@@ -138,7 +138,7 @@ pub(crate) enum TemplateError {
     Unopened,
     #[error("{{{name}}} is not a placeholder this kind of step has; it has {names}")]
     Unknown { name: String, names: &'static str },
-    #[error("{{input.{name}}} names no input [inputs] declares")]
+    #[error("{{input.{name}}} names no input [steps.inputs] declares")]
     Undeclared { name: String },
 }
 

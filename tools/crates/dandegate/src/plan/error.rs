@@ -4,6 +4,7 @@ use std::fmt;
 
 use camino::Utf8PathBuf;
 
+use crate::plan::repo::{PathProblem, RepoDir};
 use crate::plan::template::TemplateError;
 use crate::plan::{BadName, StepName};
 
@@ -100,14 +101,18 @@ pub(crate) enum Problem {
     UnknownInput { name: String, declared: String },
     #[error("{0:?} is set twice")]
     InputTwice(String),
+    #[error("{field}: {text:?} {problem}")]
+    Path {
+        field: &'static str,
+        text: String,
+        problem: PathProblem,
+    },
     #[error(
-        "[rust]: the after revision has no Cargo.toml with a [workspace] table; name it with workspace = \"<folder>\""
+        "[project.rust]: workspace: \"{0}\" holds no Cargo.toml with a [workspace] table in the after revision"
     )]
-    NoWorkspace,
+    NotWorkspace(RepoDir),
     #[error(
-        "[rust]: the after revision has several Cargo workspaces ({0}); name one with workspace = \"<folder>\""
+        "[reports.rust]: tunes the Rust reports, which run only when [project.rust] names the workspace; add [project.rust] or remove [reports.rust]"
     )]
-    SeveralWorkspaces(String),
-    #[error("[rust]: workspace: {0:?} is not a folder inside the repository")]
-    WorkspacePath(String),
+    RustReportsAlone,
 }

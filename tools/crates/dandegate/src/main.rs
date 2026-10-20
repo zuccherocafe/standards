@@ -11,7 +11,7 @@
 //!
 //! dandegate knows revisions, steps, measures, images, sections, kept results and the page. It knows nothing about a
 //! project's domain. A project's own scripts, its adapters in the after revision's `dandegate/` folder, do that work.
-//! For a Rust workspace, dandegate adds the Rust reports as built-in steps ([`rust`]).
+//! For the Rust workspace `[project.rust]` names, dandegate adds the Rust reports as built-in steps ([`rust`]).
 //!
 //! dandegate runs steps on threads, not on an async runtime. It runs up to four steps at once, and runs exclusive steps
 //! last, one at a time. It runs every git operation with the `git` command and every step under `nix develop`, below a
@@ -43,7 +43,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 
 use crate::compare::measure::{LineError, Measures, SavedError};
-use crate::plan::{Plan, PlanError};
+use crate::plan::{Plan, PlanError, Tree};
 use crate::report::Request;
 use crate::report::step::{host, supervise};
 use crate::revision::PerSide;
@@ -93,9 +93,9 @@ compares the images, measures and sections the steps write, and writes <out>/ind
 inside <out>. dandegate keeps each step's complete success in .cache/dandegate/ and reuses it while its identity \
 holds.
 
-It prints DANDEGATE-INCOMPLETE, DANDEGATE-MEASURE-CODE, DANDEGATE-WORSE, DANDEGATE-REUSED and DANDEGATE-STEP-FAILED \
-lines, then a DANDEGATE line naming the page. It exits with 0 whenever it writes the page, complete or not, with 1 \
-when it cannot write one, and with 2 for a malformed argument.";
+It prints DANDEGATE-INCOMPLETE, DANDEGATE-NOTICE, DANDEGATE-MEASURE-CODE, DANDEGATE-WORSE, DANDEGATE-REUSED and \
+DANDEGATE-STEP-FAILED lines, then a DANDEGATE line naming the page. It exits with 0 whenever it writes the page, \
+complete or not, with 1 when it cannot write one, and with 2 for a malformed argument.";
 
 /// Why no page can be written.
 #[derive(Debug, thiserror::Error)]
@@ -244,13 +244,19 @@ fn accept(
             })
         })?
         .unwrap_or_default();
-    let workspaces = rust::workspaces(&repository, revisions.after.commit()).map_err(|cause| {
+    let unresolved = |cause| {
         DandegateError::Resolve(ResolveError::Unresolved {
             requested: arguments.after.clone(),
             cause,
         })
-    })?;
-    let plan = Plan::read(&text, file, &arguments.with, &arguments.inputs, &workspaces)
+    };
+    let files = repository
+        .files(revisions.after.commit())
+        .map_err(unresolved)?;
+    let workspaces =
+        rust::workspaces(&repository, revisions.after.commit(), &files).map_err(unresolved)?;
+    let tree = Tree::new(files.into_iter().map(Utf8PathBuf::from), workspaces);
+    let plan = Plan::read(&text, file, &arguments.with, &arguments.inputs, &tree)
         .map_err(DandegateError::Plan)?;
     fs::create_dir_all(&out)
         .map_err(|source| DandegateError::Out(OutError::Make(out.clone(), source)))?;

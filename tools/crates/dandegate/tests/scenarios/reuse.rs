@@ -10,7 +10,7 @@ use crate::support::{Fixture, LIB, STEP};
 /// A reusable per-revision step with measures, running the generic step through `visual.sh`, which sources
 /// `helper.sh`.
 const VISUAL: &str = r#"
-[[step]]
+[[steps.step]]
 name = "visual"
 reuse = true
 run = ["sh", "{adapters}/visual.sh", "{tree}", "{commit}", "{out}"]
@@ -114,7 +114,7 @@ fn a_changed_input_value_misses_the_kept_result() {
     let plan = VISUAL.replace("\"{out}\"]", "\"{out}\", \"{input.renders}\"]");
     project(
         &fixture,
-        &format!("[inputs]\nrenders = {{ default = \"0\", help = \"frames\" }}\n{plan}"),
+        &format!("[steps.inputs]\nrenders = {{ default = \"0\", help = \"frames\" }}\n{plan}"),
     );
     let only = fixture.commit("only");
 
@@ -189,7 +189,9 @@ fn changed_external_file_content_at_the_same_path_misses() {
     let plan = VISUAL.replace("\"{out}\"]", "\"{out}\", \"{input.baseline}\"]");
     project(
         &fixture,
-        &format!("[inputs]\nbaseline = {{ default = \"\", help = \"a baseline file\" }}\n{plan}"),
+        &format!(
+            "[steps.inputs]\nbaseline = {{ default = \"\", help = \"a baseline file\" }}\n{plan}"
+        ),
     );
     let only = fixture.commit("only");
     let baseline = fixture.outside("baseline.json");
@@ -223,7 +225,7 @@ fn changed_external_file_content_at_the_same_path_misses() {
 fn a_changed_identity_environment_or_collected_line_misses() {
     let fixture = Fixture::new("environment");
     let plan = format!(
-        "{VISUAL}env = {{ VISUAL_LEVEL = \"fixed\" }}\n[step.identity]\nenv = [\"VISUAL_*\"]\ncollect = [\"sh\", \"-c\", \"cat \\\"$DANDEGATE_REPOSITORY/../toolchain\\\"\"]\n"
+        "{VISUAL}env = {{ VISUAL_LEVEL = \"fixed\" }}\n[steps.step.identity]\nenv = [\"VISUAL_*\"]\ncollect = [\"sh\", \"-c\", \"cat \\\"$DANDEGATE_REPOSITORY/../toolchain\\\"\"]\n"
     );
     project(&fixture, &plan);
     let only = fixture.commit("only");
@@ -299,7 +301,7 @@ fn a_failed_collector_runs_the_step_fresh_and_keeps_nothing() {
     .into_iter()
     .enumerate()
     {
-        project(&fixture, &format!("{VISUAL}\n[step.identity]\ncollect = {collector}\n"));
+        project(&fixture, &format!("{VISUAL}\n[steps.step.identity]\ncollect = {collector}\n"));
         let only = fixture.commit("collector");
         for attempt in ["first", "second"] {
             fixture.clear_events();
@@ -348,15 +350,15 @@ fn a_changed_prepare_recipe_variable_or_collector_misses_a_kept_visual() {
     let fixture = Fixture::new("prepare");
     // An unrelated step first, so the prepare step is not the first the plan declares.
     let prepare = r#"
-[[step]]
+[[steps.step]]
 name = "unrelated"
 run = ["sh", "{adapters}/step.sh", "unrelated", "{tree}", "{commit}", "{out}"]
 
-[[step]]
+[[steps.step]]
 name = "prepare"
 run = ["sh", "{adapters}/step.sh", "prepare", "{tree}", "{commit}", "{out}"]
 
-[step.identity]
+[steps.step.identity]
 env = ["BUILD_MODE"]
 "#;
     let plan = format!("{prepare}{VISUAL}needs = [\"prepare\"]\n");

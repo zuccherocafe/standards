@@ -89,7 +89,7 @@ pub(crate) fn workspace(fixture: &Fixture) {
     fixture.write("crates/alpha/benches/speed.rs", "fn main() {}\n");
     fixture.write(
         "dandegate.toml",
-        "[rust]\nscans = [\"--core\", \"alpha\"]\n",
+        "[project.rust]\nworkspace = \"./\"\n[reports.rust]\nscans = [\"--core\", \"alpha\"]\n",
     );
     fixture.write(
         "fixture/scans.txt",
@@ -214,8 +214,8 @@ fn a_root_level_rust_workspace_gets_scans_line_counts_and_the_mutation_report() 
 fn the_mutation_report_is_not_run_when_no_rust_differs() {
     let fixture = Fixture::new("no-rust");
     workspace(&fixture);
-    // A Rust workspace needs no steps file to get its reports.
-    fixture.remove("dandegate.toml");
+    // Naming the workspace is all a steps file needs for the Rust reports.
+    fixture.write("dandegate.toml", "[project.rust]\nworkspace = \"./\"\n");
     let before = fixture.commit("before");
     fixture.write("README", "words only\n");
     fixture.commit("after");
@@ -231,6 +231,34 @@ fn the_mutation_report_is_not_run_when_no_rust_differs() {
             .events()
             .iter()
             .any(|event| event.starts_with("mutants"))
+    );
+}
+
+#[test]
+fn a_workspace_with_no_rust_table_gets_a_notice_and_no_rust_reports() {
+    let fixture = Fixture::new("no-table");
+    workspace(&fixture);
+    fixture.remove("dandegate.toml");
+    let only = fixture.commit("only");
+
+    let run = fixture.run("out", &["--before", &only]);
+    let page = run.page();
+    let notice = "the Rust reports are off: the after revision has a Cargo workspace in ./, but dandegate.toml has no \
+                  [project.rust] table; add one with workspace = \"./\" to turn them on";
+    assert_eq!(run.printed("DANDEGATE-NOTICE"), [notice]);
+    assert!(
+        page.contains(&format!(
+            "<div class=\"notice\"><p>{}</p></div>",
+            notice.replace('"', "&quot;")
+        )),
+        "{page}"
+    );
+    assert_eq!(run.printed("DANDEGATE-INCOMPLETE"), Vec::<String>::new());
+    assert!(
+        !fixture
+            .events()
+            .iter()
+            .any(|event| event.starts_with("scans"))
     );
 }
 
@@ -486,7 +514,7 @@ fn a_toolchain_that_cannot_be_identified_runs_the_listings_fresh_and_keeps_nothi
 }
 
 #[test]
-fn a_workspace_in_a_folder_is_found_and_reported_there() {
+fn a_workspace_in_a_folder_is_reported_there() {
     let fixture = Fixture::new("folder");
     fixture.tool("rust-scans", SCANS);
     fixture.tool("rust-mutants", MUTANTS);
@@ -500,6 +528,7 @@ fn a_workspace_in_a_folder_is_found_and_reported_there() {
     );
     fixture.write("rust/crates/alpha/src/lib.rs", "pub fn f() {}\n");
     fixture.write("fixture/scans.txt", "H1: 0\n");
+    fixture.write("dandegate.toml", "[project.rust]\nworkspace = \"rust/\"\n");
     let before = fixture.commit("before");
     fixture.write(
         "rust/crates/alpha/src/lib.rs",

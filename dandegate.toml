@@ -1,2 +1,2 @@
-[rust]
-workspace = "tools"
+[project.rust]
+workspace = "tools/"

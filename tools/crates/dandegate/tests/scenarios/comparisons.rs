@@ -193,8 +193,8 @@ fn measures_are_compared_by_name_with_checked_arithmetic_and_their_own_direction
 #[test]
 fn changed_measuring_code_is_warned_of_beside_the_measures_it_takes() {
     let fixture = Fixture::new("measure-code");
-    let rules = "[measures]\ncode = [\"probes/\", \"tools/clips.sh\"]\nexclude = [\"probes/selftest.sh\"]\n\
-                 code_measures = [\"clips.\"]\n";
+    let rules = "[reports.measures]\ncode = [\"probes/\", \"tools/clips.sh\"]\nexclude = [\"probes/selftest.sh\"]\n\
+                 code-measures = [\"clips.\"]\n";
     fixture.write("dandegate.toml", &format!("{rules}{PROJECT}"));
     for file in [
         "probes/measures.sh",
@@ -243,4 +243,32 @@ fn changed_measuring_code_is_warned_of_beside_the_measures_it_takes() {
     );
     let warning = page.find("id=\"measure-code\"").expect("the warning");
     assert!(warning < page.find("id=\"worse\"").expect("the worse section"));
+}
+
+#[test]
+fn measuring_code_is_matched_by_its_literal_name_never_as_a_pattern() {
+    let fixture = Fixture::new("literal");
+    let rules = "[reports.measures]\ncode = [\"probes/check[1].sh\"]\n";
+    fixture.write("dandegate.toml", &format!("{rules}{PROJECT}"));
+    fixture.write("fixture/visual/clips.log", "");
+    for file in ["probes/check[1].sh", "probes/check1.sh"] {
+        fixture.write(file, "1\n");
+    }
+    let before = fixture.commit("before");
+    // As a git pattern, check[1].sh would match its sibling check1.sh.
+    fixture.write("probes/check1.sh", "2\n");
+    let sibling = fixture.commit("sibling");
+    fixture.write("probes/check[1].sh", "2\n");
+    fixture.commit("named");
+
+    let quiet = fixture.run("quiet", &["--before", &before, "--after", &sibling]);
+    assert_eq!(
+        quiet.printed("DANDEGATE-MEASURE-CODE"),
+        Vec::<String>::new()
+    );
+    let warned = fixture.run("warned", &["--before", &sibling]);
+    assert_eq!(
+        warned.printed("DANDEGATE-MEASURE-CODE"),
+        ["probes/check[1].sh"]
+    );
 }

@@ -4,17 +4,20 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexMap;
 use toml::Spanned;
 
 use crate::plan::error::{Place, PlanError, Problem};
-use crate::plan::raw::{RawOutput, RawOutputKind, RawPlan, RawRuns, RawRust, RawStep};
+use crate::plan::raw::{
+    RawGodotProject, RawOutput, RawOutputKind, RawPlan, RawRuns, RawRustReports, RawStep,
+};
+use crate::plan::repo::{PathProblem, RepoDir, RepoPath, Tree};
 use crate::plan::template::{Arg, Template};
 use crate::plan::{
-    DEFAULT_TIMEOUT, EnvName, EnvPattern, HostProgram, IDENTITY_ENV, Input, InputName, Kind,
-    MUTANTS_TIMEOUT, MeasureRules, OutPath, Output, Plan, Recipe, Report, Runs, RustSettings, Step,
-    StepName, Work,
+    DEFAULT_TIMEOUT, EnvName, EnvPattern, GodotProject, HostProgram, IDENTITY_ENV, Input,
+    InputName, Kind, MUTANTS_TIMEOUT, MeasureRules, Notice, OutPath, Output, Plan, Recipe, Report,
+    Runs, RustSettings, Step, StepName, Work,
 };
 
 /// The text's line holding byte `offset`, counted from 1.
@@ -39,6 +42,62 @@ impl Reader<'_> {
             },
             problem,
         }
+    }
+
+    /// A path field's value refused, with the field as `[table]: key`.
+    fn path(&self, text: &Spanned<String>, field: &'static str, problem: PathProblem) -> PlanError {
+        self.at(
+            text,
+            Problem::Path {
+                field,
+                text: text.get_ref().clone(),
+                problem,
+            },
+        )
+    }
+
+    /// A folder field's value, which must name a folder the after revision holds.
+    fn folder(
+        &self,
+        text: &Spanned<String>,
+        field: &'static str,
+        tree: &Tree,
+    ) -> Result<RepoDir, PlanError> {
+        let folder =
+            RepoDir::parse(text.get_ref()).map_err(|problem| self.path(text, field, problem))?;
+        if tree.holds_folder(folder.as_path()) {
+            Ok(folder)
+        } else {
+            Err(self.path(text, field, PathProblem::NoFolder))
+        }
+    }
+
+    /// A field listing folders and files, any of which the change may remove.
+    fn paths(
+        &self,
+        texts: &[Spanned<String>],
+        field: &'static str,
+        tree: &Tree,
+    ) -> Result<Vec<RepoPath>, PlanError> {
+        texts
+            .iter()
+            .map(|text| {
+                RepoPath::parse(text.get_ref())
+                    .and_then(|path| tree.check(&path).map(|()| path))
+                    .map_err(|problem| self.path(text, field, problem))
+            })
+            .collect()
+    }
+
+    fn godot(&self, raw: &RawGodotProject, tree: &Tree) -> Result<GodotProject, PlanError> {
+        Ok(GodotProject {
+            project: self.folder(&raw.project, "[project.godot]: project", tree)?,
+            tests: raw
+                .tests
+                .iter()
+                .map(|text| self.folder(text, "[project.godot]: tests", tree))
+                .collect::<Result<_, _>>()?,
+        })
     }
 
     fn template<A: Arg>(
@@ -129,32 +188,18 @@ impl Reader<'_> {
             )
         };
         let fields = raw.get_ref();
-        let path =
-            |field: &'static str, value: &Option<Spanned<String>>| -> Result<OutPath, PlanError> {
-                let text = value.as_ref().ok_or_else(|| {
-                    refuse(format!(
-                        "an output of kind {} needs {field}",
-                        fields.kind.get_ref().as_str()
-                    ))
-                })?;
-                let inside = text
-                    .get_ref()
-                    .strip_prefix("{out}/")
-                    .filter(|rest| !rest.contains(['{', '}']))
-                    .and_then(OutPath::new);
-                inside.ok_or_else(|| {
-                    self.at(
-                        text,
-                        Problem::Output {
-                            step: step.clone(),
-                            why: format!(
-                                "{field}: {:?} is not a plain path under {{out}}/",
-                                text.get_ref()
-                            ),
-                        },
-                    )
-                })
-            };
+        let path = |field: &'static str,
+                    folder: bool,
+                    value: &Option<Spanned<String>>|
+         -> Result<OutPath, PlanError> {
+            let text = value.as_ref().ok_or_else(|| {
+                refuse(format!(
+                    "an output of kind {} needs {field}",
+                    fields.kind.get_ref().as_str()
+                ))
+            })?;
+            self.out_path(step, field, folder, text)
+        };
         let unused = |names: &[(&str, &Option<Spanned<String>>)]| -> Result<(), PlanError> {
             match names.iter().find(|(_, value)| value.is_some()) {
                 Some((field, _)) => Err(refuse(format!(
@@ -168,8 +213,8 @@ impl Reader<'_> {
             RawOutputKind::Images => {
                 unused(&[("from", &fields.from), ("file", &fields.file)])?;
                 Output::Images {
-                    folder: path("folder", &fields.folder)?,
-                    expected: path("expected", &fields.expected)?,
+                    folder: path("folder", true, &fields.folder)?,
+                    expected: path("expected", false, &fields.expected)?,
                 }
             }
             RawOutputKind::Measures => {
@@ -179,7 +224,7 @@ impl Reader<'_> {
                     ("file", &fields.file),
                 ])?;
                 Output::Measures {
-                    from: path("from", &fields.from)?,
+                    from: path("from", false, &fields.from)?,
                 }
             }
             RawOutputKind::Section => {
@@ -189,7 +234,7 @@ impl Reader<'_> {
                     ("from", &fields.from),
                 ])?;
                 Output::Section {
-                    file: path("file", &fields.file)?,
+                    file: path("file", false, &fields.file)?,
                 }
             }
         };
@@ -213,6 +258,38 @@ impl Reader<'_> {
                 }
             )))
         }
+    }
+
+    /// An output's path under `{out}/`: a folder written with a trailing `/`, a file without.
+    fn out_path(
+        &self,
+        name: &StepName,
+        field: &str,
+        folder: bool,
+        text: &Spanned<String>,
+    ) -> Result<OutPath, PlanError> {
+        let written = text.get_ref();
+        let wrong = |why: String| {
+            self.at(
+                text,
+                Problem::Output {
+                    step: name.clone(),
+                    why: format!("{field}: {written:?} {why}"),
+                },
+            )
+        };
+        let not_plain = || wrong("is not a plain path under {out}/".to_owned());
+        let inside = written
+            .strip_prefix("{out}/")
+            .filter(|rest| !rest.contains(['{', '}']))
+            .ok_or_else(not_plain)?;
+        let inside = match (folder, inside.strip_suffix('/')) {
+            (true, Some(within)) => within,
+            (false, None) => inside,
+            (true, None) => return Err(wrong(PathProblem::FolderWithoutSlash.to_string())),
+            (false, Some(_)) => return Err(wrong(PathProblem::FileWithSlash.to_string())),
+        };
+        OutPath::new(inside).ok_or_else(not_plain)
     }
 
     fn step(
@@ -316,7 +393,7 @@ pub(super) fn timeout(text: &str) -> Option<Duration> {
 
 impl Plan {
     /// The steps file `text`, read from `file`, with `with`'s optional steps enabled and `set`'s `name=value` inputs
-    /// applied. `workspaces` are the folders of the after revision holding a Cargo.toml with a `[workspace]` table.
+    /// applied. `tree` is the after revision's, which every repository path is checked against.
     ///
     /// # Errors
     /// [`PlanError`] for the first problem found: the file's syntax, a field's value, a need, a selection or an
@@ -326,7 +403,7 @@ impl Plan {
         file: &Utf8Path,
         with: &[String],
         set: &[String],
-        workspaces: &[Utf8PathBuf],
+        tree: &Tree,
     ) -> Result<Self, PlanError> {
         let text = std::str::from_utf8(text).map_err(|_| PlanError {
             place: Place::File(file.to_owned()),
@@ -343,9 +420,14 @@ impl Plan {
             ),
             problem: Problem::Toml(error.message().to_owned()),
         })?;
+        let RawPlan {
+            project,
+            reports,
+            steps: raw_steps,
+        } = raw;
 
         let mut host: Vec<HostProgram> = Vec::new();
-        for written in &raw.host {
+        for written in &project.host {
             let program = HostProgram::new(written.get_ref()).ok_or_else(|| {
                 reader.at(written, Problem::HostProgram(written.get_ref().clone()))
             })?;
@@ -354,9 +436,14 @@ impl Plan {
             }
             host.push(program);
         }
+        let godot = project
+            .godot
+            .as_ref()
+            .map(|godot| reader.godot(godot.get_ref(), tree))
+            .transpose()?;
 
         let mut inputs = IndexMap::new();
-        for (name, input) in &raw.inputs {
+        for (name, input) in &raw_steps.inputs {
             let checked = InputName::new(name.get_ref())
                 .map_err(|error| reader.at(name, Problem::InputName(error)))?;
             let input = input.get_ref();
@@ -368,7 +455,7 @@ impl Plan {
         apply_inputs(&mut inputs, set)?;
 
         let mut steps = IndexMap::new();
-        for raw_step in &raw.step {
+        for raw_step in &raw_steps.step {
             let (name, step) = reader.step(raw_step, &inputs)?;
             if steps.contains_key(&name) {
                 return Err(reader.at(
@@ -378,29 +465,49 @@ impl Plan {
             }
             steps.insert(name, step);
         }
-        let rust = match rust_settings(&reader, raw.rust.as_ref(), workspaces)? {
-            None => None,
-            Some(settings) => {
-                for report in Report::ALL {
-                    steps.insert(report.step(), built_in(report, &settings));
+        let rust = rust_settings(
+            &reader,
+            project.rust.as_ref().map(|rust| &rust.get_ref().workspace),
+            reports.rust.as_ref(),
+            tree,
+        )?;
+        if let Some(settings) = &rust {
+            for report in Report::ALL {
+                steps.insert(report.step(), built_in(report, settings));
+            }
+        }
+        check_needs(&reader, &raw_steps.step, &steps)?;
+
+        let measures = match &reports.measures {
+            None => MeasureRules::default(),
+            Some(measures) => {
+                let measures = measures.get_ref();
+                MeasureRules {
+                    code: reader.paths(&measures.code, "[reports.measures]: code", tree)?,
+                    exclude: reader.paths(
+                        &measures.exclude,
+                        "[reports.measures]: exclude",
+                        tree,
+                    )?,
+                    code_measures: measures.code_measures.clone(),
                 }
-                Some(settings)
             }
         };
-        check_needs(&reader, &raw.step, &steps)?;
         select(&mut steps, with)?;
-
-        let measures = raw.measures.map_or_default(Spanned::into_inner);
+        let workspaces: Vec<Utf8PathBuf> = tree.workspaces().map(Utf8Path::to_owned).collect();
+        let notices = if rust.is_none() && !workspaces.is_empty() {
+            vec![Notice::RustOff(workspaces)]
+        } else {
+            Vec::new()
+        };
         Ok(Self {
             host,
+            godot,
             inputs,
             steps,
-            measures: MeasureRules {
-                code: measures.code,
-                exclude: measures.exclude,
-                code_measures: measures.code_measures,
-            },
+            measures,
             rust,
+            notices,
         })
     }
 }
@@ -444,48 +551,30 @@ fn apply_inputs(inputs: &mut IndexMap<InputName, Input>, set: &[String]) -> Resu
     Ok(())
 }
 
-/// The Rust reports' settings, when the after revision has a workspace or `[rust]` names one.
+/// The Rust reports' settings, when `[project.rust]` names the workspace. `[reports.rust]` tunes them, so it is
+/// refused without `[project.rust]`.
 fn rust_settings(
     reader: &Reader<'_>,
-    raw: Option<&Spanned<RawRust>>,
-    workspaces: &[Utf8PathBuf],
+    workspace: Option<&Spanned<String>>,
+    reports: Option<&Spanned<RawRustReports>>,
+    tree: &Tree,
 ) -> Result<Option<RustSettings>, PlanError> {
-    let named = raw.and_then(|rust| rust.get_ref().workspace.as_ref());
-    let workspace = match (named, workspaces) {
-        (Some(folder), _) => {
-            let path = Utf8Path::new(folder.get_ref());
-            let inside = path
-                .components()
-                .all(|part| matches!(part, Utf8Component::Normal(_) | Utf8Component::CurDir));
-            if !inside || folder.get_ref().is_empty() {
-                return Err(reader.at(folder, Problem::WorkspacePath(folder.get_ref().clone())));
-            }
-            path.to_owned()
-        }
-        (None, [one]) => one.clone(),
-        (None, []) => {
-            return match raw {
-                Some(rust) => Err(reader.at(rust, Problem::NoWorkspace)),
-                None => Ok(None),
-            };
-        }
-        (None, several) => {
-            let listed: Vec<&str> = several.iter().map(|path| path.as_str()).collect();
-            let place = raw.map_or_else(
-                || PlanError {
-                    place: Place::File(reader.file.to_owned()),
-                    problem: Problem::SeveralWorkspaces(listed.join(", ")),
-                },
-                |rust| reader.at(rust, Problem::SeveralWorkspaces(listed.join(", "))),
-            );
-            return Err(place);
-        }
+    let Some(written) = workspace else {
+        return match reports {
+            Some(reports) => Err(reader.at(reports, Problem::RustReportsAlone)),
+            None => Ok(None),
+        };
     };
-    let settings = raw.map(Spanned::get_ref);
+    let field = "[project.rust]: workspace";
+    let workspace = reader.folder(written, field, tree)?;
+    if !tree.holds_workspace(&workspace) {
+        return Err(reader.at(written, Problem::NotWorkspace(workspace)));
+    }
+    let reports = reports.map(Spanned::get_ref);
     Ok(Some(RustSettings {
         workspace,
-        scans: settings.map_or_default(|rust| rust.scans.clone()),
-        mutation: settings.map_or_default(|rust| rust.mutation.clone()),
+        scans: reports.map_or_default(|rust| rust.scans.clone()),
+        mutation: reports.map_or_default(|rust| rust.mutation.clone()),
     }))
 }
 
@@ -536,7 +625,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
                         "-c",
                         crate::rust::TOOLCHAIN_COLLECTOR,
                         "collect",
-                        settings.workspace.as_str(),
+                        settings.workspace.as_path().as_str(),
                     ]
                     .into_iter()
                     .map(Template::text)

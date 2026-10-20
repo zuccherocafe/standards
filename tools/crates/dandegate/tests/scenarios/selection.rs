@@ -10,7 +10,7 @@ pub(crate) fn step(name: &str, runs: &str, extra: &str) -> String {
         ("{tree}", "{commit}")
     };
     format!(
-        "[[step]]\nname = \"{name}\"\nruns = \"{runs}\"\nrun = [\"sh\", \"{{adapters}}/step.sh\", \"{name}\", \"{tree}\", \
+        "[[steps.step]]\nname = \"{name}\"\nruns = \"{runs}\"\nrun = [\"sh\", \"{{adapters}}/step.sh\", \"{name}\", \"{tree}\", \
          \"{commit}\", \"{{out}}\"]\n{extra}\n"
     )
 }

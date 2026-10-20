@@ -1,5 +1,28 @@
 //! Reads `dandegate.toml` from the after revision into a checked plan, once, and applies the command line's `--with`
-//! and `--input`. Every refusal names the file and line, or the option, and the field.
+//! and `--input`. Every refusal names the file and line, or the option, and the field. This is the file's format
+//! reference.
+//!
+//! The file has three groups of tables:
+//!
+//! - `[project]` says what the project is: `host`, the programs its steps take from the caller's machine, and one
+//!   table for each language it holds. `[project.rust]` names the Cargo `workspace`; `[project.godot]` names the Godot
+//!   `project` folder and its `tests` folders. A language with no table is not reported on.
+//! - `[reports]` tunes the built-in reports: `[reports.measures]` names the measuring code (`code`, `exclude`,
+//!   `code-measures`), and `[reports.rust]` gives the Rust reports their arguments (`scans`, `mutation`).
+//! - `[steps]` holds what the project adds: `[steps.inputs]` and each `[[steps.step]]`, with its
+//!   `[steps.step.identity]`.
+//!
+//! The path fields are `[project.rust]`'s `workspace`, `[project.godot]`'s `project` and `tests`,
+//! `[reports.measures]`' `code` and `exclude`, and each step output's `folder`, `expected`, `from` and `file`. In each,
+//! a folder is written with a trailing `/` and a file without one. A repository path is relative and plain, and is
+//! checked against the after revision's tree: a language table's folders must exist there, and `[reports.measures]`'
+//! `code` and `exclude` may name a path the after revision lacks, since a change can remove measuring code, but a path
+//! it holds must be written as what it is. Each is a literal name, never a git pattern. An output path is a plain path
+//! under `{out}/`. Nothing else is a path field: command words, input defaults, `host` and the Rust reports' arguments
+//! are taken as written.
+//!
+//! When the after revision holds a Cargo workspace but the file has no `[project.rust]`, the plan carries a
+//! [`Notice`] naming the table to add, which the page shows and dandegate prints.
 //!
 //! A plan guarantees these facts to the code that reads it:
 //!
@@ -14,15 +37,18 @@
 //! A per-revision step can need per-revision steps, on its own side. An after step can need per-revision steps, on the
 //! after side, or after steps. A once step can need any step, on every side that step runs.
 //!
-//! When the after revision has a Cargo workspace, the plan adds the Rust reports as built-in steps under reserved names
-//! ([`Report`]). `[rust]` gives them their arguments.
+//! When `[project.rust]` names a folder holding a Cargo workspace, the plan adds the Rust reports as built-in steps
+//! under reserved names ([`Report`]). `[reports.rust]` without `[project.rust]` is refused, since it would tune
+//! nothing; an empty one is the same as none.
 //!
 //! This module holds the types that the rest of dandegate reads. [`read`] builds them from the file's TOML shapes in
-//! [`raw`]. [`template`] parses each command word's placeholders, and [`error`] holds every refusal.
+//! [`raw`]. [`template`] parses each command word's placeholders, [`repo`] holds the repository's paths and tree,
+//! and [`error`] holds every refusal.
 
 mod error;
 mod raw;
 mod read;
+mod repo;
 mod template;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -33,6 +59,7 @@ use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use indexmap::IndexMap;
 
 pub(crate) use crate::plan::error::PlanError;
+pub(crate) use crate::plan::repo::{RepoDir, RepoPath, Tree};
 pub(crate) use crate::plan::template::{
     Arg, Expansion, PairArg, PairValues, Template, TreeArg, TreeValues,
 };
@@ -231,16 +258,58 @@ pub(crate) enum Output {
 /// The measuring code the page warns about when it differs between the two commits.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct MeasureRules {
-    pub(crate) code: Vec<String>,
-    pub(crate) exclude: Vec<String>,
+    pub(crate) code: Vec<RepoPath>,
+    pub(crate) exclude: Vec<RepoPath>,
     pub(crate) code_measures: Vec<String>,
+}
+
+/// The Godot project `[project.godot]` names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GodotProject {
+    project: RepoDir,
+    tests: Vec<RepoDir>,
+}
+
+/// What the reader noticed about the steps file that changes no step, which the page shows and dandegate prints.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Notice {
+    /// The after revision holds these Cargo workspaces, `.` for the root, but no `[project.rust]` names one, so the
+    /// Rust reports are off.
+    RustOff(Vec<Utf8PathBuf>),
+}
+
+impl fmt::Display for Notice {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RustOff(workspaces) => {
+                let written: Vec<String> = workspaces
+                    .iter()
+                    .map(|folder| format!("{folder}/"))
+                    .collect();
+                // The one folder is shown as the TOML string to write, so a quote or backslash in its name stays intact.
+                let (noun, example) = match written.as_slice() {
+                    [one] => (
+                        "a Cargo workspace",
+                        toml::Value::String(one.clone()).to_string(),
+                    ),
+                    _ => ("Cargo workspaces", "\"<folder>/\"".to_owned()),
+                };
+                write!(
+                    formatter,
+                    "the Rust reports are off: the after revision has {noun} in {}, but dandegate.toml has no \
+                     [project.rust] table; add one with workspace = {example} to turn them on",
+                    written.join(", ")
+                )
+            }
+        }
+    }
 }
 
 /// The Rust reports' settings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RustSettings {
-    /// The workspace folder under the repository, `.` at its root.
-    pub(crate) workspace: Utf8PathBuf,
+    /// The workspace folder `[project.rust]` names.
+    pub(crate) workspace: RepoDir,
     /// rust-scans' arguments besides `--workspace`.
     pub(crate) scans: Vec<String>,
     /// cargo-mutants' arguments, after `--`.
@@ -530,10 +599,16 @@ impl Step {
 pub(crate) struct Plan {
     /// Unique, in the file's order.
     host: Vec<HostProgram>,
+    #[expect(
+        dead_code,
+        reason = "no report reads the Godot project yet; the reader checks it"
+    )]
+    godot: Option<GodotProject>,
     inputs: IndexMap<InputName, Input>,
     steps: IndexMap<StepName, Step>,
     measures: MeasureRules,
     rust: Option<RustSettings>,
+    notices: Vec<Notice>,
 }
 
 impl Plan {
@@ -556,6 +631,10 @@ impl Plan {
 
     pub(crate) fn rust(&self) -> Option<&RustSettings> {
         self.rust.as_ref()
+    }
+
+    pub(crate) fn notices(&self) -> &[Notice] {
+        &self.notices
     }
 }
 #[cfg(test)]

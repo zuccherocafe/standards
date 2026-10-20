@@ -140,7 +140,9 @@ impl Repository {
             .collect())
     }
 
-    /// The files that differ between two commits under any of `paths`, every path when none is given.
+    /// The files that differ between two commits under any of `paths`, every path when none is given. Each path is
+    /// literal, a file or a folder with everything below it, never a pattern: git's wildcards, brackets and pathspec
+    /// magic match only themselves.
     ///
     /// # Errors
     /// [`GitError`] when either commit cannot be read.
@@ -151,6 +153,7 @@ impl Repository {
         paths: &[&str],
     ) -> Result<Vec<String>, GitError> {
         let mut arguments = vec![
+            "--literal-pathspecs",
             "diff",
             "--name-only",
             "-z",

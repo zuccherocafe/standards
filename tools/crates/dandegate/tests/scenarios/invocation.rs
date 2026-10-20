@@ -7,15 +7,15 @@ use crate::support::{Fixture, files_under, png};
 
 /// A per-revision step with images and measures, and a once step with a section, each running the generic step.
 pub(crate) const PROJECT: &str = r#"
-[[step]]
+[[steps.step]]
 name = "visual"
 run = ["sh", "{adapters}/step.sh", "visual", "{tree}", "{commit}", "{out}"]
 output = [
-    { kind = "images", folder = "{out}/images", expected = "{out}/expected.txt" },
+    { kind = "images", folder = "{out}/images/", expected = "{out}/expected.txt" },
     { kind = "measures", from = "{out}/clips.log" },
 ]
 
-[[step]]
+[[steps.step]]
 name = "notes"
 runs = "once"
 run = ["sh", "{adapters}/step.sh", "notes", "{after}", "{after-commit}", "{out}"]
@@ -107,12 +107,12 @@ fn a_step_runs_the_tools_of_its_revisions_shell_and_never_the_callers() {
     fixture.write(
         "dandegate.toml",
         r#"
-[[step]]
+[[steps.step]]
 name = "pinned"
 runs = "once"
 run = ["pinned", "{out}/written.txt"]
 
-[[step]]
+[[steps.step]]
 name = "unpinned"
 runs = "once"
 run = ["unpinned", "{out}/written.txt"]
@@ -138,15 +138,15 @@ fn every_refusal_comes_before_any_step_runs() {
     fixture.write(
         "dandegate.toml",
         &format!(
-            "[inputs]\nrenders = {{ default = \"0\", help = \"frames to render\" }}\n{PROJECT}"
+            "[steps.inputs]\nrenders = {{ default = \"0\", help = \"frames to render\" }}\n{PROJECT}"
         ),
     );
     let valid = fixture.commit("valid");
-    fixture.write("dandegate.toml", "[[step]\nname = \"visual\"\n");
+    fixture.write("dandegate.toml", "[[steps.step]\nname = \"visual\"\n");
     let syntax = fixture.commit("syntax");
     fixture.write(
         "dandegate.toml",
-        "\n[[step]]\nname = \"visual\"\nrun = [\"sh\", \"{before}\"]\n",
+        "\n[[steps.step]]\nname = \"visual\"\nrun = [\"sh\", \"{before}\"]\n",
     );
     let placeholder = fixture.commit("placeholder");
     fs::create_dir(fixture.outside("existing")).expect("a folder");
@@ -235,12 +235,12 @@ fn revisions_are_frozen_when_the_report_starts_while_a_branch_moves() {
     let fixture = Fixture::new("frozen");
     // The mover moves main to a new commit while the report runs. The late step starts only after it.
     let plan = r#"
-[[step]]
+[[steps.step]]
 name = "mover"
 runs = "once"
 run = ["sh", "-c", "git -C \"$DANDEGATE_REPOSITORY\" commit --quiet --allow-empty --message moved"]
 
-[[step]]
+[[steps.step]]
 name = "late"
 runs = "once"
 needs = ["mover"]
@@ -271,17 +271,17 @@ run = ["sh", "{adapters}/step.sh", "late", "{after}", "{after-commit}", "{out}"]
 fn every_step_gets_the_repository_its_inputs_verbatim_and_the_measures_file_only_when_given() {
     let fixture = Fixture::new("step-environment");
     let plan = r#"
-[inputs]
+[steps.inputs]
 source-checkout = { default = ".", help = "where untracked sources are read" }
 
-[[step]]
+[[steps.step]]
 name = "environment"
 runs = "once"
 reuse = true
 run = ["sh", "{adapters}/environment.sh", "{input.source-checkout}"]
 env = { STEP_MODE = "{input.source-checkout}-mode" }
 
-[step.identity]
+[steps.step.identity]
 env = ["DANDEGATE_*"]
 "#;
     fixture.write("dandegate.toml", plan);

@@ -72,20 +72,20 @@ fn independent_steps_run_four_at_once_and_exclusive_steps_last_and_alone() {
         // A scheduler that never runs four at once would hold these until their time runs out.
         let _ = write!(
             plan,
-            "[[step]]\nname = \"wide{index}\"\nruns = \"once\"\ntimeout = \"60s\"\n\
+            "[[steps.step]]\nname = \"wide{index}\"\nruns = \"once\"\ntimeout = \"60s\"\n\
              run = [\"sh\", \"{{adapters}}/wide.sh\", \"wide{index}\"]\n\n"
         );
     }
     for index in 1..=2 {
         let _ = write!(
             plan,
-            "[[step]]\nname = \"alone{index}\"\nruns = \"once\"\nexclusive = true\n\
+            "[[steps.step]]\nname = \"alone{index}\"\nruns = \"once\"\nexclusive = true\n\
              run = [\"sh\", \"{{adapters}}/alone.sh\", \"alone{index}\"]\n\n"
         );
     }
     // An ordinary step declared after the exclusive ones, ready only once every wide step has finished.
     plan.push_str(
-        "[[step]]\nname = \"late\"\nruns = \"once\"\n\
+        "[[steps.step]]\nname = \"late\"\nruns = \"once\"\n\
          needs = [\"wide1\", \"wide2\", \"wide3\", \"wide4\", \"wide5\", \"wide6\"]\n\
          run = [\"sh\", \"{adapters}/alone.sh\", \"late\"]\n",
     );
@@ -203,20 +203,20 @@ fn a_step_out_of_time_is_stopped_with_its_children_while_the_rest_finishes() {
     fixture.write(
         "dandegate.toml",
         &r#"
-[[step]]
+[[steps.step]]
 name = "slow"
 runs = "once"
 timeout = "1s"
 run = ["sh", "{adapters}/slow.sh"]
 
 # Long enough for the helper to start both shards, which the step waits for before it waits for the helper.
-[[step]]
+[[steps.step]]
 name = "helper"
 runs = "once"
 timeout = "5s"
 run = ["sh", "{adapters}/helper.sh", "HELPER", "{after}", "{out}"]
 
-[[step]]
+[[steps.step]]
 name = "quick"
 runs = "once"
 run = ["sh", "{adapters}/step.sh", "quick", "{after}", "{after-commit}", "{out}"]
@@ -256,7 +256,7 @@ fn what_a_finished_step_leaves_running_is_stopped_with_it() {
     fixture.write("dandegate/leaves.sh", LEAVES);
     fixture.write(
         "dandegate.toml",
-        "[[step]]\nname = \"leaves\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/leaves.sh\"]\n",
+        "[[steps.step]]\nname = \"leaves\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/leaves.sh\"]\n",
     );
     let only = fixture.commit("only");
 
@@ -271,7 +271,7 @@ fn a_step_ended_by_a_signal_its_supervisor_ignores_exits_as_a_shell_reports_it()
     let fixture = Fixture::new("signalled");
     fixture.write(
         "dandegate.toml",
-        "[[step]]\nname = \"piped\"\nruns = \"once\"\nrun = [\"sh\", \"-c\", \"kill -PIPE $$\"]\n",
+        "[[steps.step]]\nname = \"piped\"\nruns = \"once\"\nrun = [\"sh\", \"-c\", \"kill -PIPE $$\"]\n",
     );
     let only = fixture.commit("only");
 
@@ -300,7 +300,7 @@ fn two_reports_on_one_repository_each_in_its_own_pid_namespace_keep_their_own_ch
     fixture.write(
         "dandegate.toml",
         r#"
-[[step]]
+[[steps.step]]
 name = "held"
 runs = "once"
 run = ["sh", "{adapters}/held.sh", "{after}", "{out}"]
@@ -350,7 +350,7 @@ fn stopping_dandegate_stops_every_step_it_started() {
     fixture.write("dandegate/holds.sh", HOLDS);
     fixture.write(
         "dandegate.toml",
-        "[[step]]\nname = \"holds\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/holds.sh\"]\n",
+        "[[steps.step]]\nname = \"holds\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/holds.sh\"]\n",
     );
     let only = fixture.commit("only");
     // The step's supervisor becomes this process's child when dandegate ends, so this test can wait for it.

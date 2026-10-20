@@ -78,7 +78,7 @@ fn fresh_and_reused_pages_stand_alone_once_the_cache_and_scratch_are_gone() {
 fn a_missing_or_malformed_section_status_makes_the_page_incomplete() {
     let fixture = Fixture::new("status");
     let plan = r#"
-[[step]]
+[[steps.step]]
 name = "notes"
 runs = "once"
 run = ["sh", "{adapters}/step.sh", "notes", "{after}", "{after-commit}", "{out}"]
@@ -116,7 +116,7 @@ output = [{ kind = "section", file = "{out}/notes.md" }]
 fn saved_measures_round_trip_their_directions() {
     let fixture = Fixture::new("round-trip");
     let plan = r#"
-[[step]]
+[[steps.step]]
 name = "clips"
 runs = "after"
 run = ["sh", "{adapters}/step.sh", "clips", "{tree}", "{commit}", "{out}"]
@@ -184,7 +184,7 @@ output = [{ kind = "measures", from = "{out}/clips.log" }]
 fn an_earlier_reports_measures_are_read_in_each_shape_it_saved() {
     let fixture = Fixture::new("earlier");
     let plan = r#"
-[[step]]
+[[steps.step]]
 name = "clips"
 runs = "after"
 run = ["sh", "{adapters}/step.sh", "clips", "{tree}", "{commit}", "{out}"]

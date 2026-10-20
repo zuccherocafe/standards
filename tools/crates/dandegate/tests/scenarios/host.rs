@@ -32,21 +32,22 @@ fn a_step_finds_its_named_host_programs_after_its_shells_tools_and_nothing_else_
     fixture.caller_tool("unnamed", &WRITES.replace("$2", "host"));
     fixture.write(
         "dandegate.toml",
-        r#"host = ["both", "named"]
+        r#"[project]
+host = ["both", "named"]
 
-[[step]]
+[[steps.step]]
 name = "both"
 runs = "once"
 run = ["both", "{out}/written.txt"]
 
-[[step]]
+[[steps.step]]
 name = "named"
 runs = "once"
 reuse = true
 run = ["named", "{out}/written.txt"]
 identity = { collect = ["named"] }
 
-[[step]]
+[[steps.step]]
 name = "unnamed"
 runs = "once"
 run = ["unnamed", "{out}/written.txt"]
@@ -82,19 +83,20 @@ fn a_host_program_not_found_is_one_warning_and_fails_only_the_step_that_runs_it(
     fixture.caller_tool("named", NAMED);
     fixture.write(
         "dandegate.toml",
-        r#"host = ["absent", "named"]
+        r#"[project]
+host = ["absent", "named"]
 
-[[step]]
+[[steps.step]]
 name = "absent"
 runs = "once"
 run = ["absent"]
 
-[[step]]
+[[steps.step]]
 name = "named"
 runs = "once"
 run = ["named", "{out}/written.txt"]
 
-[[step]]
+[[steps.step]]
 name = "plain"
 runs = "once"
 run = ["sh", "-c", "echo plain > \"$0\"", "{out}/written.txt"]
@@ -130,7 +132,7 @@ fn a_built_in_command_finds_the_host_programs() {
     fixture.caller_tool("listed", "#!/bin/sh\necho 'pub fn toy::host()'\n");
     fixture.write(
         "dandegate.toml",
-        "host = [\"listed\"]\n[rust]\nscans = [\"--core\", \"alpha\"]\n",
+        "[project]\nhost = [\"listed\"]\n[project.rust]\nworkspace = \"./\"\n[reports.rust]\nscans = [\"--core\", \"alpha\"]\n",
     );
     let only = fixture.commit("only");
 
@@ -154,7 +156,7 @@ fn a_host_program_out_of_time_is_stopped_with_its_children() {
     fixture.caller_tool("hold", HOLD);
     fixture.write(
         "dandegate.toml",
-        "host = [\"hold\"]\n[[step]]\nname = \"hold\"\nruns = \"once\"\ntimeout = \"1s\"\nrun = [\"hold\"]\n",
+        "[project]\nhost = [\"hold\"]\n[[steps.step]]\nname = \"hold\"\nruns = \"once\"\ntimeout = \"1s\"\nrun = [\"hold\"]\n",
     );
     let only = fixture.commit("only");
 
@@ -173,7 +175,7 @@ fn stopping_dandegate_stops_a_host_program_and_everything_it_started() {
     fixture.caller_tool("hold", HOLD);
     fixture.write(
         "dandegate.toml",
-        "host = [\"hold\"]\n[[step]]\nname = \"hold\"\nruns = \"once\"\nrun = [\"hold\"]\n",
+        "[project]\nhost = [\"hold\"]\n[[steps.step]]\nname = \"hold\"\nruns = \"once\"\nrun = [\"hold\"]\n",
     );
     let only = fixture.commit("only");
     // The step's supervisor becomes this process's child when dandegate ends, so this test can wait for it.
@@ -200,9 +202,11 @@ fn stopping_dandegate_stops_a_host_program_and_everything_it_started() {
 fn a_kept_result_misses_when_the_after_revision_changes_only_its_host_programs() {
     let fixture = Fixture::new("host-reuse");
     fixture.caller_tool("named", NAMED);
-    let step =
-        "[[step]]\nname = \"named\"\nreuse = true\nrun = [\"named\", \"{out}/written.txt\"]\n";
-    fixture.write("dandegate.toml", &format!("host = [\"named\"]\n{step}"));
+    let step = "[[steps.step]]\nname = \"named\"\nreuse = true\nrun = [\"named\", \"{out}/written.txt\"]\n";
+    fixture.write(
+        "dandegate.toml",
+        &format!("[project]\nhost = [\"named\"]\n{step}"),
+    );
     let before = fixture.commit("before");
     fixture.write("README", "the after revision\n");
     let declared = fixture.commit("declared");

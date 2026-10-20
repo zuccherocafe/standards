@@ -1,8 +1,8 @@
 //! Writes the report's page, `index.html`. The page is plain HTML with its style inline. It loads nothing from outside,
 //! reads in light and dark themes, and links only to files inside the output folder.
 //!
-//! The page's sections, in order, are what makes the report incomplete, the host programs not found, the
-//! measuring-code warning, the measures that got worse, every step's outcome, what dandegate reused or kept, the steps'
+//! The page's sections, in order, are what makes the report incomplete, the host programs not found, the reader's
+//! notices about the steps file, the measuring-code warning, the measures that got worse, every step's outcome, what dandegate reused or kept, the steps'
 //! sections, every measure, and the images.
 
 use std::fmt::Write as _;
@@ -49,6 +49,8 @@ pub(crate) struct Page<'a> {
     pub(crate) incomplete: &'a [String],
     /// One warning for each host program not found, or why none can be given.
     pub(crate) host: &'a [String],
+    /// What the reader noticed about the steps file that changes no step.
+    pub(crate) notices: &'a [String],
     pub(crate) measure_code: Option<&'a [String]>,
     pub(crate) measure_code_error: Option<&'a str>,
     pub(crate) affected: &'a [&'a MeasureRow],
@@ -74,6 +76,7 @@ td, th { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vert
 pre { overflow-x: auto; border: 1px solid var(--line); padding: 8px; }
 code, pre { font: 13px/1.4 ui-monospace, monospace; }
 .incomplete, .warning { border: 2px solid var(--warn); background: var(--warn-background); padding: 6px 12px; }
+.notice { border: 1px solid var(--line); padding: 6px 12px; }
 .failed td { color: var(--warn); }
 .muted { color: var(--muted); }
 figure { margin: 16px 0; } figcaption { margin-bottom: 4px; }
@@ -161,6 +164,13 @@ pub(crate) fn render(page: &Page<'_>) -> String {
             html,
             "<div class=\"warning host\"><p>{}</p></div>",
             escape(warning)
+        );
+    }
+    for notice in page.notices {
+        let _ = writeln!(
+            html,
+            "<div class=\"notice\"><p>{}</p></div>",
+            escape(notice)
         );
     }
     measure_code(&mut html, page);

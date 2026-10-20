@@ -8,7 +8,7 @@ use crate::selection::started;
 use crate::support::{Fixture, png};
 
 const VISUAL: &str = r#"
-[[step]]
+[[steps.step]]
 name = "visual"
 reuse = true
 run = ["sh", "{adapters}/step.sh", "visual", "{tree}", "{commit}", "{out}"]
@@ -113,41 +113,41 @@ fn a_missing_changed_extra_malformed_or_old_format_entry_is_a_miss() {
 fn only_complete_successes_are_kept() {
     let fixture = Fixture::new("complete");
     let plan = r#"
-[[step]]
+[[steps.step]]
 name = "good"
 reuse = true
 run = ["sh", "{adapters}/step.sh", "good", "{tree}", "{commit}", "{out}"]
 output = [{ kind = "measures", from = "{out}/clips.log" }]
 
-[[step]]
+[[steps.step]]
 name = "failing"
 reuse = true
 run = ["sh", "{adapters}/step.sh", "failing", "{tree}", "{commit}", "{out}"]
 output = [{ kind = "measures", from = "{out}/clips.log" }]
 
-[[step]]
+[[steps.step]]
 name = "partial"
 reuse = true
 run = ["sh", "{adapters}/step.sh", "partial", "{tree}", "{commit}", "{out}"]
 output = [{ kind = "section", file = "{out}/report.md" }]
 
-[[step]]
+[[steps.step]]
 name = "malformed"
 reuse = true
 run = ["sh", "{adapters}/step.sh", "malformed", "{tree}", "{commit}", "{out}"]
 output = [{ kind = "measures", from = "{out}/clips.log" }]
 
-[[step]]
+[[steps.step]]
 name = "unrendered"
 reuse = true
 run = ["sh", "{adapters}/step.sh", "unrendered", "{tree}", "{commit}", "{out}"]
-output = [{ kind = "images", folder = "{out}/images", expected = "{out}/expected.txt" }]
+output = [{ kind = "images", folder = "{out}/images/", expected = "{out}/expected.txt" }]
 
-[[step]]
+[[steps.step]]
 name = "corrupt"
 reuse = true
 run = ["sh", "{adapters}/step.sh", "corrupt", "{tree}", "{commit}", "{out}"]
-output = [{ kind = "images", folder = "{out}/images", expected = "{out}/expected.txt" }]
+output = [{ kind = "images", folder = "{out}/images/", expected = "{out}/expected.txt" }]
 "#;
     fixture.write("dandegate.toml", plan);
     fixture.write("fixture/good/clips.log", "MEASURE: good 1 m\n");

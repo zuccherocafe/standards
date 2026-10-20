@@ -74,10 +74,17 @@ impl Session<'_> {
                 reuse: notes.get(&at).map(|notes| notes.join("; ")),
             })
             .collect();
+        let notices: Vec<String> = self
+            .plan()
+            .notices()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         let page = Page {
             revisions: &self.request.revisions,
             incomplete: &incomplete,
             host: &self.host_warnings,
+            notices: &notices,
             measure_code: code.as_ref().ok().map(Vec::as_slice),
             measure_code_error: code.as_ref().err().map(String::as_str),
             affected: &affected,
@@ -92,6 +99,7 @@ impl Session<'_> {
         let mut lines = self.printed(
             outcomes,
             &incomplete,
+            &notices,
             code.as_deref().unwrap_or_default(),
             &got_worse,
         );
@@ -195,6 +203,7 @@ impl Session<'_> {
         &self,
         outcomes: &PerInstance<Outcome>,
         incomplete: &[String],
+        notices: &[String],
         code: &[String],
         got_worse: &[&MeasureRow],
     ) -> Vec<String> {
@@ -202,6 +211,11 @@ impl Session<'_> {
             .iter()
             .map(|why| format!("DANDEGATE-INCOMPLETE: {why}"))
             .collect();
+        lines.extend(
+            notices
+                .iter()
+                .map(|notice| format!("DANDEGATE-NOTICE: {notice}")),
+        );
         lines.extend(
             code.iter()
                 .map(|file| format!("DANDEGATE-MEASURE-CODE: {file}")),
@@ -266,7 +280,8 @@ impl Session<'_> {
         if rules.code.is_empty() {
             return Ok(Vec::new());
         }
-        let paths: Vec<&str> = rules.code.iter().map(String::as_str).collect();
+        let written: Vec<String> = rules.code.iter().map(ToString::to_string).collect();
+        let paths: Vec<&str> = written.iter().map(String::as_str).collect();
         let changed = self
             .request
             .repository
@@ -282,7 +297,7 @@ impl Session<'_> {
                 !rules
                     .exclude
                     .iter()
-                    .any(|excluded| Utf8Path::new(file).starts_with(excluded.trim_end_matches('/')))
+                    .any(|excluded| Utf8Path::new(file).starts_with(excluded.as_path()))
             })
             .collect())
     }
