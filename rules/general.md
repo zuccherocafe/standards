@@ -60,7 +60,7 @@ A project's checks exist to catch what is broken, not what is different.
 
 **The upgrade shows what moved.** The change carries the full checks and a dandegate report from the base to the upgrade, with the performance steps selected. A difference the toolchain caused is explained before later work depends on it.
 
-**Checked by:** review of the upgrade change against these rules; the project's checks, where [pin-age](../tools/pin_age.py) prints a line for each pin over a month old and fails on none.
+**Checked by:** review of the upgrade change against these rules; the project's checks, where [pin-age](../tools/rust/crates/pin-age/) prints a line for each pin over a month old and fails on none.
 
 **Copy tool configuration, pin shared tools.** Cargo, Clippy, rustfmt, cargo-deny, Godot, and the GDScript formatter read only files inside the project, and a clean clone must build alone. So a project copies the files in [templates/](../templates/) it uses and adds its own entries after the shared ones, which keeps the shared part comparable with the latest template. A difference from the template is reported, never a failed check. A tool in [tools/](../tools/) reads the project's files and takes project details as arguments, so one copy serves every project. The development shell takes this repository as a flake input pinned in `flake.lock` and puts the tools on `PATH`. Whenever this repository's `main` moves, each project moves its pin to it in a change of its own, so every project reads the latest standards.
 

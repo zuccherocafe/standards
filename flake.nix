@@ -47,9 +47,7 @@
       '';
 
       # Advises only: it fails on a pin file it cannot read, never on a pin's age.
-      pinAge = pkgs.writeShellScriptBin "pin-age" ''
-        exec ${python}/bin/python3 -I ${./tools/pin_age.py} "$@"
-      '';
+      pinAge = workspaceTool "pin-age";
 
       # A new minor version moves the target in ruff.toml and pyrefly.toml with it.
       python = pkgs.python315;
@@ -96,9 +94,9 @@
           }
           python_files() { files '*.py'; }
           links() { files '*.md' | xargs -0 lychee --offline --include-fragments --no-progress; }
-          format() { python_files | xargs -0 ruff format --check; }
-          lint() { python_files | xargs -0 ruff check; }
-          types() { python_files | xargs -0 pyrefly check; }
+          format() { python_files | xargs -0 -r ruff format --check; }
+          lint() { python_files | xargs -0 -r ruff check; }
+          types() { python_files | xargs -0 -r pyrefly check; }
           tests() {
             local suite folder result=0
             while IFS= read -r -d "" suite; do
