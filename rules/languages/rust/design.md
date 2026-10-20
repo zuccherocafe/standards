@@ -6,7 +6,7 @@ Part of the [Rust standard](README.md). Types, parsing, where behaviour lives, v
 
 ### Identities
 
-*Weigh.* An identity in a crate-level interface, or one that is stored, has its own type. A crate-level interface is a `pub(crate)` or wider signature, a record, or an error. Use a newtype with a private field, a checked constructor, an accessor, `Display`, and `Eq + Ord + Hash`. Key maps by the identity type so a key from one map does not fit another. When authored and stored names differ, the type has two entry points. One accepts the authored form. `FromStr` accepts the stored form, which must round-trip. For example, a person may write "violin case" while the program stores `violin_case`.
+*Weigh.* An identity in a crate-level interface, or one that is stored, has its own type where it could be confused with another identity or keys a map. A crate-level interface is a `pub(crate)` or wider signature, a record, or an error. Use a newtype with a private field, a checked constructor, an accessor, `Display`, and `Eq + Ord + Hash`. Key maps by the identity type so a key from one map does not fit another. When authored and stored names differ, the type has two entry points. One accepts the authored form. `FromStr` accepts the stored form, which must round-trip. For example, a person may write "violin case" while the program stores `violin_case`.
 
 Before, the maps share a string key type:
 
@@ -169,7 +169,7 @@ impl<T> Index<Side> for PerSide<T> { /* match side */ }
 
 ### Index spaces
 
-*Weigh.* Each index space has its own index type, issued by its collection. Only the collection's crate can construct an index from an offset, through a sealed trait or crate-private constructor. The collection issues indices through operations such as `push` or iteration. A typed index proves its index space, not its originating instance. An index from one solver is a valid index for another. Where a handle might come from another instance, bind it to its source or check it once at entry.
+*Weigh.* An index that is stored or passed between modules has its own index type, issued by its collection. Only the collection's crate can construct an index from an offset, through a sealed trait or crate-private constructor. The collection issues indices through operations such as `push` or iteration. A typed index proves its index space, not its originating instance. An index from one solver is a valid index for another. Where a handle might come from another instance, bind it to its source or check it once at entry.
 
 Ref: guppy's private `PackageIx(u32)` (`guppy/src/graph/mod.rs`); rust-analyzer's `la-arena` `Idx<T>`.
 

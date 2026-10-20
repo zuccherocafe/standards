@@ -79,7 +79,7 @@ Ref: nextest's per-operation errors and `ConfigParseError { config_file, tool, k
 
 ### Where a refusal sits
 
-*Always.* Place a refusal where it is cheapest and clearest for the author. Refuse as soon as the needed facts are known, before expensive work the refusal would waste. The order of independent refusals is not a promise. A change may move a refusal earlier or later to make it cheaper or clearer. Its description lists every move. No test fixes which independent fault is reported first. Never let a fault pass unrefused or make a refusal unreachable. A refusal's wording may improve for its reader, and the change lists that improvement too. Where a project has codes, a code stays stable unless the change explains why it changes.
+*Always.* A refusal sits and moves as [A refusal sits where it is cheapest](../../general.md#design) says. A change's description lists every move. A refusal's wording may improve for its reader, and the change lists that improvement too. Where a project has codes, a code stays stable unless the change explains why it changes.
 
 **Checked by:** review of the change's list of moved refusals.
 
