@@ -198,11 +198,13 @@ impl Session<'_> {
         let prepared = match self.target(at) {
             Target::Tree(recipe, side) => match recipe.collect() {
                 None => None,
-                Some(collect) => Some(self.prepared(recipe, &self.tree(side)?, &out, collect)),
+                Some(collect) => {
+                    Some(self.prepared(at, recipe, &self.tree(side)?, &out, collect)?)
+                }
             },
             Target::Pair(recipe) => match recipe.collect() {
                 None => None,
-                Some(collect) => Some(self.prepared(recipe, &self.pair()?, &out, collect)),
+                Some(collect) => Some(self.prepared(at, recipe, &self.pair()?, &out, collect)?),
             },
         };
         let Some(Prepared { command, env }) = prepared else {

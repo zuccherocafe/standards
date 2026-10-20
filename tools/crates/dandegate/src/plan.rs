@@ -536,6 +536,16 @@ impl Step {
         self.runs.inputs()
     }
 
+    /// Whether any of the step's templates names its build cache, `{cache}`.
+    pub(crate) fn uses_cache(&self) -> bool {
+        match &self.runs {
+            Runs::PerRevision(recipe) | Runs::After(recipe) => {
+                recipe.templates().any(Template::uses_cache)
+            }
+            Runs::Once(recipe) => recipe.templates().any(Template::uses_cache),
+        }
+    }
+
     /// The built-in Rust report the step runs, if it is one.
     pub(crate) fn report(&self) -> Option<Report> {
         match &self.runs {

@@ -2,7 +2,8 @@
 //!
 //! A template's argument type decides which placeholders it can hold. A per-revision or after step's templates take
 //! [`TreeArg`], and a once step's templates take [`PairArg`], so no template can hold the other kind's placeholder.
-//! `{out}`, `{adapters}` and `{input.<name>}` are open to both kinds.
+//! `{out}`, `{adapters}`, `{cache}` and `{input.<name>}` are open to both kinds. `{cache}` is the step's build cache at
+//! its place, a folder kept from one report to the next (`crate::report::cache`).
 
 use std::fmt::Write as _;
 
@@ -40,7 +41,7 @@ pub(crate) struct TreeValues<'a> {
 
 impl Arg for TreeArg {
     type Values<'a> = TreeValues<'a>;
-    const NAMES: &'static str = "{tree}, {commit}, {out}, {adapters} and {input.<name>}";
+    const NAMES: &'static str = "{tree}, {commit}, {out}, {adapters}, {cache} and {input.<name>}";
 
     fn named(name: &str) -> Option<Self> {
         match name {
@@ -83,8 +84,7 @@ pub(crate) struct PairValues<'a> {
 
 impl Arg for PairArg {
     type Values<'a> = PairValues<'a>;
-    const NAMES: &'static str =
-        "{before}, {after}, {before-commit}, {after-commit}, {out}, {adapters} and {input.<name>}";
+    const NAMES: &'static str = "{before}, {after}, {before-commit}, {after-commit}, {out}, {adapters}, {cache} and {input.<name>}";
 
     fn named(name: &str) -> Option<Self> {
         match name {
@@ -123,6 +123,7 @@ pub(crate) enum Piece<A> {
     Input(InputName),
     Out,
     Adapters,
+    Cache,
 }
 
 /// A command word or environment value with its placeholders parsed.
@@ -149,6 +150,7 @@ pub(crate) struct Expansion<'a, 'v, A: Arg> {
     pub(crate) inputs: &'a IndexMap<InputName, Input>,
     pub(crate) out: &'a Utf8Path,
     pub(crate) adapters: &'a Utf8Path,
+    pub(crate) cache: &'a Utf8Path,
 }
 
 impl<A: Arg> Template<A> {
@@ -205,6 +207,7 @@ impl<A: Arg> Template<A> {
         match name {
             "out" => Ok(Piece::Out),
             "adapters" => Ok(Piece::Adapters),
+            "cache" => Ok(Piece::Cache),
             _ => A::named(name)
                 .map(Piece::Arg)
                 .ok_or_else(|| TemplateError::Unknown {
@@ -226,6 +229,7 @@ impl<A: Arg> Template<A> {
                 }
                 Piece::Out => text.push_str(expansion.out.as_str()),
                 Piece::Adapters => text.push_str(expansion.adapters.as_str()),
+                Piece::Cache => text.push_str(expansion.cache.as_str()),
             }
         }
         text
@@ -243,6 +247,7 @@ impl<A: Arg> Template<A> {
                 Piece::Input(name) => write!(text, "{{input.{name}}}"),
                 Piece::Out => write!(text, "{{out}}"),
                 Piece::Adapters => write!(text, "{{adapters}}"),
+                Piece::Cache => write!(text, "{{cache}}"),
             };
         }
         text
@@ -252,8 +257,13 @@ impl<A: Arg> Template<A> {
     pub(crate) fn inputs(&self) -> impl Iterator<Item = &InputName> {
         self.0.iter().filter_map(|piece| match piece {
             Piece::Input(name) => Some(name),
-            Piece::Text(_) | Piece::Arg(_) | Piece::Out | Piece::Adapters => None,
+            Piece::Text(_) | Piece::Arg(_) | Piece::Out | Piece::Adapters | Piece::Cache => None,
         })
+    }
+
+    /// Whether the template names the step's build cache.
+    pub(crate) fn uses_cache(&self) -> bool {
+        self.0.iter().any(|piece| matches!(piece, Piece::Cache))
     }
 }
 
@@ -273,7 +283,7 @@ mod tests {
     #[test]
     fn placeholders_are_filled_and_text_is_kept() {
         let template = Template::<TreeArg>::parse(
-            "--at={tree}/x:{commit} {input.renders}{out}{adapters}",
+            "--at={tree}/x:{commit} {input.renders}{out}{adapters}{cache}",
             &inputs(),
         )
         .expect("a template");
@@ -287,15 +297,17 @@ mod tests {
             inputs: &inputs(),
             out: Utf8Path::new("/o"),
             adapters: Utf8Path::new("/a"),
+            cache: Utf8Path::new("/c"),
         };
         assert_eq!(
             template.expand(&expansion),
-            "--at=/t/x:0123456789abcdef0123456789abcdef01234567 3/o/a"
+            "--at=/t/x:0123456789abcdef0123456789abcdef01234567 3/o/a/c"
         );
         assert_eq!(
             template.written(),
-            "--at={tree}/x:{commit} {input.renders}{out}{adapters}"
+            "--at={tree}/x:{commit} {input.renders}{out}{adapters}{cache}"
         );
+        assert!(template.uses_cache());
     }
 
     #[test]

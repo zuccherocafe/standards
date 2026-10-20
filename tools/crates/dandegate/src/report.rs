@@ -4,18 +4,20 @@
 //!
 //! A report runs in this order:
 //!
-//! 1. Check out both commits as detached worktrees in a folder of `.cache/dandegate/scratch/` that this run makes for
-//!    itself, and link the host programs the plan names into a folder beside them ([`step::host`]).
+//! 1. Take the build caches when a step names one ([`cache`]). Then check out both commits as detached worktrees in a
+//!    folder of `.cache/dandegate/scratch/` that this run makes for itself, and link the host programs the plan names
+//!    into a folder beside them ([`step::host`]).
 //! 2. For each reusable step, work out its identity, running its collector, and look for a kept result.
 //! 3. Decide which steps run. A step that only other steps need runs only when one of them runs fresh.
 //! 4. Run the steps, and keep each complete success.
-//! 5. Remove the checkouts.
+//! 5. Remove the checkouts, keep the build caches within their bound and let go of them ([`cache`]).
 //! 6. Compare the two sides, and write the page, `measures.json` and the printed lines.
 //!
 //! [`schedule`] orders the steps and runs up to four at once. [`step`] runs one command and records what happened to a
 //! step. [`store`] keeps complete successes. [`identity`] lists what a kept result depends on. [`summary`] compares the
-//! two sides and writes the page.
+//! two sides and writes the page. [`cache`] holds the build caches that `{cache}` names.
 
+pub(crate) mod cache;
 mod identity;
 mod schedule;
 pub(crate) mod step;
@@ -36,6 +38,7 @@ use crate::plan::{
     Arg, Expansion, HostProgram, PairArg, PairValues, Plan, Recipe, Report, Runs, Step, Template,
     TreeArg, TreeValues, Work,
 };
+use crate::report::cache::{BOUND, Builds};
 use crate::report::schedule::{Graph, Instance, InstanceId, PerInstance, Place, Start, run_all};
 use crate::report::step::{Launch, LaunchError, Outcome, Skip, check_outputs, host, launch, shown};
 use crate::report::store::{Identity, Lookup, Store};
@@ -95,6 +98,10 @@ struct Session<'a> {
     log: Log,
     store: Store,
     identities: PerInstance<Option<Result<Identity, String>>>,
+    /// Each enabled instance's build cache, when its step names one, or why it has none.
+    caches: PerInstance<Option<Result<Utf8PathBuf, String>>>,
+    /// The kept build caches, which this report owns until they are dropped; none when it builds in scratch.
+    builds: Option<Builds>,
     notes: Mutex<BTreeMap<InstanceId, Vec<String>>>,
 }
 
@@ -117,6 +124,19 @@ pub(crate) fn report(request: &Request) -> Finished {
         request.revisions.before, request.revisions.after
     ));
     let scratch = prepare_cache(&cache);
+    // Taken before either checkout is made, so no checkout's files are older than what the caches hold.
+    let builds = request
+        .plan
+        .steps()
+        .values()
+        .any(|step| step.enabled() && step.uses_cache())
+        .then(
+            || match Builds::take(cache.join("builds"), &cache.join("builds.lock")) {
+                Ok(Some(builds)) => Ok(builds),
+                Ok(None) => Err("the build caches are in use by another report".to_owned()),
+                Err(error) => Err(format!("the build caches cannot be locked: {error}")),
+            },
+        );
     let checkouts = PerSide::from_fn(|side| {
         let folder = scratch.as_ref().map_err(Clone::clone)?.join(side.as_str());
         request
@@ -140,6 +160,25 @@ pub(crate) fn report(request: &Request) -> Finished {
     }
     let graph = Graph::new(&request.plan);
     let identities = graph.each(|_| None);
+    let caches = graph.each(|at| {
+        let instance = graph.instance(at);
+        let step = &request.plan.steps()[&instance.step];
+        (step.enabled() && step.uses_cache()).then(|| match &builds {
+            Some(Ok(builds)) => builds
+                .folder(&instance.step, instance.place)
+                .map_err(|error| format!("its build cache cannot be made: {error}")),
+            Some(Err(why)) => scratch_cache(&scratch, instance).map_err(|error| {
+                format!("{why}, and no folder of this report's can be made: {error}")
+            }),
+            None => Err("the build caches were not taken".to_owned()),
+        })
+    });
+    let busy = match &builds {
+        Some(Err(why)) => Some(format!(
+            "{why}, so it builds in a new folder of this report's"
+        )),
+        _ => None,
+    };
     let mut session = Session {
         request,
         graph,
@@ -156,12 +195,43 @@ pub(crate) fn report(request: &Request) -> Finished {
         log,
         store: Store::new(cache.join("results")),
         identities,
+        caches,
+        builds: builds.and_then(Result::ok),
         notes: Mutex::new(BTreeMap::new()),
     };
+    if let Some(note) = busy {
+        for (at, cache) in session.caches.iter() {
+            if matches!(cache, Some(Ok(_))) {
+                session.note(at, note.clone());
+            }
+        }
+    }
     let starts = session.starts();
     let outcomes = run_all(&session.graph, starts, &|at| session.execute(at));
     session.remove_checkouts();
+    if let Some(builds) = session.builds.take() {
+        for line in builds.bound(BOUND) {
+            session.log.write(&format!("=== {line}\n"));
+        }
+    }
     session.page(&outcomes)
+}
+
+/// A new build cache for `instance` in this report's scratch folder, for when another report holds the kept ones.
+fn scratch_cache(
+    scratch: &Result<Utf8PathBuf, String>,
+    instance: &Instance,
+) -> io::Result<Utf8PathBuf> {
+    let scratch = scratch
+        .as_ref()
+        .map_err(|why| io::Error::other(why.clone()))?;
+    let folder = scratch.join("cache").join(format!(
+        "{}-{}",
+        instance.place.as_str(),
+        instance.step.as_str()
+    ));
+    fs::create_dir_all(&folder)?;
+    Ok(folder)
 }
 
 /// Make the cache folder, ignored by git whatever the project ignores, and a new scratch folder for this run.
@@ -449,19 +519,27 @@ impl Session<'_> {
         }
     }
 
-    /// `command` with its placeholders filled in, and the recipe's environment.
+    /// `command` with its placeholders filled in for the instance, and the recipe's environment, or why its build
+    /// cache cannot be given.
     fn prepared<A: Arg>(
         &self,
+        at: InstanceId,
         recipe: &Recipe<A>,
         values: &A::Values<'_>,
         out: &Utf8Path,
         command: &[Template<A>],
-    ) -> Prepared {
+    ) -> Result<Prepared, String> {
+        let cache = match &self.caches[at] {
+            None => Utf8Path::new(""),
+            Some(Ok(folder)) => folder,
+            Some(Err(why)) => return Err(why.clone()),
+        };
         let expansion = Expansion {
             values,
             inputs: self.plan().inputs(),
             out,
             adapters: &self.adapters,
+            cache,
         };
         let command = expanded(command, &expansion);
         let mut env = self.env.clone();
@@ -471,7 +549,7 @@ impl Session<'_> {
                 .iter()
                 .map(|(name, value)| (name.as_str().to_owned(), value.expand(&expansion))),
         );
-        Prepared { command, env }
+        Ok(Prepared { command, env })
     }
 
     /// Run one instance and keep its result when it is a complete success.
@@ -552,7 +630,10 @@ impl Session<'_> {
         };
         match recipe.work() {
             Work::Command(run) => {
-                let Prepared { command, env } = self.prepared(recipe, values, out, run);
+                let Prepared { command, env } = match self.prepared(at, recipe, values, out, run) {
+                    Ok(prepared) => prepared,
+                    Err(why) => return Outcome::LaunchFailed(why),
+                };
                 let opened = OpenOptions::new()
                     .append(true)
                     .open(log_path)

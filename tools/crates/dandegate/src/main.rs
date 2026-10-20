@@ -91,7 +91,7 @@ dandegate resolves both revisions to commits and checks each one out under the r
 It reads dandegate.toml from the after revision and runs its steps in each checkout's `nix develop` shell. It \
 compares the images, measures and sections the steps write, and writes <out>/index.html, with every file it links \
 inside <out>. dandegate keeps each step's complete success in .cache/dandegate/ and reuses it while its identity \
-holds.
+holds. A step's {cache} folder, under .cache/dandegate/builds/, is kept from one report to the next.
 
 It prints DANDEGATE-INCOMPLETE, DANDEGATE-NOTICE, DANDEGATE-MEASURE-CODE, DANDEGATE-WORSE, DANDEGATE-REUSED and \
 DANDEGATE-STEP-FAILED lines, then a DANDEGATE line naming the page. It exits with 0 whenever it writes the page, \
