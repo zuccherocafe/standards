@@ -1,12 +1,11 @@
 # Refused design read
 
-- Area: 
-- Revision: 0123456789abcdef0123456789abcdef01234567
-- Previous: none
+- Area:
+- Last full read: 0123456789abcdef0123456789abcdef01234567
 - Inspected: `site`
 
 ## Disagreements
 
-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
-|---|---|---|---|---|---|---|
-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+| Concept | Owner | Sites | Consequence | Done when |
+|---|---|---|---|---|
+| a concept | the owner | `site` | what goes wrong | when it is done |
