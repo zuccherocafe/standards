@@ -14,11 +14,11 @@
 mod support;
 
 use std::fs;
-use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
 use rustix::process::Signal;
+use rustix::thread::{CpuSet, sched_getaffinity, sched_setaffinity};
 
 use crate::support::{FAILS, Fixture, NAMESPACES, Running, SCOPES};
 
@@ -64,7 +64,7 @@ fn a_change_is_mutated_in_whole_repository_copies_with_private_targets() {
         let diff = work.join("change.diff");
         let shard = format!("{index}/2");
         assert_eq!(
-            fixture.lines(&format!("shard-{index}.arguments"))[1..8],
+            fixture.lines(&format!("shard-{index}.arguments"))[1..10],
             [
                 "--in-diff",
                 diff.to_str().expect("UTF-8"),
@@ -72,6 +72,8 @@ fn a_change_is_mutated_in_whole_repository_copies_with_private_targets() {
                 "--in-place",
                 "--shard",
                 &shard,
+                "--sharding",
+                "round-robin",
                 "--output",
             ]
         );
@@ -178,8 +180,22 @@ fn a_scope_is_available_only_when_systemd_run_starts_one() {
 }
 
 #[test]
-fn each_shard_runs_in_a_capped_scope_with_its_share_of_the_cpus_or_uncapped_saying_so() {
+fn each_shard_runs_in_a_capped_scope_with_its_share_of_the_cpus_it_is_given_or_uncapped_saying_so()
+{
     let fixture = capable("capped");
+    // The binary inherits this thread's CPUs, narrowed to at most four of those the test may use.
+    let mut allowed = sched_getaffinity(None).expect("this thread's CPUs");
+    let mut given = 0;
+    for cpu in 0..CpuSet::MAX_CPU {
+        if allowed.is_set(cpu) {
+            if given == 4 {
+                allowed.unset(cpu);
+            } else {
+                given += 1;
+            }
+        }
+    }
+    sched_setaffinity(None, &allowed).expect("this thread's CPUs can be narrowed");
     let run = fixture.run(&[]);
     assert_eq!(run.status(), 0, "{}", run.stderr());
     // The probe's call first, then one call for each shard, each holding half of the 16 GiB cap.
@@ -192,16 +208,7 @@ fn each_shard_runs_in_a_capped_scope_with_its_share_of_the_cpus_or_uncapped_sayi
              --property OOMPolicy=continue",
         ]
     );
-    let online = Command::new("getconf")
-        .arg("_NPROCESSORS_ONLN")
-        .output()
-        .expect("getconf starts");
-    let online: usize = String::from_utf8(online.stdout)
-        .expect("UTF-8")
-        .trim()
-        .parse()
-        .expect("a count of CPUs");
-    let share = (online / 2).max(1).to_string();
+    let share = (given / 2).max(1).to_string();
     for index in 0..2 {
         let arguments = fixture.lines(&format!("shard-{index}.arguments"));
         let at = arguments

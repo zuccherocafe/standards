@@ -23,8 +23,9 @@
 //!
 //! Each shard runs in a systemd user scope holding an equal part of a 16 GiB memory cap, without swap, so a mutant
 //! that allocates without end is killed and counted while the run goes on. Where `systemd-run --user` cannot start a
-//! scope, the shards run without a cap and the report says so. The shards share the jobserver's tasks, one per CPU
-//! online, and each test binary stops at its first failing test, since one failure is enough to catch a mutant.
+//! scope, the shards run without a cap and the report says so. The shards share the jobserver's tasks, one per CPU the
+//! tool may run on, so a caller that restricts its CPUs restricts the shards too. Mutants are dealt to the shards in
+//! turn. Each test binary stops at its first failing test, since one failure is enough to catch a mutant.
 //!
 //! Every mutant builds with the Cargo profile `mutants`, which the tool defines, so a project need not. The profile is
 //! the development profile with light optimisation, incremental builds, many codegen units and no debug information,
