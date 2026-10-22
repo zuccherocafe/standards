@@ -7,6 +7,15 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -14,6 +23,8 @@
       self,
       nixpkgs,
       rust-overlay,
+      pyproject-nix,
+      uv2nix,
     }:
     let
       system = "x86_64-linux";
@@ -71,6 +82,17 @@
       pinAge = workspaceTool "pin-age";
 
       designRead = workspaceTool "design-read";
+
+      # Harbor runs the evals. evals/uv.lock pins it and everything it imports, each as a wheel for this system, so
+      # nothing builds from source and nothing installs at run time. Only Harbor's own commands reach the shell.
+      evals = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./evals; };
+      evalsPython =
+        (pkgs.callPackage pyproject-nix.build.packages { python = pkgs.python314; }).overrideScope
+          (evals.mkPyprojectOverlay { sourcePreference = "wheel"; });
+      harbor = (pkgs.callPackages pyproject-nix.build.util { }).mkApplication {
+        venv = evalsPython.mkVirtualEnv "evals" evals.deps.default;
+        package = evalsPython.harbor;
+      };
 
       crate =
         {
@@ -185,7 +207,7 @@
         pin-age = pinAge;
         design-read = designRead;
         nix-lint = nixLint;
-        inherit dandegate;
+        inherit dandegate harbor;
       };
 
       checks.${system}.nix-lint = pkgs.runCommand "nix-lint" { } ''
@@ -208,8 +230,13 @@
           pinAge
           designRead
           nixLint
+          harbor
+          # Reads Harbor's and pi's records for the evals' accounting.
+          pkgs.jq
           pkgs.jujutsu
         ];
+        # Harbor otherwise reports each command and job to its developers.
+        env.HARBOR_TELEMETRY = "off";
       };
     };
 }
