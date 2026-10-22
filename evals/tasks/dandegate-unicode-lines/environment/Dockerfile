@@ -12,15 +12,17 @@ RUN curl -fsSLo /tmp/rustup-init https://static.rust-lang.org/rustup/archive/1.2
 FROM toolchain AS source
 RUN git clone -q https://github.com/zuccherocafe/standards.git /src \
     && git -C /src checkout -q 3bb9db9c98b6d84557b03257b00ef8a67a2235fd
-COPY start.patch /start.patch
+COPY tasks/dandegate-unicode-lines/environment/start.patch /start.patch
 RUN git -C /src apply --cached /start.patch \
     && test "$(git -C /src write-tree --prefix=tools/)" = 568aadab174472393e802645a702161d292c2aa7 \
     && mkdir /export && git -C /src archive --prefix=tools/ "$(git -C /src write-tree --prefix=tools/)" | tar -x -C /export
 
 FROM toolchain
+COPY pi/ /opt/pi/
+RUN sh /opt/pi/install.sh
 COPY --from=source /export/ /app/
-COPY AGENTS.md /app/AGENTS.md
-COPY gitignore /app/.gitignore
+COPY tasks/dandegate-unicode-lines/environment/AGENTS.md /app/AGENTS.md
+COPY tasks/dandegate-unicode-lines/environment/gitignore /app/.gitignore
 WORKDIR /app
 RUN cargo fetch --locked --manifest-path tools/rust/Cargo.toml \
     && cargo test --locked --offline --manifest-path tools/rust/Cargo.toml -p dandegate --no-run \

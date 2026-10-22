@@ -20,7 +20,7 @@ starting_commit = "e9d414d03cfafb9cf212da0c31ba7686639358b4"
 
 [environment]
 # The model provider only, from start to teardown, so no phase that follows the agent's run, such as collecting its
-# change, reopens the network. Harbor's pi agent downloads Node and pi during setup, which this policy refuses.
+# change, reopens the network. The image holds Node and pi, so the agent's setup needs no network.
 network_mode = "allowlist"
 allowed_hosts = ["openrouter.ai"]
 build_timeout_sec = 1800.0
@@ -42,9 +42,9 @@ environment_mode = "separate"
 command = "cd /app && git add -A && git diff --cached --binary e9d414d03cfafb9cf212da0c31ba7686639358b4 > /var/tmp/model.patch"
 timeout_sec = 120.0
 
-# What the agent ran on: Harbor's pi agent installs Node, npm and pi afresh in every trial.
+# What the agent ran on: the Node, npm and pi the image holds, and pi's installed tree.
 [[verifier.collect]]
-command = '. "$HOME/.nvm/nvm.sh" 2>/dev/null; { echo "node $(node --version 2>&1)"; echo "npm $(npm --version 2>&1)"; echo "pi $(pi --version 2>&1 | tail -n 1)"; npm ls -g --all --json 2>&1; } > /var/tmp/agent-identity.txt'
+command = '{ echo "node $(node --version 2>&1)"; echo "npm $(npm --version 2>&1)"; echo "pi $(pi --version 2>&1)"; sha256sum /opt/pi/package-lock.json; (cd /opt/pi && npm ls --all --json 2>&1); } > /var/tmp/agent-identity.txt'
 timeout_sec = 120.0
 
 [verifier.environment]

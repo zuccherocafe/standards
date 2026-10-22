@@ -1,0 +1,21 @@
+# A task image's build sees only the files its Dockerfile copies, so no hidden test, reference solution, shortcut or
+# other file a task holds can enter an image. Each level is closed, then reopened for its build inputs alone, since
+# a builder does not search a closed folder for a reopened file.
+*
+!pi
+pi/*
+!pi/install.sh
+!pi/package.json
+!pi/package-lock.json
+!tasks
+tasks/*
+!tasks/dandegate-literal-paths
+!tasks/dandegate-unicode-lines
+!tasks/design-read-fenced-code
+tasks/*/*
+!tasks/*/environment
+tasks/*/environment/*
+!tasks/*/environment/Dockerfile
+!tasks/*/environment/start.patch
+!tasks/*/environment/AGENTS.md
+!tasks/*/environment/gitignore

@@ -88,11 +88,37 @@
       evals = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./evals; };
       evalsPython =
         (pkgs.callPackage pyproject-nix.build.packages { python = pkgs.python314; }).overrideScope
-          (evals.mkPyprojectOverlay { sourcePreference = "wheel"; });
-      harbor = (pkgs.callPackages pyproject-nix.build.util { }).mkApplication {
+          (
+            pkgs.lib.composeExtensions (evals.mkPyprojectOverlay { sourcePreference = "wheel"; }) (
+              final: prev: {
+                harbor = prev.harbor.overrideAttrs {
+                  # Harbor's only executable scripts run inside containers, which have /bin/sh and no Nix store.
+                  dontPatchShebangs = true;
+                  # The patch's first line says why. A wheel installs unpatched, so the installed module is patched and
+                  # its bytecode compiled again, since Python would load the wheel's without checking it against the
+                  # source. A Harbor whose module no longer takes the patch exactly fails the build.
+                  postInstall = ''
+                    site="$out/${final.python.sitePackages}"
+                    patch --directory "$site" --strip 1 --forward --fuzz 0 < ${./evals/harbor/pi-installed.patch}
+                    ${final.python.interpreter} -m compileall -q -f "$site/harbor/agents/installed/pi.py"
+                  '';
+                };
+              }
+            )
+          );
+      harborApplication = (pkgs.callPackages pyproject-nix.build.util { }).mkApplication {
         venv = evalsPython.mkVirtualEnv "evals" evals.deps.default;
         package = evalsPython.harbor;
       };
+      # Harbor's own container calls resolve short image names through evals/registries.conf alone, in place of the
+      # host's registries settings, which the rest of the shell and the host keep.
+      harbor =
+        pkgs.runCommand "harbor-${evalsPython.harbor.version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; }
+          ''
+            for program in ${harborApplication}/bin/*; do
+              makeWrapper "$program" "$out/bin/''${program##*/}" --set CONTAINERS_REGISTRIES_CONF ${./evals/registries.conf}
+            done
+          '';
 
       crate =
         {

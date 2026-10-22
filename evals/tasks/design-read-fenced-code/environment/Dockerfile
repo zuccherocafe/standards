@@ -12,15 +12,17 @@ RUN curl -fsSLo /tmp/rustup-init https://static.rust-lang.org/rustup/archive/1.2
 FROM toolchain AS source
 RUN git clone -q https://github.com/zuccherocafe/standards.git /src \
     && git -C /src checkout -q d38fefcdc494673c9fe332856245a004487bc197
-COPY start.patch /start.patch
+COPY tasks/design-read-fenced-code/environment/start.patch /start.patch
 RUN git -C /src apply --cached /start.patch \
     && test "$(git -C /src write-tree --prefix=tools/)" = 7c8becc2ae89bd35e3659865499bd3c445ad8e16 \
     && mkdir /export && git -C /src archive --prefix=tools/ "$(git -C /src write-tree --prefix=tools/)" | tar -x -C /export
 
 FROM toolchain
+COPY pi/ /opt/pi/
+RUN sh /opt/pi/install.sh
 COPY --from=source /export/ /app/
-COPY AGENTS.md /app/AGENTS.md
-COPY gitignore /app/.gitignore
+COPY tasks/design-read-fenced-code/environment/AGENTS.md /app/AGENTS.md
+COPY tasks/design-read-fenced-code/environment/gitignore /app/.gitignore
 WORKDIR /app
 RUN cargo fetch --locked --manifest-path tools/Cargo.toml \
     && cargo test --locked --offline --manifest-path tools/Cargo.toml -p design-read --no-run \
