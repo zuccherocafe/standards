@@ -1,0 +1,207 @@
+diff --git a/tools/crates/design-read/tests/evaluation.rs b/tools/crates/design-read/tests/evaluation.rs
+new file mode 100644
+index 0000000..030f9f6
+--- /dev/null
++++ b/tools/crates/design-read/tests/evaluation.rs
+@@ -0,0 +1,61 @@
++//! Fenced code in a read, through the command: everything inside a fenced code block is content, and the block ends
++//! only at a valid closing fence, so the read's real sections, outside every block, decide whether it passes.
++
++mod evaluation {
++    use std::path::Path;
++    use std::process::{Command, Output};
++
++    fn check(read: &str) -> Output {
++        Command::new(env!("CARGO_BIN_EXE_design-read"))
++            .args(["check", read])
++            .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/evaluation"))
++            .output()
++            .expect("design-read runs")
++    }
++
++    fn text(bytes: &[u8]) -> &str {
++        std::str::from_utf8(bytes).expect("UTF-8")
++    }
++
++    fn passes(read: &str) {
++        let output = check(read);
++        assert_eq!(text(&output.stderr), "", "{read}");
++        assert_eq!(
++            text(&output.stdout),
++            format!("{read}: passes: disagreements: 1 new, 0 open, 0 resolved, 0 parked\n")
++        );
++        assert_eq!(output.status.code(), Some(0), "{read}");
++    }
++
++    fn refused(read: &str, refusal: &str) {
++        let output = check(read);
++        assert_eq!(text(&output.stderr), format!("{read}:{refusal}\n"), "{read}");
++        assert_eq!(text(&output.stdout), "", "{read}");
++        assert_eq!(output.status.code(), Some(1), "{read}");
++    }
++
++    #[test]
++    fn shorter_fences_and_fences_with_text_after_them_inside_a_longer_block_are_content() {
++        passes("shorter.md");
++    }
++
++    #[test]
++    fn a_fence_of_the_other_marker_inside_a_block_is_content() {
++        passes("marker.md");
++    }
++
++    #[test]
++    fn a_fence_indented_four_spaces_is_content_and_one_indented_up_to_three_closes_the_block() {
++        passes("indented.md");
++    }
++
++    #[test]
++    fn a_longer_closing_fence_ends_the_block_and_the_sections_after_it_are_checked() {
++        refused("repeated.md", "20: Disagreements: given again; first on line 14");
++    }
++
++    #[test]
++    fn a_section_heading_inside_a_block_is_not_a_section() {
++        refused("quoted.md", "1: Disagreements: missing; a read has a `## Disagreements` section");
++    }
++}
+diff --git a/tools/crates/design-read/tests/fixtures/evaluation/indented.md b/tools/crates/design-read/tests/fixtures/evaluation/indented.md
+new file mode 100644
+index 0000000..c1de78f
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/evaluation/indented.md
+@@ -0,0 +1,20 @@
++# Indented fences
++
++- Area: a test area
++- Revision: 0123456789abcdef0123456789abcdef01234567
++- Previous: none
++- Inspected: `site`
++
++## Models in play
++
++   ~~~
++## Disagreements
++    ~~~
++## Disagreements
++  ~~~
++
++## Disagreements
++
++| ID | Concept | Owner | Sites | Consequence | Done when | Status |
++|---|---|---|---|---|---|---|
++| i-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+diff --git a/tools/crates/design-read/tests/fixtures/evaluation/marker.md b/tools/crates/design-read/tests/fixtures/evaluation/marker.md
+new file mode 100644
+index 0000000..a3df7a0
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/evaluation/marker.md
+@@ -0,0 +1,27 @@
++# Another marker inside a fence
++
++- Area: a test area
++- Revision: 0123456789abcdef0123456789abcdef01234567
++- Previous: none
++- Inspected: `site`
++
++## Models in play
++
++```text
++~~~
++## Disagreements
++~~~~~~
++## Disagreements
++```
++
++~~~~
++```
++## Disagreements
++```
++~~~~~
++
++## Disagreements
++
++| ID | Concept | Owner | Sites | Consequence | Done when | Status |
++|---|---|---|---|---|---|---|
++| m-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+diff --git a/tools/crates/design-read/tests/fixtures/evaluation/quoted.md b/tools/crates/design-read/tests/fixtures/evaluation/quoted.md
+new file mode 100644
+index 0000000..61b3766
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/evaluation/quoted.md
+@@ -0,0 +1,16 @@
++# A section only inside a fence
++
++- Area: a test area
++- Revision: 0123456789abcdef0123456789abcdef01234567
++- Previous: none
++- Inspected: `site`
++
++## Models in play
++
++````
++## Disagreements
++
++| ID | Concept | Owner | Sites | Consequence | Done when | Status |
++|---|---|---|---|---|---|---|
++| q-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++````
+diff --git a/tools/crates/design-read/tests/fixtures/evaluation/repeated.md b/tools/crates/design-read/tests/fixtures/evaluation/repeated.md
+new file mode 100644
+index 0000000..5888091
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/evaluation/repeated.md
+@@ -0,0 +1,22 @@
++# Sections after a closed fence
++
++- Area: a test area
++- Revision: 0123456789abcdef0123456789abcdef01234567
++- Previous: none
++- Inspected: `site`
++
++## Models in play
++
++```
++## Disagreements
++`````
++
++## Disagreements
++
++| ID | Concept | Owner | Sites | Consequence | Done when | Status |
++|---|---|---|---|---|---|---|
++| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++
++## Disagreements
++
++None found.
+diff --git a/tools/crates/design-read/tests/fixtures/evaluation/shorter.md b/tools/crates/design-read/tests/fixtures/evaluation/shorter.md
+new file mode 100644
+index 0000000..bac4b38
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/evaluation/shorter.md
+@@ -0,0 +1,25 @@
++# Shorter fences inside a longer one
++
++- Area: a test area
++- Revision: 0123456789abcdef0123456789abcdef01234567
++- Previous: none
++- Inspected: `site`
++
++## Models in play
++
++An example of a tool's output:
++
++````markdown
++```rust
++## Disagreements
++```
++``` 
++```` markdown
++| ID | Concept |
++````
++
++## Disagreements
++
++| ID | Concept | Owner | Sites | Consequence | Done when | Status |
++|---|---|---|---|---|---|---|
++| s-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |

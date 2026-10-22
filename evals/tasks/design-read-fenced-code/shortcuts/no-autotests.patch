@@ -1,0 +1,10 @@
+diff --git a/tools/crates/design-read/Cargo.toml b/tools/crates/design-read/Cargo.toml
+index 0cb8ff1..3a7ab9c 100644
+--- a/tools/crates/design-read/Cargo.toml
++++ b/tools/crates/design-read/Cargo.toml
+@@ -1,4 +1,5 @@
+ [package]
++autotests = false
+ name = "design-read"
+ version.workspace = true
+ edition.workspace = true

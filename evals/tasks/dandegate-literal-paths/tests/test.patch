@@ -1,0 +1,120 @@
+diff --git a/tools/crates/dandegate/tests/scenarios.rs b/tools/crates/dandegate/tests/scenarios.rs
+index 168c307..2add315 100644
+--- a/tools/crates/dandegate/tests/scenarios.rs
++++ b/tools/crates/dandegate/tests/scenarios.rs
+@@ -19,6 +19,8 @@
+ mod comparisons;
+ #[path = "scenarios/durable.rs"]
+ mod durable;
++#[path = "scenarios/evaluation.rs"]
++mod evaluation;
+ #[path = "scenarios/host.rs"]
+ mod host;
+ #[path = "scenarios/invocation.rs"]
+diff --git a/tools/crates/dandegate/tests/scenarios/evaluation.rs b/tools/crates/dandegate/tests/scenarios/evaluation.rs
+new file mode 100644
+index 0000000..1b6e6f7
+--- /dev/null
++++ b/tools/crates/dandegate/tests/scenarios/evaluation.rs
+@@ -0,0 +1,101 @@
++//! Repository paths that `dandegate.toml` names select changes by their literal names: a file only itself, a folder
++//! everything below it, whatever characters the name holds.
++
++use crate::invocation::PROJECT;
++use crate::support::Fixture;
++
++/// A measuring-code file or folder named in `[reports.measures]`, the files around it, and the commits of a change to
++/// a look-alike, then to the named path.
++fn measuring_code(name: &str, code: &str, files: &[&str], look_alike: &str, named: &str) -> (Fixture, String, String) {
++    let fixture = Fixture::new(name);
++    fixture.write("dandegate.toml", &format!("[reports.measures]\ncode = [\"{code}\"]\n{PROJECT}"));
++    fixture.write("fixture/visual/clips.log", "");
++    for file in files {
++        fixture.write(file, "1\n");
++    }
++    let before = fixture.commit("before");
++    fixture.write(look_alike, "2\n");
++    let look_alike = fixture.commit("look-alike");
++    fixture.write(named, "2\n");
++    fixture.commit("named");
++    (fixture, before, look_alike)
++}
++
++#[test]
++fn a_file_with_brackets_in_its_name_is_selected_by_its_own_change_and_never_by_a_sibling() {
++    let (fixture, before, sibling) = measuring_code(
++        "brackets",
++        "probes/check[1].sh",
++        &["probes/check[1].sh", "probes/check1.sh"],
++        "probes/check1.sh",
++        "probes/check[1].sh",
++    );
++    let quiet = fixture.run("quiet", &["--before", &before, "--after", &sibling]);
++    assert_eq!(quiet.printed("DANDEGATE-MEASURE-CODE"), Vec::<String>::new());
++    let warned = fixture.run("warned", &["--before", &sibling]);
++    assert_eq!(warned.printed("DANDEGATE-MEASURE-CODE"), ["probes/check[1].sh"]);
++}
++
++#[test]
++fn a_file_with_a_wildcard_in_its_name_is_selected_by_its_own_change_and_never_by_a_sibling() {
++    let (fixture, before, sibling) = measuring_code(
++        "wildcard",
++        "probes/run*.sh",
++        &["probes/run*.sh", "probes/run-all.sh"],
++        "probes/run-all.sh",
++        "probes/run*.sh",
++    );
++    let quiet = fixture.run("quiet", &["--before", &before, "--after", &sibling]);
++    assert_eq!(quiet.printed("DANDEGATE-MEASURE-CODE"), Vec::<String>::new());
++    let warned = fixture.run("warned", &["--before", &sibling]);
++    assert_eq!(warned.printed("DANDEGATE-MEASURE-CODE"), ["probes/run*.sh"]);
++}
++
++#[test]
++fn a_folder_with_brackets_in_its_name_selects_the_changes_below_it_and_never_those_in_a_sibling() {
++    let (fixture, before, sibling) = measuring_code(
++        "folder",
++        "probes[2]/",
++        &["probes[2]/deep/measure.sh", "probes2/deep/measure.sh"],
++        "probes2/deep/measure.sh",
++        "probes[2]/deep/measure.sh",
++    );
++    let quiet = fixture.run("quiet", &["--before", &before, "--after", &sibling]);
++    assert_eq!(quiet.printed("DANDEGATE-MEASURE-CODE"), Vec::<String>::new());
++    let warned = fixture.run("warned", &["--before", &sibling]);
++    assert_eq!(warned.printed("DANDEGATE-MEASURE-CODE"), ["probes[2]/deep/measure.sh"]);
++}
++
++/// The stand-in mutation report, which records that it ran.
++const MUTANTS: &str = "#!/bin/sh\nprintf 'mutants %s\\n' \"$*\" >> \"$EVENTS/events\"\necho \"caught: 0 missed: 0\"\n";
++
++#[test]
++fn a_workspace_with_a_wildcard_in_its_folder_name_has_its_rust_changed_only_by_changes_below_it() {
++    let fixture = Fixture::new("workspace");
++    fixture.tool("rust-mutants", MUTANTS);
++    fixture.tool("rust-scans", "#!/bin/sh\necho 'seconds: 0.1'\n");
++    fixture.write("dandegate.toml", "[project.rust]\nworkspace = \"rust*/\"\n");
++    fixture.write("rust*/Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]\nresolver = \"3\"\n");
++    fixture.write(
++        "rust*/crates/one/Cargo.toml",
++        "[package]\nname = \"one\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
++    );
++    for file in ["rust*/crates/one/src/lib.rs", "rust-old/src/lib.rs"] {
++        fixture.write(file, "pub fn f() {}\n");
++    }
++    let before = fixture.commit("before");
++    fixture.write("rust-old/src/lib.rs", "pub fn g() {}\n");
++    let sibling = fixture.commit("sibling");
++    fixture.write("rust*/crates/one/src/lib.rs", "pub fn g() {}\n");
++    fixture.commit("named");
++
++    let quiet = fixture.run("quiet", &["--before", &before, "--after", &sibling]);
++    assert!(
++        quiet
++            .page()
++            .contains("<td>both</td><td>mutants</td><td>not run: no Rust differs between the revisions</td>")
++    );
++    assert!(!fixture.events().iter().any(|event| event.starts_with("mutants")));
++    fixture.run("changed", &["--before", &sibling]);
++    assert!(fixture.events().iter().any(|event| event.starts_with("mutants")));
++}

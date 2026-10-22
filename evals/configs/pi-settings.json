@@ -1,0 +1,5 @@
+{
+  "compaction": { "enabled": false },
+  "cacheWarming": "off",
+  "retry": { "enabled": true, "maxRetries": 3, "provider": { "maxRetries": 0 } }
+}

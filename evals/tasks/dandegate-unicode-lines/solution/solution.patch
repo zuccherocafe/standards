@@ -1,0 +1,50 @@
+diff --git a/tools/rust/crates/dandegate/src/rust/lines.rs b/tools/rust/crates/dandegate/src/rust/lines.rs
+index c2dfc1cd..264f1578 100644
+--- a/tools/rust/crates/dandegate/src/rust/lines.rs
++++ b/tools/rust/crates/dandegate/src/rust/lines.rs
+@@ -28,7 +28,8 @@ fn counted(text: &str) -> u64 {
+     text.bytes().filter(|&byte| byte == b'\n').count() as u64
+ }
+ 
+-/// Where the comment or literal starting at byte `start` ends, or `start` when none starts there.
++/// Where the comment or literal starting at byte `start`, a character boundary, ends, or `start` when none starts there.
++/// The end is a character boundary too.
+ fn literal_end(text: &str, start: usize) -> usize {
+     let bytes = text.as_bytes();
+     let rest = &text[start..];
+@@ -45,7 +46,7 @@ fn literal_end(text: &str, start: usize) -> usize {
+                 depth -= 1;
+                 index += 2;
+             } else {
+-                index += 1;
++                index += char_length(text, index);
+             }
+         }
+         return index;
+@@ -56,13 +57,25 @@ fn literal_end(text: &str, start: usize) -> usize {
+     if rest.starts_with('"') || rest.starts_with("b\"") {
+         let mut index = start + rest.find('"').map_or(0, |quote| quote + 1);
+         while index < text.len() && bytes[index] != b'"' {
+-            index += if bytes[index] == b'\\' { 2 } else { 1 };
++            if bytes[index] == b'\\' {
++                index += 1;
++                if index == text.len() {
++                    break;
++                }
++            }
++            index += char_length(text, index);
+         }
+         return (index + 1).min(text.len());
+     }
+     start
+ }
+ 
++/// The length in bytes of the character starting at byte `index`, so every position the reader moves to is a character
++/// boundary.
++fn char_length(text: &str, index: usize) -> usize {
++    text[index..].chars().next().map_or(1, char::len_utf8)
++}
++
+ /// Where a raw string `r#"…"#` (or `br`) starting at `start` ends.
+ fn raw_string_end(text: &str, start: usize) -> Option<usize> {
+     let rest = text[start..].strip_prefix('b').unwrap_or(&text[start..]);

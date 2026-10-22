@@ -1,0 +1,92 @@
+diff --git a/tools/rust/crates/dandegate/tests/scenarios.rs b/tools/rust/crates/dandegate/tests/scenarios.rs
+index c232a21..b9abc7b 100644
+--- a/tools/rust/crates/dandegate/tests/scenarios.rs
++++ b/tools/rust/crates/dandegate/tests/scenarios.rs
+@@ -18,6 +18,8 @@
+ mod comparisons;
+ #[path = "scenarios/durable.rs"]
+ mod durable;
++#[path = "scenarios/evaluation.rs"]
++mod evaluation;
+ #[path = "scenarios/invocation.rs"]
+ mod invocation;
+ 
+diff --git a/tools/rust/crates/dandegate/tests/scenarios/evaluation.rs b/tools/rust/crates/dandegate/tests/scenarios/evaluation.rs
+new file mode 100644
+index 0000000..c887fe7
+--- /dev/null
++++ b/tools/rust/crates/dandegate/tests/scenarios/evaluation.rs
+@@ -0,0 +1,73 @@
++//! Line counts of a workspace whose comments and literals hold characters of more than one byte, which are counted
++//! like any others: every comment and literal is blanked whole before braces are read.
++
++use crate::support::Fixture;
++
++/// The words crate before the change: its production lines, then a test module whose comment holds a brace.
++const WORDS_BEFORE: &str = "/* café */
++/** Ünïcödé, documented */
++pub fn greet() -> &'static str {
++    /* nested /* é { */ still a comment } */
++    \"héllo ✓\"
++}
++
++#[cfg(test)]
++mod tests {
++    /* ✓ a brace in a comment: } */
++    #[test]
++    fn greets() {
++        assert_eq!(super::greet(), \"héllo ✓\");
++    }
++}
++";
++
++/// The section a step wrote, from the page.
++fn section(page: &str, title: &str) -> String {
++    let start = page
++        .find(&format!("<h3>{title}</h3>"))
++        .expect("the page has the step's section");
++    let rest = &page[start..];
++    let pre = rest.find("<pre>").expect("the section's text") + 5;
++    rest[pre..rest.find("</pre>").expect("its end")].to_owned()
++}
++
++#[test]
++fn comments_and_literals_holding_characters_of_several_bytes_are_counted_like_any_other_text() {
++    let fixture = Fixture::new("unicode");
++    fixture.tool("cargo", "#!/bin/sh\nexec \"$CARGO\" \"$@\"\n");
++    fixture.tool("rust-scans", "#!/bin/sh\necho 'seconds: 0.100'\n");
++    fixture.tool(
++        "rust-mutants",
++        "#!/bin/sh\necho 'caught: 0 missed: 0 timeout: 0 unviable: 0'\n",
++    );
++    fixture.write(
++        "Cargo.toml",
++        "[workspace]\nmembers = [\"crates/*\"]\nresolver = \"3\"\n",
++    );
++    for name in ["words", "plain"] {
++        fixture.write(
++            &format!("crates/{name}/Cargo.toml"),
++            &format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"),
++        );
++    }
++    fixture.write("crates/plain/src/lib.rs", "pub fn f() {}\n");
++    fixture.write("crates/words/src/lib.rs", WORDS_BEFORE);
++    let before = fixture.commit("before");
++    fixture.write(
++        "crates/words/src/lib.rs",
++        &format!("{WORDS_BEFORE}\npub fn after() {{}}\n"),
++    );
++    fixture.commit("after");
++
++    let run = fixture.run("out", &["--before", &before]);
++    // words: the seven lines before `#[cfg(test)]`, the blank one included, are production, and the module's eight
++    // are tests; after, a blank line and a function follow the module. plain has one production line.
++    let lines = section(&run.page(), "lines (both)");
++    for row in [
++        "| words | 7 → 9 (+2) | 8 → 8 |",
++        "| plain | 1 → 1 | 0 → 0 |",
++        "| total | 8 → 10 (+2) | 8 → 8 |",
++    ] {
++        assert!(lines.contains(row), "{row} in {lines}");
++    }
++}

@@ -1,0 +1,12 @@
+diff --git a/tools/crates/design-read/src/markdown.rs b/tools/crates/design-read/src/markdown.rs
+index 3587940..bab97dd 100644
+--- a/tools/crates/design-read/src/markdown.rs
++++ b/tools/crates/design-read/src/markdown.rs
+@@ -55,6 +55,7 @@ impl<'a> Sections<'a> {
+                 lead.push(line);
+             }
+         }
++        sections.clear();
+         Self { lead, sections }
+     }
+ 

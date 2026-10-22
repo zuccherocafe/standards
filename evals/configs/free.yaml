@@ -1,0 +1,15 @@
+# The free checks: the nop agent and the reference solution on every task, one trial at a time. Neither calls a model.
+jobs_dir: ../.cache/evals/jobs
+n_attempts: 1
+n_concurrent_trials: 1
+retry:
+  max_retries: 0
+environment:
+  type: podman
+tasks:
+  - path: tasks/dandegate-literal-paths
+  - path: tasks/design-read-fenced-code
+  - path: tasks/dandegate-unicode-lines
+agents:
+  - name: nop
+  - name: oracle

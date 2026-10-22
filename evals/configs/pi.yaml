@@ -1,0 +1,36 @@
+# A paid run: pi through OpenRouter on every task, one trial at a time, with no automatic trial retry. Layer
+# configs/treatment.yaml after this file for the treatment, so both conditions of a comparison run from this file.
+# Give the attempts and the job's name on the command line; Harbor's -m does not replace the model below.
+jobs_dir: ../.cache/evals/jobs
+n_attempts: 1
+n_concurrent_trials: 1
+retry:
+  max_retries: 0
+environment:
+  type: podman
+  mounts:
+    # pi's user settings, read-only, the same in both conditions. Compaction and cache warming are off, since pi
+    # records neither request with a response id, so a trial that fills the model's context ends there. pi's own
+    # retry of a failed request stays on, at most 3 times, and its provider-level retry off.
+    - type: bind
+      source: ../../../configs/pi-settings.json
+      target: /root/.pi/agent/settings.json
+      read_only: true
+tasks:
+  - path: tasks/dandegate-literal-paths
+  - path: tasks/design-read-fenced-code
+  - path: tasks/dandegate-unicode-lines
+agents:
+  - name: pi
+    model_name: openrouter/deepseek/deepseek-v4.1-flash-1017
+    override_setup_timeout_sec: 900
+    kwargs:
+      version: "1.4.0"
+      thinking: high
+      max_turns: 80
+    env:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      # Keep pi to its bundled model catalogue and prices, and off every host but the model provider's.
+      PI_OFFLINE: "1"
+      PI_SKIP_VERSION_CHECK: "1"
+      PI_TELEMETRY: "0"

@@ -1,0 +1,55 @@
+schema_version = "1.3"
+artifacts = ["/var/tmp/model.patch", "/var/tmp/agent-identity.txt"]
+
+[task]
+name = "standards/dandegate-literal-paths"
+description = "dandegate reads the repository paths dandegate.toml names literally, never as git patterns."
+authors = []
+keywords = ["rust", "review-finding"]
+
+[metadata]
+source_repository = "https://github.com/zuccherocafe/standards"
+# The starting tree is the reviewed revision's tools/, built from this public base and environment/start.patch.
+source_base = "ec898d345537cdcaaa1d1e1c626faba52bbffe0c"
+source_revision = "66a74ee4cf2412fc3b85c7f1e0b75e2a00604d6c"
+source_tree = "7bd30f006220d9c56d8698e171a3ef3baf3e52b1"
+# The landed revision whose correction solution/solution.patch extracts.
+solution_revision = "7907fd581e44703d17849e47f9c4b17584a48460"
+# The commit the image makes of the starting tree; the agent's change is the difference from it.
+starting_commit = "dd2169bdf73000dcfac5d594bf9321a82a1a41b1"
+
+[environment]
+# The model provider only, from start to teardown, so no phase that follows the agent's run, such as collecting its
+# change, reopens the network. Harbor's pi agent downloads Node and pi during setup, which this policy refuses.
+network_mode = "allowlist"
+allowed_hosts = ["openrouter.ai"]
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 6144
+storage_mb = 10240
+
+[agent]
+timeout_sec = 3600.0
+network_mode = "allowlist"
+allowed_hosts = ["openrouter.ai"]
+
+[verifier]
+timeout_sec = 1800.0
+environment_mode = "separate"
+
+# The agent's change, captured in its own container before it stops, is all the verifier receives.
+[[verifier.collect]]
+command = "cd /app && git add -A && git diff --cached --binary dd2169bdf73000dcfac5d594bf9321a82a1a41b1 > /var/tmp/model.patch"
+timeout_sec = 120.0
+
+# What the agent ran on: Harbor's pi agent installs Node, npm and pi afresh in every trial.
+[[verifier.collect]]
+command = '. "$HOME/.nvm/nvm.sh" 2>/dev/null; { echo "node $(node --version 2>&1)"; echo "npm $(npm --version 2>&1)"; echo "pi $(pi --version 2>&1 | tail -n 1)"; npm ls -g --all --json 2>&1; } > /var/tmp/agent-identity.txt'
+timeout_sec = 120.0
+
+[verifier.environment]
+network_mode = "no-network"
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 6144
+storage_mb = 10240
