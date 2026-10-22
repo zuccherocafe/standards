@@ -11,35 +11,62 @@
     standards.url = "github:zuccherocafe/standards";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, standards }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+      standards,
+    }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
         overlays = [ rust-overlay.overlays.default ];
       };
-      lib = pkgs.lib;
+      # deadnix: skip, a new pin starts from `lib.fakeHash`.
+      inherit (pkgs) lib;
 
       rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
       # A cargo tool from crates.io at an exact version, built with the lockfile it was published with.
-      crate = { pname, version, hash, cargoHash, nativeBuildInputs ? [ ], buildInputs ? [ ] }:
+      # deadnix: skip, for the project's own pins.
+      crate =
+        {
+          pname,
+          version,
+          hash,
+          cargoHash,
+          nativeBuildInputs ? [ ],
+          buildInputs ? [ ],
+        }:
         pkgs.rustPlatform.buildRustPackage {
-          inherit pname version cargoHash nativeBuildInputs buildInputs;
+          inherit
+            pname
+            version
+            cargoHash
+            nativeBuildInputs
+            buildInputs
+            ;
           src = pkgs.fetchCrate { inherit pname version hash; };
           doCheck = false;
         };
 
       # A published binary installed unchanged, so it loads the host's graphics, audio and GPU drivers.
-      official = { install, ... }@args:
-        pkgs.stdenvNoCC.mkDerivation (builtins.removeAttrs args [ "install" ] // {
-          nativeBuildInputs = [ pkgs.unzip ];
-          dontConfigure = true;
-          dontBuild = true;
-          dontFixup = true;
-          sourceRoot = ".";
-          installPhase = install;
-        });
+      # deadnix: skip, for the project's own pins.
+      official =
+        { install, ... }@args:
+        pkgs.stdenvNoCC.mkDerivation (
+          builtins.removeAttrs args [ "install" ]
+          // {
+            nativeBuildInputs = [ pkgs.unzip ];
+            dontConfigure = true;
+            dontBuild = true;
+            dontFixup = true;
+            sourceRoot = ".";
+            installPhase = install;
+          }
+        );
 
       rustScans = standards.packages.${system}.rust-scans;
       gdscriptScans = standards.packages.${system}.gdscript-scans;
@@ -47,9 +74,17 @@
       dandegate = standards.packages.${system}.dandegate;
       pinAge = standards.packages.${system}.pin-age;
       designRead = standards.packages.${system}.design-read;
+      nixLint = standards.packages.${system}.nix-lint;
 
     in
     {
+      checks.${system}.nix-lint = pkgs.runCommand "nix-lint" { } ''
+        ${nixLint}/bin/nix-lint ${self}
+        touch $out
+      '';
+
+      formatter.${system} = pkgs.nixfmt-tree;
+
       devShells.${system}.default = pkgs.mkShell {
         packages = [
           rust

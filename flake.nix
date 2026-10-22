@@ -9,7 +9,12 @@
     };
   };
 
-  outputs = { self, nixpkgs, rust-overlay }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+    }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
@@ -18,21 +23,33 @@
       };
 
       rust = pkgs.rust-bin.fromRustupToolchainFile ./tools/rust-toolchain.toml;
-      rustPlatform = pkgs.makeRustPlatform { cargo = rust; rustc = rust; };
+      rustPlatform = pkgs.makeRustPlatform {
+        cargo = rust;
+        rustc = rust;
+      };
 
       # A binary of the workspace, built from this repository's own source and lockfile with the pinned toolchain.
-      workspaceTool = pname: rustPlatform.buildRustPackage {
-        inherit pname;
-        inherit ((builtins.fromTOML (builtins.readFile ./tools/Cargo.toml)).workspace.package) version;
-        src = pkgs.lib.fileset.toSource {
-          root = ./tools;
-          fileset = pkgs.lib.fileset.unions [ ./tools/Cargo.toml ./tools/Cargo.lock ./tools/crates ];
+      workspaceTool =
+        pname:
+        rustPlatform.buildRustPackage {
+          inherit pname;
+          inherit ((builtins.fromTOML (builtins.readFile ./tools/Cargo.toml)).workspace.package) version;
+          src = pkgs.lib.fileset.toSource {
+            root = ./tools;
+            fileset = pkgs.lib.fileset.unions [
+              ./tools/Cargo.toml
+              ./tools/Cargo.lock
+              ./tools/crates
+            ];
+          };
+          cargoLock.lockFile = ./tools/Cargo.lock;
+          cargoBuildFlags = [
+            "--package"
+            pname
+          ];
+          # The checks run its tests.
+          doCheck = false;
         };
-        cargoLock.lockFile = ./tools/Cargo.lock;
-        cargoBuildFlags = [ "--package" pname ];
-        # The checks run its tests.
-        doCheck = false;
-      };
 
       # Both run what they need from the PATH of the shell they are used in: rust-scans runs `cargo metadata`;
       # dandegate runs `git` and `nix develop`.
@@ -54,7 +71,13 @@
 
       designRead = workspaceTool "design-read";
 
-      crate = { pname, version, hash, cargoHash }:
+      crate =
+        {
+          pname,
+          version,
+          hash,
+          cargoHash,
+        }:
         pkgs.rustPlatform.buildRustPackage {
           inherit pname version cargoHash;
           src = pkgs.fetchCrate { inherit pname version hash; };
@@ -68,12 +91,59 @@
         cargoHash = "sha256-ix/aR9SfYw14w930IhOocr8eU+895zuMxkSvtD7WaD0=";
       };
 
+      # Lints the Nix files of the folder given, the current one by default. In a git work tree it lints the tracked and
+      # unignored ones and refuses any folder but the root, so a run from a subfolder cannot pass without the rest.
+      # Outside one, as in a flake's source in the store, which holds only the files git tracks, it lints every .nix
+      # file under the folder. A binding deadnix flags that the code needs takes `# deadnix: skip, <reason>` on the
+      # line above it.
+      nixLint = pkgs.writeShellApplication {
+        name = "nix-lint";
+        runtimeInputs = [
+          pkgs.nixfmt
+          pkgs.statix
+          pkgs.deadnix
+          pkgs.git
+          pkgs.findutils
+        ];
+        text = ''
+          cd "''${1:-.}"
+          files=()
+          if top=$(git rev-parse --show-toplevel 2>/dev/null); then
+            if [ "$top" != "$(pwd -P)" ]; then
+              echo "nix-lint: run it from the root of the git work tree, $top, not from $PWD" >&2
+              exit 1
+            fi
+            # jj does not add a new file to git's index, so untracked files count, and ignored ones do not.
+            while IFS= read -r -d "" file; do
+              if [ -e "$file" ]; then files+=("$file"); fi
+            done < <(git ls-files -z --cached --others --exclude-standard -- '*.nix')
+          else
+            while IFS= read -r -d "" file; do files+=("$file"); done < <(find . -name '*.nix' -type f -print0)
+          fi
+          if [ "''${#files[@]}" -eq 0 ]; then
+            echo "nix-lint: no .nix file under $PWD" >&2
+            exit 1
+          fi
+          failed=0
+          nixfmt --check -- "''${files[@]}" || failed=1
+          for file in "''${files[@]}"; do statix check -- "$file" || failed=1; done
+          deadnix --fail -- "''${files[@]}" || failed=1
+          exit "$failed"
+        '';
+      };
+
       check = pkgs.writeShellApplication {
         name = "check";
         # Each check is a function `step` calls by name, which ShellCheck cannot follow.
         excludeShellChecks = [ "SC2329" ];
         runtimeInputs = [
-          rust pinAge pkgs.lychee pkgs.git pkgs.findutils pkgs.coreutils
+          rust
+          pinAge
+          nixLint
+          pkgs.lychee
+          pkgs.git
+          pkgs.findutils
+          pkgs.coreutils
         ];
         text = ''
           cd "$(git rev-parse --show-toplevel)"
@@ -95,6 +165,7 @@
           }
           links() { files '*.md' | xargs -0 lychee --offline --include-fragments --no-progress; }
           step links links
+          step "nix lint" nix-lint
           step "pin age" pin-age --toolchain tools/rust-toolchain.toml \
             --toolchain templates/rust/rust-toolchain.toml --lock flake.lock
           step "rust format" cargo fmt --manifest-path tools/Cargo.toml --check
@@ -111,8 +182,16 @@
         rust-mutants = rustMutants;
         pin-age = pinAge;
         design-read = designRead;
+        nix-lint = nixLint;
         inherit dandegate;
       };
+
+      checks.${system}.nix-lint = pkgs.runCommand "nix-lint" { } ''
+        ${nixLint}/bin/nix-lint ${self}
+        touch $out
+      '';
+
+      formatter.${system} = pkgs.nixfmt-tree;
 
       devShells.${system}.default = pkgs.mkShell {
         packages = [
@@ -126,6 +205,7 @@
           rustMutants
           pinAge
           designRead
+          nixLint
           pkgs.jujutsu
         ];
       };
