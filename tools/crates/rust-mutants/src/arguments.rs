@@ -46,8 +46,8 @@ fails nothing.
 
 Run it from inside the repository. Each shard tests its own copy of the repository under `--out`'s `rust-mutants` \
 folder, which the tool empties first. The exit status is 0 when every shard finished, whatever the tests missed, 1 \
-when the run could not finish, and 2 for a malformed argument. Needs `git`, `cargo mutants` and mold's `ld.mold` on \
-PATH, a nightly Cargo, `systemd-run` for the memory cap and `unshare` for the PID namespaces.";
+when the run could not finish, and 2 for a malformed argument. Needs `git`, `cargo-mutants`, a nightly `cargo` and \
+mold's `ld.mold` on PATH, `systemd-run` for the memory cap and `unshare` for the PID namespaces.";
 
 /// A revision as the caller wrote it; git checks it, the tool does not.
 #[derive(Clone, Debug, PartialEq, Eq)]

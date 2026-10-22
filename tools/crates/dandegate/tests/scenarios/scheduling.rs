@@ -39,7 +39,7 @@ event "start helper"
 wait
 "#;
 
-/// A stand-in `cargo mutants` shard: records its number and start time, then holds.
+/// A stand-in cargo-mutants shard: records its number and start time, then holds.
 const SHARD: &str = r#"#!/bin/sh
 shard=$(printf '%s\n' "$@" | sed -n '/^--shard$/{n;p;}' | cut -d / -f 1)
 printf '%s %s\n' $$ "$(cut -d ' ' -f 22 /proc/$$/stat)" > "$EVENTS/shard-$shard"
@@ -250,7 +250,9 @@ fn a_step_out_of_time_is_stopped_with_its_children_while_the_rest_finishes() {
     let fixture = Fixture::new("timeout");
     fixture.write("dandegate/slow.sh", SLOW);
     fixture.write("dandegate/helper.sh", HELPER);
-    fixture.tool("cargo", SHARD);
+    fixture.tool("cargo-mutants", SHARD);
+    // rust-mutants gives cargo-mutants the Cargo on PATH; the stand-in shard never runs it.
+    fixture.tool("cargo", "#!/bin/sh\nexit 1\n");
     let helper = rust_mutants();
     fixture.write(
         "dandegate.toml",

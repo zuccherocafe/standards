@@ -9,6 +9,7 @@
 //! 3. A report run again into the same folder prints only its own mutants and leaves the folder's other contents.
 //! 4. A shard that fails, or an interrupt, ends the run with exit code 1; every shard is stopped and the copies are
 //!    removed.
+//! 5. Without a `cargo` on PATH for cargo-mutants to run, the run is refused before any shard starts.
 
 #[path = "scenarios/support.rs"]
 mod support;
@@ -44,10 +45,15 @@ fn capable(name: &str) -> Fixture {
 fn a_change_is_mutated_in_whole_repository_copies_with_private_targets() {
     let fixture = capable("change");
     let missed = format!("{MISSED}\n");
-    let run = fixture.run(&[("CODE", "2"), ("MISSED", &missed)]);
+    // cargo-mutants is given the Cargo on PATH, as `cargo mutants` gives it, not one the caller set.
+    let run = fixture.run(&[
+        ("CODE", "2"),
+        ("MISSED", &missed),
+        ("CARGO", "/elsewhere/cargo"),
+    ]);
     assert_eq!(run.status(), 0, "{}", run.stderr());
     let work = fixture.work();
-    let mut calls = fixture.lines("cargo");
+    let mut calls = fixture.lines("cargo-mutants");
     calls.sort();
     assert_eq!(calls, ["0", "1"]);
     for index in 0..2 {
@@ -57,14 +63,21 @@ fn a_change_is_mutated_in_whole_repository_copies_with_private_targets() {
             fixture.event(&format!("shard-{index}.folder")).trim_end(),
             folder.to_str().expect("UTF-8")
         );
+        let environment = fixture.lines(&format!("shard-{index}.environment"));
         assert_eq!(
-            fixture.lines(&format!("shard-{index}.environment"))[0],
+            environment[0],
             folder.join("target").to_str().expect("UTF-8")
+        );
+        assert_eq!(
+            environment[2],
+            fixture.bin().join("cargo").to_str().expect("UTF-8")
         );
         let diff = work.join("change.diff");
         let shard = format!("{index}/2");
+        let arguments = fixture.lines(&format!("shard-{index}.arguments"));
+        assert_eq!(arguments[0], "mutants");
         assert_eq!(
-            fixture.lines(&format!("shard-{index}.arguments"))[1..10],
+            arguments[1..10],
             [
                 "--in-diff",
                 diff.to_str().expect("UTF-8"),
@@ -224,7 +237,7 @@ fn each_shard_runs_in_a_capped_scope_with_its_share_of_the_cpus_it_is_given_or_u
     fixture.program("systemd-run", FAILS);
     let run = fixture.run(&[]);
     assert_eq!(run.status(), 0, "{}", run.stderr());
-    assert_eq!(fixture.lines("cargo").len(), 2);
+    assert_eq!(fixture.lines("cargo-mutants").len(), 2);
     assert!(
         run.printed().contains(&NO_SCOPE.to_owned()),
         "{}",
@@ -304,6 +317,19 @@ fn a_failure_after_the_shards_started_stops_them_and_removes_the_copies() {
         );
         assert!(!fixture.work().join(format!("copy-{index}")).exists());
     }
+}
+
+#[test]
+fn a_machine_without_cargo_is_refused_before_any_shard_starts() {
+    let fixture = capable("no-cargo");
+    fixture.remove_program("cargo");
+    let run = fixture.run(&[]);
+    assert_eq!(run.status(), 1);
+    assert_eq!(
+        run.stderr(),
+        "rust_mutants: no cargo on PATH for cargo-mutants to run\n"
+    );
+    assert_eq!(fixture.event("cargo-mutants"), "");
 }
 
 #[test]

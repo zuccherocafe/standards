@@ -17,9 +17,11 @@
 //! folder in Cargo's configuration): shards sharing a target folder test each other's builds. The shards run at once
 //! and their lists are merged ([`outcomes`]); the copies are removed afterwards, and on any failure, an interrupt
 //! included, every started shard is stopped first ([`shards`]). The tool owns only `--out`'s `rust-mutants` folder,
-//! emptied at the start so what is printed is this run's. Needs `git`, `cargo mutants` and mold's `ld.mold` on PATH, a
-//! nightly Cargo for the profile's flags and the test harness's options, `systemd-run` for the memory cap and
-//! `unshare` for the PID namespaces.
+//! emptied at the start so what is printed is this run's. Needs `git`, `cargo-mutants` and mold's `ld.mold` on PATH, a
+//! nightly Cargo there for the profile's flags and the test harness's options, `systemd-run` for the memory cap and
+//! `unshare` for the PID namespaces. The tool runs cargo-mutants itself rather than through `cargo mutants`, so Cargo's
+//! home is never searched for it ([`command`]). The standards' flake exports the tool in a wrapper that adds these to
+//! PATH and puts the cargo-mutants the flake pins first, so the report runs that cargo-mutants whatever the shell holds.
 //!
 //! Each shard runs in a systemd user scope holding an equal part of a 16 GiB memory cap, without swap, so a mutant
 //! that allocates without end is killed and counted while the run goes on. Where `systemd-run --user` cannot start a
@@ -73,7 +75,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::arguments::{Arguments, Scope};
 use crate::command::{Prepared, Selection, Shard, Work, command};
-use crate::machine::{Machine, Runner};
+use crate::machine::{Machine, Runner, cargo};
 use crate::outcomes::{Outcome, Outcomes, ReadError};
 use crate::repository::{CopyError, Repository, RepositoryError, changed_rust};
 use crate::shards::{Copies, Interrupted, Running, WaitError};
@@ -97,6 +99,9 @@ fn main() -> ExitCode {
 
 /// The whole run: prepare, run the shards, print what they found.
 fn run(arguments: &Arguments) -> Result<(), RunError> {
+    let current = env::current_dir().map_err(RunError::CurrentFolder)?;
+    let cargo =
+        cargo(&env::var_os("PATH").unwrap_or_default(), &current).ok_or(RunError::NoCargo)?;
     let workspace = resolve(&arguments.workspace).map_err(RunError::CurrentFolder)?;
     let out = resolve(&arguments.out).map_err(RunError::CurrentFolder)?;
     let work = Work::under(&out);
@@ -134,7 +139,7 @@ fn run(arguments: &Arguments) -> Result<(), RunError> {
         work,
         selection,
     };
-    let machine = Machine::discover(&workspace);
+    let machine = Machine::discover(&workspace, cargo);
     if !machine.capped {
         say(format_args!(
             "{LEAD}systemd-run --user cannot start a scope here, so the shards run without a memory cap"
@@ -312,6 +317,8 @@ impl fmt::Display for Failed {
 enum RunError {
     #[error("could not read the current folder")]
     CurrentFolder(#[source] io::Error),
+    #[error("no cargo on PATH for cargo-mutants to run")]
+    NoCargo,
     #[error("could not make {}", .path.display())]
     Make {
         path: PathBuf,

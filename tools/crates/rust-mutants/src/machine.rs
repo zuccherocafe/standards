@@ -1,14 +1,20 @@
-//! The machine's facts, discovered once before any command is built: how many CPUs the tool may run on, whether a
-//! memory-capped user scope can be started, and whether each test binary can run in a PID namespace of its own.
+//! The machine's facts, discovered once before any command is built: the Cargo cargo-mutants runs, how many CPUs the
+//! tool may run on, whether a memory-capped user scope can be started, and whether each test binary can run in a PID
+//! namespace of its own.
+//!
+//! The Cargo is the first `cargo` on PATH, the one `cargo mutants` would have run, found as a program search finds it
+//! ([`cargo`]). The run is refused without one.
 //!
 //! Each fact is found by trying it. A scope is available when `systemd-run --user --scope` runs `true`. Test binaries
 //! are contained when rustc names its host, whose Cargo runner variable sets the runner, and `unshare` runs `true` in a
 //! new PID namespace. A probe that cannot start counts as unavailable, and the run goes on without that fact.
 
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::num::{NonZeroU32, NonZeroUsize};
-use std::path::Path;
+use std::os::unix::fs::PermissionsExt as _;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
 
@@ -29,6 +35,8 @@ const NAMESPACE: [&str; 7] = [
 /// What the machine offers the shards.
 #[derive(Clone, Debug)]
 pub(crate) struct Machine {
+    /// The Cargo cargo-mutants runs, given to it as `CARGO`, as Cargo gives each of its subcommands.
+    pub(crate) cargo: PathBuf,
     /// The CPUs this process may run on, shared among the shards as jobserver tasks.
     pub(crate) cpus: NonZeroUsize,
     /// Whether each shard runs in a memory-capped user scope.
@@ -50,8 +58,9 @@ pub(crate) enum Runner {
 }
 
 impl Machine {
-    /// The facts, found by trying each; rustc runs in `workspace`, so the workspace's toolchain names the host.
-    pub(crate) fn discover(workspace: &Path) -> Self {
+    /// The facts, found by trying each, with the Cargo already found; rustc runs in `workspace`, so the workspace's
+    /// toolchain names the host.
+    pub(crate) fn discover(workspace: &Path, cargo: PathBuf) -> Self {
         let mut scoped = scope(NonZeroU32::MIN);
         scoped.push("true".into());
         let capped = runs(&scoped);
@@ -66,6 +75,7 @@ impl Machine {
                     Runner::Namespaced { host, existing }
                 });
         Self {
+            cargo,
             cpus: cpus(),
             capped,
             runner,
@@ -88,6 +98,18 @@ impl Runner {
             }
         }
     }
+}
+
+/// The first `cargo` in the folders of `path`, a PATH value, that the caller may run, as a program search finds it, with
+/// a relative folder taken from `current`; none when no folder holds one. Its links are kept, so a rustup proxy stays
+/// one and picks its toolchain as it would have.
+pub(crate) fn cargo(path: &OsStr, current: &Path) -> Option<PathBuf> {
+    env::split_paths(path)
+        .map(|folder| current.join(folder).join("cargo"))
+        .find(|file| {
+            fs::metadata(file)
+                .is_ok_and(|found| found.is_file() && found.permissions().mode() & 0o111 != 0)
+        })
 }
 
 /// Cargo's test runner variable for the target `triple`.
@@ -152,6 +174,30 @@ mod tests {
             stdout: printed.as_bytes().to_vec(),
             stderr: Vec::new(),
         }
+    }
+
+    #[test]
+    fn cargo_is_the_first_one_on_path_that_runs() {
+        let root = crate::scratch("cargo-on-path");
+        for (folder, mode) in [("skipped", 0o644), ("first", 0o755), ("second", 0o755)] {
+            let file = root.join(folder).join("cargo");
+            fs::create_dir(root.join(folder)).expect("the scratch folder is writable");
+            fs::write(&file, "").expect("the scratch folder is writable");
+            fs::set_permissions(&file, fs::Permissions::from_mode(mode)).expect("the file is ours");
+        }
+        fs::create_dir(root.join("empty")).expect("the scratch folder is writable");
+        let path = env::join_paths(
+            ["empty", "skipped", "first", "second"].map(|folder| root.join(folder)),
+        )
+        .expect("the folders join");
+        assert_eq!(cargo(&path, Path::new("/")), Some(root.join("first/cargo")));
+        let relative = env::join_paths(["skipped", "second"]).expect("the folders join");
+        assert_eq!(cargo(&relative, &root), Some(root.join("second/cargo")));
+        assert_eq!(
+            cargo(&root.join("empty").into_os_string(), Path::new("/")),
+            None
+        );
+        fs::remove_dir_all(root).expect("the scratch folder is ours");
     }
 
     #[test]

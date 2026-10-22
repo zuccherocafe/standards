@@ -20,16 +20,17 @@ use rustix::process::{Pid, Signal, kill_process};
 /// The system tools the binary and the stand-ins run, linked into every fixture's `bin/`.
 const SYSTEM_TOOLS: [&str; 8] = ["sh", "git", "mkdir", "cat", "sed", "cut", "sleep", "true"];
 
-/// A stand-in `cargo mutants` shard. It adds its shard's number to the calls in `cargo`, and records its arguments, its
-/// folder, its target and runner variables, and what its copy of the repository holds, under its shard's number. With
-/// `HOLD` set it records its process and holds; otherwise it writes `MISSED` as its missed list and exits with `CODE`.
-pub(crate) const CARGO: &str = r#"#!/bin/sh
+/// A stand-in cargo-mutants shard. It adds its shard's number to the calls in `cargo-mutants`, and records its
+/// arguments, its folder, its target, runner and Cargo variables, and what its copy of the repository holds, under its
+/// shard's number. With `HOLD` set it records its process and holds; otherwise it writes `MISSED` as its missed list
+/// and exits with `CODE`.
+pub(crate) const CARGO_MUTANTS: &str = r#"#!/bin/sh
 shard=$(printf '%s\n' "$@" | sed -n '/^--shard$/{n;p;}' | cut -d / -f 1)
-printf '%s\n' "$shard" >> "$EVENTS/cargo"
+printf '%s\n' "$shard" >> "$EVENTS/cargo-mutants"
 output=$(printf '%s\n' "$@" | sed -n '/^--output$/{n;p;}')
 printf '%s\n' "$@" > "$EVENTS/shard-$shard.arguments"
 pwd -P > "$EVENTS/shard-$shard.folder"
-printf '%s\n' "${CARGO_TARGET_DIR-unset}" "${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER-unset}" \
+printf '%s\n' "${CARGO_TARGET_DIR-unset}" "${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER-unset}" "${CARGO-unset}" \
     > "$EVENTS/shard-$shard.environment"
 if [ -f ../shared/table.json ]; then echo shared; else echo missing; fi > "$EVENTS/shard-$shard.copy"
 cat crates/core/src/lib.rs >> "$EVENTS/shard-$shard.copy"
@@ -76,8 +77,8 @@ pub(crate) struct Run {
 }
 
 impl Fixture {
-    /// The repository, `bin/` with the system tools and the stand-ins for `cargo` and `rustc`, and an empty events
-    /// folder. `systemd-run` and `unshare` are each the scenario's to add.
+    /// The repository, `bin/` with the system tools, the stand-ins for cargo-mutants and `rustc`, and a `cargo` the
+    /// stand-in never runs, and an empty events folder. `systemd-run` and `unshare` are each the scenario's to add.
     pub(crate) fn new(name: &str) -> Self {
         // A test binary in a PID namespace of its own has the same process number as one in another, so a folder is
         // taken by making it, never by its name alone.
@@ -109,7 +110,8 @@ impl Fixture {
             std::os::unix::fs::symlink(found, fixture.root.join("bin").join(tool))
                 .expect("bin/ is writable");
         }
-        fixture.program("cargo", CARGO);
+        fixture.program("cargo-mutants", CARGO_MUTANTS);
+        fixture.program("cargo", FAILS);
         fixture.program("rustc", RUSTC);
         fixture.git(&["init", "--quiet"]);
         fixture.git(&["config", "user.name", "Rust Mutants Tests"]);
@@ -123,6 +125,11 @@ impl Fixture {
         fixture.git(&["config", "diff.noprefix", "true"]);
         fixture.write("rust/crates/core/src/lib.rs", "pub fn one() -> u8 { 2 }\n");
         fixture
+    }
+
+    /// The folder holding the stand-ins, the binary's whole PATH.
+    pub(crate) fn bin(&self) -> PathBuf {
+        self.root.join("bin")
     }
 
     pub(crate) fn repo(&self) -> PathBuf {

@@ -71,6 +71,8 @@
       rustScans = standards.packages.${system}.rust-scans;
       gdscriptScans = standards.packages.${system}.gdscript-scans;
       rustMutants = standards.packages.${system}.rust-mutants;
+      # rust-mutants runs this one, and dandegate digests it from the shell.
+      cargoMutants = standards.packages.${system}.cargo-mutants;
       dandegate = standards.packages.${system}.dandegate;
       pinAge = standards.packages.${system}.pin-age;
       designRead = standards.packages.${system}.design-read;
@@ -91,6 +93,7 @@
           rustScans
           gdscriptScans
           rustMutants
+          cargoMutants
           dandegate
           pinAge
           designRead

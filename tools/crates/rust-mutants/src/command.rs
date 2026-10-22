@@ -4,6 +4,10 @@
 //! Every mutant builds with the Cargo profile `mutants`, defined through Cargo's `--config` on cargo-mutants' build,
 //! check and test calls, unless the options after `--` select a profile of their own ([`profile`]). Doctests are
 //! skipped and each test binary stops at its first failure, whatever the profile.
+//!
+//! cargo-mutants runs as its own program with `mutants` as its first argument and `CARGO` naming the machine's Cargo,
+//! as `cargo mutants` would start it, but without Cargo's search for a subcommand, which looks in Cargo's home before
+//! PATH unless PATH lists that folder. The cargo-mutants on PATH runs, whatever Cargo's home holds.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -199,7 +203,7 @@ pub(crate) fn command(
     } else {
         Vec::new()
     };
-    words.extend(["cargo", "mutants"].map(OsString::from));
+    words.extend(["cargo-mutants", "mutants"].map(OsString::from));
     match &prepared.selection {
         Selection::Diff(diff) => {
             words.extend(["--in-diff".into(), diff.into(), "--workspace".into()]);
@@ -234,6 +238,7 @@ pub(crate) fn command(
     let mut command = Command::new(program);
     command
         .args(arguments)
+        .env("CARGO", &machine.cargo)
         .env("CARGO_TARGET_DIR", workspace.join("target"))
         .current_dir(workspace);
     if let Some((name, value)) = machine.runner.variable() {
@@ -280,6 +285,7 @@ mod tests {
 
     fn machine(cpus: usize, capped: bool) -> Machine {
         Machine {
+            cargo: PathBuf::from("/toolchain/bin/cargo"),
             cpus: NonZeroUsize::new(cpus).expect("not zero"),
             capped,
             runner: Runner::Uncontained,
@@ -334,7 +340,7 @@ mod tests {
             "--property",
             "OOMPolicy=continue",
             "--",
-            "cargo",
+            "cargo-mutants",
             "mutants",
             "--in-diff",
             "/report/rust-mutants/change.diff",
@@ -359,10 +365,16 @@ mod tests {
         );
         assert_eq!(
             command.get_envs().collect::<Vec<_>>(),
-            [(
-                OsStr::new("CARGO_TARGET_DIR"),
-                Some(OsStr::new("/report/rust-mutants/copy-1/rust/target"))
-            )]
+            [
+                (
+                    OsStr::new("CARGO"),
+                    Some(OsStr::new("/toolchain/bin/cargo"))
+                ),
+                (
+                    OsStr::new("CARGO_TARGET_DIR"),
+                    Some(OsStr::new("/report/rust-mutants/copy-1/rust/target"))
+                )
+            ]
         );
     }
 
@@ -370,7 +382,7 @@ mod tests {
     fn package_mode_names_the_crate_and_an_uncapped_shard_runs_cargo_mutants_itself() {
         let command = command(&[], &package("core"), shard(0, 3), &machine(2, false));
         let mut expected = vec![
-            "cargo",
+            "cargo-mutants",
             "mutants",
             "--package",
             "core",
@@ -404,7 +416,7 @@ mod tests {
                 &machine(2, false),
             );
             let mut expected = vec![
-                "cargo",
+                "cargo-mutants",
                 "mutants",
                 "--package",
                 "core",
