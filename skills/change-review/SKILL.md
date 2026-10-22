@@ -41,7 +41,7 @@ Number the must-fix findings first, then the should-fix ones. Include the follow
 - A heading with its kind and the concrete failure in one line.
 - The file and line, and what goes wrong.
 - The real input that reaches it, or the stated promise it breaks, and what a person would see. Or, for a should-fix finding, why it is not must-fix. If you can name a real input it affects, it is must-fix.
-- The rule it rests on in `general.md` or the language standard.
+- The most specific rule it rests on in `general.md` or the language standard; a broad rule only when no narrower one covers it ([Review rubric](../../rules/review.md#review-rubric)).
 - The smallest fix and what it costs ([Weigh each fix, then fix the cause](../../rules/general.md#design), [Make invalid states unrepresentable](../../rules/general.md#design), [Parse at the boundary](../../rules/general.md#design)). Add no validation, test, or type the finding does not need.
 
 When the same fault appears in other places, triage each one now. If a real input reaches a site, mark that site must-fix in this change. Otherwise, drop it. Never defer a finding to a later change.
