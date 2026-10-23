@@ -94,13 +94,16 @@
                 harbor = prev.harbor.overrideAttrs {
                   # Harbor's only executable scripts run inside containers, which have /bin/sh and no Nix store.
                   dontPatchShebangs = true;
-                  # The patch's first line says why. A wheel installs unpatched, so the installed module is patched and
-                  # its bytecode compiled again, since Python would load the wheel's without checking it against the
-                  # source. A Harbor whose module no longer takes the patch exactly fails the build.
+                  # Each patch's first line says why. A wheel installs unpatched, so the installed modules are patched
+                  # and their bytecode compiled again, since Python would load the wheel's without checking it against
+                  # the source. A Harbor whose modules no longer take a patch exactly fails the build.
                   postInstall = ''
                     site="$out/${final.python.sitePackages}"
                     patch --directory "$site" --strip 1 --forward --fuzz 0 < ${./evals/harbor/pi-installed.patch}
-                    ${final.python.interpreter} -m compileall -q -f "$site/harbor/agents/installed/pi.py"
+                    patch --directory "$site" --strip 1 --forward --fuzz 0 < ${./evals/harbor/analyze-task-config.patch}
+                    patch --directory "$site" --strip 1 --forward --fuzz 0 < ${./evals/harbor/egress-sidecar.patch}
+                    ${final.python.interpreter} -m compileall -q -f "$site/harbor/agents/installed/pi.py" \
+                      "$site/harbor/analyze/analyzer.py" "$site/harbor/cli/analyze.py"
                   '';
                 };
               }
@@ -111,12 +114,14 @@
         package = evalsPython.harbor;
       };
       # Harbor's own container calls resolve short image names through evals/registries.conf alone, in place of the
-      # host's registries settings, which the rest of the shell and the host keep.
+      # host's registries settings, which the rest of the shell and the host keep. Podman's compose otherwise starts
+      # each command's output with a banner, which Harbor's agents read as the first line of a version.
       harbor =
         pkgs.runCommand "harbor-${evalsPython.harbor.version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; }
           ''
             for program in ${harborApplication}/bin/*; do
-              makeWrapper "$program" "$out/bin/''${program##*/}" --set CONTAINERS_REGISTRIES_CONF ${./evals/registries.conf}
+              makeWrapper "$program" "$out/bin/''${program##*/}" --set CONTAINERS_REGISTRIES_CONF ${./evals/registries.conf} \
+                --set PODMAN_COMPOSE_WARNING_LOGS false
             done
           '';
 

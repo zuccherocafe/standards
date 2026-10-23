@@ -1,0 +1,27 @@
+You are reviewing one change a coding agent made to finish a task. Evaluate the change against the criteria below, and
+provide a short rationale for each.
+
+The review packet is at {trial_path}. Every path below and in the criteria is relative to it. It holds:
+
+- task/instruction.md: what the agent was asked to do.
+- task/tests/: the hidden tests the verifier added after the agent finished (test.patch) and the script that ran them
+  (test.sh). The agent never saw them.
+- start/: the repository as the agent found it, with start/AGENTS.md, the operating instructions the agent was given.
+- change.patch: the agent's whole change to start/, as git diff prints it.
+- verifier/reward.json and verifier/test-stdout.txt: the verifier's stages and output after it applied the change and
+  the hidden tests.
+- standards/: the engineering standards the change is reviewed against, rules/ and the skills/ they link to.
+
+The packet says nothing about who or what made the change, and that is deliberate: judge the change on its own.
+
+Read the instruction, the change and the code it changes before evaluating. Evaluate each criterion one at a time. For
+each criterion, think about the evidence before making your judgment. Reference specific files, hunks or test output in
+your explanations.
+
+Also write a "summary": a 3-5 sentence overview of what the change does, how it addresses the instruction, and its main
+strengths and faults.
+
+Do not modify any files under {trial_path}.
+
+Guidance:
+{criteria_guidance}

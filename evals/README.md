@@ -173,6 +173,63 @@ These totals are not a complete account, even when every row has numbers:
 
 Harbor's own token counts and `cost_usd` are not the source; the design read says why.
 
+## Reviewing each trial's change
+
+A trial's score says whether the change works, not how it is built. A review has an evaluator agent judge each change through Harbor's `harbor analyze`. [`review/rubric.toml`](review/rubric.toml) holds the criteria, what the evaluator reads for each and what passes, and [`review/prompt.txt`](review/prompt.txt) tells the evaluator what its packet holds.
+
+### Blinding
+
+The evaluator must not learn which agent, model or condition made a change, or whether the change is the reference. [`review/blind.sh`](review/blind.sh) copies each trial to review into a packet named by a random id, which also shuffles the order Harbor reviews them in. It keeps the key from id to trial in `key.json` beside the packets, where the evaluator cannot read it, and what it found in `publication.txt`. Everything else a trial holds names its agent, model or condition, or tells the reference from an agent's change, so a packet leaves it out:
+
+- `config.json`, `lock.json` and `result.json`, at the trial's and the job's level, name the agent, its version and model and the condition's mounts, and record the trial's timings, tokens and cost; an oracle trial's agent time is near zero. `blind.sh` reads the trial's `result.json` for the key and the check below.
+- `agent/` holds the agent's own records: `trajectory.json`, pi's sessions and output, and the setup log. pi's system prompt carries the treatment's `AGENTS.md` and its skills, and a treated agent's commands read the bundle, so no edit could make a treated trajectory read as a control one, and the oracle leaves no trajectory at all. The rubric's reward-hacking criterion, Harbor's own, therefore judges from the change and the verifier's output.
+- `artifacts/var/tmp/agent-identity.txt` names pi and its versions, and `artifacts/manifest.json` lists the artifacts.
+- `trial.log` and `job.log` narrate the run with the agent's name. A packet has an empty `trial.log`, and the packets' folder an empty `job.log`, the files by which Harbor recognises a trial and a job.
+- The trial's and the job's folder names carry the task, the job's name and Harbor's trial suffix; a packet's name is its id.
+- The task's `solution/` holds the reference change and `shortcuts/` the wrong answers, so a packet holds only the task's `instruction.md` and `tests/`. Harbor's `analyze` would otherwise copy the whole task folder that `result.json` names.
+- `charges.jsonl`, `attempts.tsv` and `generations/` are the accounting's records of the model's requests.
+- The verifier's output records how long Cargo took, such as `0.52s` or `1m 02s`, which differs from run to run; a packet's copy says `<time>`.
+
+What an agent writes can name it too, so `blind.sh` checks each packet against what the trial's record says identifies it: the model and the parts of its name, the agent's environment variable names, the condition's mounts as full and home-relative paths, and the trial's own name, job and folder, all regardless of case, and the agent's name as a whole word. It checks every path the change leaves, as `git apply` decodes it from Git's quoting, so an empty or binary file's name counts, and every line the change adds. A change that names the trial there, or that holds a binary change, whose bytes it cannot check, is not published: its packet is removed, `publication.txt` names the trial and what it found, and `blind.sh` exits 1 once every other trial is done, leaving the trial itself as it was. A name in the verifier's output, which repeats the change and the tests, is replaced by `[withheld]` by the same two matches, and the lines it touched are counted in `publication.txt`. The check cannot see what the record does not name: an agent's name shorter than three letters, such as pi, is too common a word to match alone, and a change that describes its maker in other words, or writes in a style its maker is known by, passes it.
+
+### The reference control
+
+The reference is analysed the same way, from the oracle trials of a free-check run, as a control: it shows what the evaluator says of a reference production fix that passes the task verifier. The reference omits its tests by design, so it is no baseline for the regression-test criterion; [the design read](../docs/design-reads/evals.md#disagreements) says why, and `results.json` marks that baseline unavailable while keeping the reference's own outcomes. Each trial is analysed twice (`-k 2`), so `results.json` shows how often the evaluator gives one change two outcomes. [`review/results.sh`](review/results.sh) refuses a key and an analysis that do not describe the same packets, each the number of times the analysis asked.
+
+Agreement compares the attempts within this run. It establishes neither correctness nor reproducibility across runs; the same reviewer settings can yield different verdicts. Comparisons must also account for rubric and prompt changes.
+
+### The reviewer
+
+The reviewer is a setting. [`review/codex/review.sh`](review/codex/review.sh) runs Harbor's Codex agent on a Codex login, which Harbor copies into the evaluator's container for the run; a review spends the login's subscription, not an OpenRouter key. Any Harbor agent and model can replace Codex, with an image that holds the agent, a task configuration like [`review/codex/task.toml`](review/codex/task.toml) that allows its provider's hosts, and a script like `review.sh` for its credentials. `results.json` records the reviewer, and findings compare only between reviews by one reviewer, since another agent or model reads the same change differently.
+
+`review.sh` reads no login until it is told which: `CODEX_AUTH_JSON_PATH=<file>`, or `REVIEW_REAL_LOGIN=1` for `~/.codex/auth.json`. It also requires `REVIEW_LOGIN_RISK=accepted`, which acknowledges the limits below. It copies the login once into a private folder and gives that copy to Harbor's upload, to Harbor's scrubber and to the scan. It takes no argument but the review folder, which it resolves to its real path, so nothing can move Harbor's output, its configuration or the agent's environment; it writes Harbor's output to `harbor.log` inside the review folder, waits for Harbor to exit even when interrupted, and prints nothing from the review until the scan has passed.
+
+### What protects the login, and what does not
+
+Harbor's Codex agent runs the model's commands without Codex's sandbox, as the same user as Codex, so they can read the login; Codex's sandbox cannot create its namespaces in the rootless container. Nothing in a review enforces a boundary around the login. What there is:
+
+- The network. For the whole run the evaluator's container opens TCP only to the reviewer's provider: for Codex, to `chatgpt.com` only through the sidecar's proxy, with name lookups only as single A or AAAA questions for exactly `chatgpt.com`, in any case. Exact-name DNS queries still carry caller-selected IDs, letter case, RD/AD flags, A/AAAA selection and, when present, EDNS size, extended-RCODE, version and flag fields. The filter does not normalise these fields or guarantee what the resolver forwards. A residual DNS signalling channel remains; this is not a zero-egress boundary. ICMP leaves only as errors about traffic the kernel already tracks and as neighbour discovery on the link, and the container has no raw-socket or network-administration power. On a handled exit, the sidecar attempts to empty the allowlist while retaining the rules, and logs whether that succeeded. Abrupt termination can leave the previous allowlist rules in force.
+- The scrubber and the scan, which are best-effort detection, not a boundary. Harbor replaces the login's tokens with `[REDACTED]` in each trial's files. [`review/codex/scan.sh`](review/codex/scan.sh) then looks in every path name and file the review wrote, the job-level files and `harbor.log` included, for each token whole, every 24-character run of it, its base64 and base64url at the three alignments, and its hex; it deletes what holds one, and anything it cannot read, and fails, and the login is then to be treated as exposed. It refuses a folder given as a link, names a path only once its name is clean, and keeps the messages of the tools it runs, which name paths, to itself. It passes only when it listed and read every path and no configured pattern was found.
+
+What remains: raw output holding the login can exist in the container and on disk before the scan cleans it up; a copy in any other reversible form, such as the token split into groups or base64 wrapped across lines, or a fragment shorter than 24 characters, survives a scan that passes; and a command the model runs can send the login to the provider, which the network allows. A real-login review is run only by someone who accepts these.
+
+### The shell's Harbor
+
+The shell's Harbor carries two patches for reviews. [`harbor/analyze-task-config.patch`](harbor/analyze-task-config.patch) lets `harbor analyze` take the evaluator task's `task.toml` from a file with `--task-config`, since Harbor's own leaves the network open and installs the agent at run time. [`harbor/egress-sidecar.patch`](harbor/egress-sidecar.patch) gives Harbor's network sidecar, which the tasks' trials use too, the name, ICMP, capability and exit rules above. Under them a task's allowlisted names resolve in any case and only over UDP, and a wildcard entry gets no name resolution. The name check comes before any NAT or local exemption, so Docker's embedded resolver at a local address, and the port Docker rewrites its queries to, get no exemption; nobody has run the patched sidecar on Docker. Codex 0.163.0 also tries `ab.chatgpt.com` and `*.oaiusercontent.com`, and reviews well without either. Leaving `auth.openai.com` out keeps the container from refreshing the login, and so from rotating the token the host holds. A login that Codex judges due for a refresh therefore fails the review, and using Codex on the host refreshes it.
+
+### Running a review
+
+With `name` set to the review's name and `trials` to the trial folders to review, these commands build the reviewer's image, make the packets, run the review on the host's login one analysis at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
+
+```sh
+(
+  set -euo pipefail
+  podman build -t localhost/evals-review-codex:0.163.0 -f review/codex/Dockerfile review/codex
+  review/blind.sh "../.cache/evals/reviews/$name" "${trials[@]}"
+  REVIEW_REAL_LOGIN=1 REVIEW_LOGIN_RISK=accepted review/codex/review.sh "../.cache/evals/reviews/$name"
+)
+```
+
 ## Container backends
 
 The tasks run on Harbor's `podman` backend, which [`configs/free.yaml`](configs/free.yaml) and `configs/pi.yaml` select. It needs, on the host:
