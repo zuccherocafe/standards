@@ -9,9 +9,15 @@ pi/*
 !pi/package-lock.json
 !tasks
 tasks/*
+!tasks/dandegate-build-cache
+!tasks/dandegate-host-programs
 !tasks/dandegate-literal-paths
+!tasks/dandegate-step-durations
+!tasks/dandegate-steps-at-once
 !tasks/dandegate-unicode-lines
+!tasks/design-read-area-files
 !tasks/design-read-fenced-code
+!tasks/rust-mutants-round-robin
 tasks/*/*
 !tasks/*/environment
 tasks/*/environment/*

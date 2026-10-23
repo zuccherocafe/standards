@@ -11,12 +11,26 @@ environment:
 metrics:
   - type: mean
 tasks:
+  # Bug-fix tasks from review findings.
   - path: tasks/dandegate-literal-paths
     source: dandegate-literal-paths
   - path: tasks/design-read-fenced-code
     source: design-read-fenced-code
   - path: tasks/dandegate-unicode-lines
     source: dandegate-unicode-lines
+  # Feature tasks.
+  - path: tasks/dandegate-step-durations
+    source: dandegate-step-durations
+  - path: tasks/dandegate-steps-at-once
+    source: dandegate-steps-at-once
+  - path: tasks/rust-mutants-round-robin
+    source: rust-mutants-round-robin
+  - path: tasks/design-read-area-files
+    source: design-read-area-files
+  - path: tasks/dandegate-build-cache
+    source: dandegate-build-cache
+  - path: tasks/dandegate-host-programs
+    source: dandegate-host-programs
 agents:
   - name: nop
   - name: oracle

@@ -1,0 +1,2215 @@
+diff --git a/tools/crates/design-read/Cargo.toml b/tools/crates/design-read/Cargo.toml
+index 0cb8ff1a..4112993d 100644
+--- a/tools/crates/design-read/Cargo.toml
++++ b/tools/crates/design-read/Cargo.toml
+@@ -4,7 +4,7 @@ version.workspace = true
+ edition.workspace = true
+ publish.workspace = true
+ license.workspace = true
+-description = "Checks a design read's shape and that it carries forward every disagreement the previous read left unresolved"
++description = "Checks the shape of a project's design reads, one living file per area"
+ 
+ [dependencies]
+ camino.workspace = true
+diff --git a/tools/crates/design-read/src/carry.rs b/tools/crates/design-read/src/carry.rs
+deleted file mode 100644
+index 022c6180..00000000
+--- a/tools/crates/design-read/src/carry.rs
++++ /dev/null
+@@ -1,166 +0,0 @@
+-//! What a read carries forward from its previous read. A disagreement keeps its ID from read to read, so comparing IDs
+-//! is enough: an ID is `new` exactly when the previous read lacks it, and every ID the previous read left `new`, `open`
+-//! or `parked` appears again, whatever its status now. Leaving one out would read as resolved without saying so.
+-//!
+-//! A first read compares with no rows, so every row in it is `new`.
+-
+-use std::collections::{BTreeMap, BTreeSet};
+-
+-use crate::read::{Read, Refusal, Row, Status};
+-
+-/// Every way `read` fails to carry forward `previous`, the rows of its previous read.
+-pub(crate) fn refusals(read: &Read, previous: &[Row]) -> Vec<Refusal> {
+-    let before: BTreeMap<_, _> = previous.iter().map(|row| (&row.id, row.status)).collect();
+-    let mut refusals = Vec::new();
+-    for row in read.rows() {
+-        let reason = match (row.status, before.contains_key(&row.id)) {
+-            (Status::New, true) => {
+-                format!(
+-                    "`new`, but {} is in the previous read; carry it as open, resolved or parked",
+-                    row.id
+-                )
+-            }
+-            (Status::Open | Status::Resolved | Status::Parked, false) => {
+-                format!(
+-                    "`{}`, but {} is not in a previous read; a disagreement this read found is new",
+-                    row.status, row.id
+-                )
+-            }
+-            (Status::New, false) | (Status::Open | Status::Resolved | Status::Parked, true) => {
+-                continue;
+-            }
+-        };
+-        refusals.push(Refusal::at(row.line, "Status", reason));
+-    }
+-    let here: BTreeSet<_> = read.rows().iter().map(|row| &row.id).collect();
+-    for (id, status) in before {
+-        let unresolved = match status {
+-            Status::New | Status::Open | Status::Parked => true,
+-            Status::Resolved => false,
+-        };
+-        if unresolved && !here.contains(id) {
+-            refusals.push(read.refuse(format!(
+-                "{id} is {status} in the previous read and missing here; carry it as open, resolved or parked"
+-            )));
+-        }
+-    }
+-    refusals
+-}
+-
+-#[cfg(test)]
+-mod tests {
+-    use std::fmt::Write as _;
+-
+-    use super::*;
+-
+-    fn read(previous: &str, rows: &[(&str, &str)]) -> Read {
+-        let mut text = format!(
+-            "- Area: a\n- Revision: {}\n- Previous: {previous}\n- Inspected: i\n",
+-            "f".repeat(40)
+-        );
+-        if previous != "none" {
+-            text.push_str("## After the last phase\nn\n");
+-        }
+-        text.push_str("## Disagreements\n| ID | Concept | Owner | Sites | Consequence | Done when | Status |\n|---|---|---|---|---|---|---|\n");
+-        for (id, status) in rows {
+-            writeln!(text, "| {id} | c | o | s | x | d | {status} |")
+-                .expect("a String takes any text");
+-        }
+-        if rows.is_empty() {
+-            text.push_str("None found.\n");
+-        }
+-        Read::parse(&text).expect("a well-shaped read")
+-    }
+-
+-    fn previous(rows: &[(&str, &str)]) -> Vec<Row> {
+-        read("none", rows).rows().to_vec()
+-    }
+-
+-    fn reasons(read: &Read, previous: &[Row]) -> Vec<String> {
+-        refusals(read, previous)
+-            .iter()
+-            .map(ToString::to_string)
+-            .collect()
+-    }
+-
+-    #[test]
+-    fn every_unresolved_id_carried_with_any_status_and_new_ones_new_passes() {
+-        let before = previous(&[
+-            ("a-D1", "new"),
+-            ("a-D2", "open"),
+-            ("a-D3", "parked"),
+-            ("a-D4", "new"),
+-        ]);
+-        let after = read(
+-            "p.md",
+-            &[
+-                ("a-D1", "open"),
+-                ("a-D2", "resolved"),
+-                ("a-D3", "parked"),
+-                ("a-D4", "open"),
+-                ("b-D1", "new"),
+-            ],
+-        );
+-        assert_eq!(reasons(&after, &before), Vec::<String>::new());
+-    }
+-
+-    #[test]
+-    fn an_id_the_previous_read_resolved_may_be_left_out() {
+-        let before = previous(&[("a-D1", "new"), ("a-D2", "resolved")]);
+-        assert_eq!(
+-            reasons(&read("p.md", &[("a-D1", "open")]), &before),
+-            Vec::<String>::new()
+-        );
+-    }
+-
+-    #[test]
+-    fn an_unresolved_id_left_out_is_refused_whatever_it_was() {
+-        let before = previous(&[("a-D1", "new"), ("a-D2", "open"), ("a-D3", "parked")]);
+-        let mut refused = reasons(&read("p.md", &[]), &before);
+-        refused.sort();
+-        assert_eq!(
+-            refused,
+-            [
+-                "7: Disagreements: a-D1 is new in the previous read and missing here; carry it as open, resolved or parked",
+-                "7: Disagreements: a-D2 is open in the previous read and missing here; carry it as open, resolved or parked",
+-                "7: Disagreements: a-D3 is parked in the previous read and missing here; carry it as open, resolved or parked",
+-            ]
+-        );
+-    }
+-
+-    #[test]
+-    fn new_is_refused_for_a_carried_id_and_the_other_statuses_for_a_new_one() {
+-        let before = previous(&[("a-D1", "new")]);
+-        let after = read(
+-            "p.md",
+-            &[
+-                ("a-D1", "new"),
+-                ("b-D1", "open"),
+-                ("b-D2", "resolved"),
+-                ("b-D3", "parked"),
+-            ],
+-        );
+-        let mut refused = reasons(&after, &before);
+-        refused.sort();
+-        assert_eq!(
+-            refused,
+-            [
+-                "10: Status: `new`, but a-D1 is in the previous read; carry it as open, resolved or parked",
+-                "11: Status: `open`, but b-D1 is not in a previous read; a disagreement this read found is new",
+-                "12: Status: `resolved`, but b-D2 is not in a previous read; a disagreement this read found is new",
+-                "13: Status: `parked`, but b-D3 is not in a previous read; a disagreement this read found is new",
+-            ]
+-        );
+-    }
+-
+-    #[test]
+-    fn a_first_read_may_hold_only_new_rows() {
+-        let first = read("none", &[("a-D1", "new"), ("a-D2", "open")]);
+-        assert_eq!(
+-            reasons(&first, &[]),
+-            [
+-                "9: Status: `open`, but a-D2 is not in a previous read; a disagreement this read found is new"
+-            ]
+-        );
+-    }
+-}
+diff --git a/tools/crates/design-read/src/main.rs b/tools/crates/design-read/src/main.rs
+index a53452a8..4621837e 100644
+--- a/tools/crates/design-read/src/main.rs
++++ b/tools/crates/design-read/src/main.rs
+@@ -1,51 +1,55 @@
+-//! Checks a design read's shape and that it carries forward what the previous read left open. This is the format's
+-//! reference; `skills/design-read/SKILL.md` says when a read is due and what stays judgement, and
++//! Checks the shape of a project's design reads, one living file per area under `docs/design-reads/`. This is the
++//! format's reference; `skills/design-read/SKILL.md` says when a read is due and how an area file changes, and
+ //! `templates/DESIGN-READ.md` is the shape to copy.
+ //!
+ //! ```text
+-//! design-read check <file>
++//! design-read check [<file>]...
+ //! ```
+ //!
+-//! A design read is one Markdown file. The tool reads three parts of it and leaves every other section as prose for
+-//! people. Headings, tables and fields inside fenced code are examples, not the read's own ([`markdown`]).
++//! With no file, it checks every `*.md` file directly in `docs/design-reads/` under the working directory except
++//! `README.md`, in name order. Each area file is checked alone. The tool reads two parts of it and leaves every other
++//! section as prose for people. Headings, tables and fields inside fenced code are examples, not the file's own
++//! ([`markdown`]).
+ //!
+-//! - **Header**: the `- Field: value` lines before the first level-two heading. `Area`, `Revision`, `Previous` and
+-//!   `Inspected` are each given once and non-empty. `Revision` is a full commit id, 40 lowercase hexadecimal digits.
+-//!   `Previous` is `none` for a first read, or a path relative to the read naming a file that can be read.
+-//! - **`## After the last phase`**: present and non-empty when `Previous` names a read, absent when it is `none`.
+-//! - **`## Disagreements`**: one section holding one table whose columns are exactly `ID | Concept | Owner | Sites |
+-//!   Consequence | Done when | Status`, followed by a delimiter row of seven cells. Every row has seven non-empty
+-//!   cells. An ID is `<read>-D<n>`, the read's name in lowercase letters, digits and hyphens and `n` a positive number,
+-//!   and is unique in the read. A status is `new`, `open`, `resolved` or `parked`. A read with no rows says
+-//!   `None found.` in the section instead of a table, and never beside rows ([`read`]).
++//! - **Header**: the `- Field: value` lines before the first level-two heading, which are exactly `Area`,
++//!   `Last full read` and `Inspected`, each given once and non-empty. `Last full read` is a full commit id, 40
++//!   lowercase hexadecimal digits.
++//! - **`## Disagreements`**: one section holding one table whose columns are exactly `Concept | Owner | Sites |
++//!   Consequence | Done when`, followed by a delimiter row of five cells. Every row has five non-empty cells. No two
++//!   rows have the same Concept, compared after trimming and ignoring case. A file with no open disagreements says
++//!   `None found.` in the section instead of a table, and never beside one, even one without rows ([`read`]).
+ //!
+-//! Against the previous read's table, or against no rows for a first read, an ID is `new` exactly when the previous
+-//! read lacks it, and every ID the previous read left `new`, `open` or `parked` appears again ([`carry`]). Only the
+-//! previous read's table is read: its own shape is not checked and its `Previous` link is not followed, so each read
+-//! is checked once, when it is written. Nothing here reads the code a read names.
++//! It does not check the prose sections, whether the commit in `Last full read` exists, whether the sites a row names
++//! exist or are right, whether a disagreement is still open, or the folder's `README.md`. Nothing here reads the code
++//! an area file names.
+ //!
+-//! A read that passes exits 0 and prints `<file>: passes: disagreements: <n> new, <n> open, <n> resolved, <n> parked`,
+-//! or `<file>: passes: none found`, on standard output. A refused read exits 1 and prints one line per refusal on
+-//! standard error, `<file>:<line>: <field>: <reason>`, where the field is a header field, a column, or a section's
+-//! title. A malformed command line, or a read that cannot be read as UTF-8 text, exits 2.
++//! Each file that passes prints `<file>: passes` on standard output. Each refusal prints one line on standard error,
++//! `<file>:<line>: <field>: <reason>`, where the field is a header field, a column, or a section's title. A file that
++//! cannot be read as UTF-8 text prints `<file>: cannot be read: <reason>` on standard error. Every file is checked
++//! whatever an earlier one gave. The exit status is 0 when every file passes, 1 when any is refused and all could be
++//! read, and 2 for a usage fault: a malformed command line, a file that cannot be read, or, with no file named, a
++//! `docs/design-reads/` folder that cannot be listed.
+ 
+-mod carry;
+ mod markdown;
+ mod read;
+ 
+ use std::fs;
+-use std::io::{self, Write as _};
++use std::io;
+ use std::process::ExitCode;
+ 
+ use camino::{Utf8Path, Utf8PathBuf};
+ use clap::{Parser, Subcommand};
+ 
+-use crate::read::{Previous, Read, Refusal, Row};
++use crate::read::Refusal;
+ 
+-/// The exit status for a read that is refused.
++/// The exit status when any file is refused.
+ const REFUSED: u8 = 1;
+-/// The exit status for a read that cannot be read at all.
+-const UNUSABLE: u8 = 2;
++/// The exit status for a usage fault.
++const USAGE: u8 = 2;
++/// The folder checked when no file is named, relative to the working directory.
++const FOLDER: &str = "docs/design-reads";
++/// The folder's description for readers, which is not an area file.
++const README: &str = "README.md";
+ 
+ #[derive(Debug, Parser)]
+ #[command(name = "design-read", about = "Check design reads.")]
+@@ -56,78 +60,79 @@ struct Arguments {
+ 
+ #[derive(Debug, Subcommand)]
+ enum Command {
+-    /// Check one read's shape and what it carries forward from its previous read.
++    /// Check each area file's shape.
+     Check {
+-        /// The read, a Markdown file.
+-        file: Utf8PathBuf,
++        /// The area files, Markdown; every one in `docs/design-reads/` when none is named.
++        files: Vec<Utf8PathBuf>,
+     },
+ }
+ 
+ fn main() -> ExitCode {
+-    let Command::Check { file } = Arguments::parse().command;
++    let Command::Check { files } = Arguments::parse().command;
+     let mut out = io::stdout().lock();
+     let mut errors = io::stderr().lock();
+     // Standard error is where a failure to write is reported, so a failure to write there has nowhere to go.
+-    let written = match check(&file) {
+-        Ok(passed) => writeln!(out, "{file}: passes: {passed}").map(|()| ExitCode::SUCCESS),
+-        Err(Failure::Refused(refusals)) => refusals
+-            .iter()
+-            .try_for_each(|refusal| writeln!(errors, "{file}:{refusal}"))
+-            .map(|()| ExitCode::from(REFUSED)),
+-        Err(Failure::Unusable(reason)) => {
+-            writeln!(errors, "{file}: {reason}").map(|()| ExitCode::from(UNUSABLE))
+-        }
+-    };
+-    written.unwrap_or(ExitCode::FAILURE)
+-}
+-
+-/// Why a read does not pass.
+-#[derive(Debug)]
+-enum Failure {
+-    /// The read's refusals, sorted by line for reading; the order is not a promise.
+-    Refused(Vec<Refusal>),
+-    /// The file could not be read as text, so it has no lines to refuse.
+-    Unusable(String),
++    let written = run(files, &mut out, &mut errors);
++    written.map_or(ExitCode::FAILURE, ExitCode::from)
+ }
+ 
+-impl Failure {
+-    fn refused(mut refusals: Vec<Refusal>) -> Self {
+-        refusals.sort_by_key(Refusal::line);
+-        Self::Refused(refusals)
++/// Checks `files`, or the folder's area files when none is named, writing each result; the exit status.
++fn run(
++    files: Vec<Utf8PathBuf>,
++    out: &mut impl io::Write,
++    errors: &mut impl io::Write,
++) -> io::Result<u8> {
++    let files = if files.is_empty() {
++        match area_files(Utf8Path::new(FOLDER)) {
++            Ok(files) => files,
++            Err(error) => {
++                writeln!(errors, "{FOLDER}: cannot be listed: {error}")?;
++                return Ok(USAGE);
++            }
++        }
++    } else {
++        files
++    };
++    let mut status = 0;
++    for file in &files {
++        match check(file) {
++            Ok(refusals) if refusals.is_empty() => writeln!(out, "{file}: passes")?,
++            Ok(refusals) => {
++                for refusal in &refusals {
++                    writeln!(errors, "{file}:{refusal}")?;
++                }
++                status = status.max(REFUSED);
++            }
++            Err(error) => {
++                writeln!(errors, "{file}: cannot be read: {error}")?;
++                status = USAGE;
++            }
++        }
+     }
++    Ok(status)
+ }
+ 
+-/// The summary of the read at `file` when it passes, read with its previous read.
+-fn check(file: &Utf8Path) -> Result<String, Failure> {
+-    let text = fs::read_to_string(file)
+-        .map_err(|error| Failure::Unusable(format!("cannot be read: {error}")))?;
+-    let read = Read::parse(&text).map_err(Failure::refused)?;
+-    let refusals = match read.previous() {
+-        None => carry::refusals(&read, &[]),
+-        Some(previous) => match previous_rows(file, previous) {
+-            Ok(rows) => carry::refusals(&read, &rows),
+-            Err(refusal) => vec![refusal],
+-        },
+-    };
+-    if refusals.is_empty() {
+-        Ok(read.summary())
+-    } else {
+-        Err(Failure::refused(refusals))
++/// Every `*.md` file directly in `folder` except its README, in name order.
++fn area_files(folder: &Utf8Path) -> io::Result<Vec<Utf8PathBuf>> {
++    let mut files = Vec::new();
++    for entry in folder.read_dir_utf8()? {
++        let entry = entry?;
++        let path = entry.path();
++        if fs::metadata(path)?.is_file()
++            && path.extension() == Some("md")
++            && entry.file_name() != README
++        {
++            files.push(path.to_owned());
++        }
+     }
++    files.sort();
++    Ok(files)
+ }
+ 
+-/// The rows of the previous read, found relative to `file`; refused when it cannot be read or has no table.
+-fn previous_rows(file: &Utf8Path, previous: &Previous) -> Result<Vec<Row>, Refusal> {
+-    let path = file
+-        .parent()
+-        .unwrap_or(Utf8Path::new(""))
+-        .join(previous.path());
+-    let text = fs::read_to_string(&path)
+-        .map_err(|error| previous.refuse(format!("{} cannot be read: {error}", previous.path())))?;
+-    read::rows_of(&text).map_err(|reason| {
+-        previous.refuse(format!(
+-            "{} has no table to compare with: {reason}",
+-            previous.path()
+-        ))
+-    })
++/// The refusals of the area file at `file`, sorted by line for reading; the order is not a promise.
++fn check(file: &Utf8Path) -> io::Result<Vec<Refusal>> {
++    let text = fs::read_to_string(file)?;
++    let mut refusals = read::refusals(&text);
++    refusals.sort_by_key(Refusal::line);
++    Ok(refusals)
+ }
+diff --git a/tools/crates/design-read/src/read.rs b/tools/crates/design-read/src/read.rs
+index bf857166..68b32cfa 100644
+--- a/tools/crates/design-read/src/read.rs
++++ b/tools/crates/design-read/src/read.rs
+@@ -1,254 +1,36 @@
+-//! One read, parsed: its header fields, whether its "After the last phase" section fits its `Previous` field, and its
+-//! disagreements table. Every refusal names the line and the field; the caller names the file.
++//! One area file's shape: its header fields and its disagreements table. Every refusal names the line and the field;
++//! the caller names the file.
+ //!
+-//! The header is the `- Field: value` lines before the first level-two heading. Lines there that name no field are
+-//! prose. The table is the first table in the "Disagreements" section; a read that found none says `None found.` there
+-//! instead.
++//! The header is the `- Field: value` lines before the first level-two heading, and holds exactly the fields in
++//! [`FIELDS`]. Lines there that are not `- Field: value` are prose. The table is the first table in the "Disagreements" section; an area file with no open disagreements says
++//! `None found.` there instead.
+ 
+ use std::collections::BTreeMap;
+ use std::fmt;
+ 
+-use camino::{Utf8Path, Utf8PathBuf};
+-
+ use crate::markdown::{self, Line, Section, Sections};
+ 
+ /// The table's columns, in order.
+-const COLUMNS: [&str; 7] = [
+-    "ID",
+-    "Concept",
+-    "Owner",
+-    "Sites",
+-    "Consequence",
+-    "Done when",
+-    "Status",
+-];
+-const PREVIOUS: &str = "Previous";
+-const AFTER: &str = "After the last phase";
++const COLUMNS: [&str; 5] = ["Concept", "Owner", "Sites", "Consequence", "Done when"];
++const LAST_FULL_READ: &str = "Last full read";
++/// The header's fields; any other is refused.
++const FIELDS: [&str; 3] = ["Area", LAST_FULL_READ, "Inspected"];
+ const DISAGREEMENTS: &str = "Disagreements";
+ const NONE_FOUND: &str = "None found.";
+ 
+-/// A read whose shape is right: its header fields are present once each, its after-note fits its previous read, and
+-/// its table's rows are complete with unique IDs.
+-#[derive(Debug)]
+-pub(crate) struct Read {
+-    previous: Option<Previous>,
+-    rows: Vec<Row>,
+-    /// The line of the "Disagreements" heading.
+-    line: usize,
+-}
+-
+-impl Read {
+-    /// The read in `text`, or every refusal of its shape.
+-    pub(crate) fn parse(text: &str) -> Result<Self, Vec<Refusal>> {
+-        let sections = Sections::of(text);
+-        let mut refusals = Vec::new();
+-        let previous = header(&sections.lead, &mut refusals);
+-        after_note(&sections, &previous, &mut refusals);
+-        let mut found = sections.titled(DISAGREEMENTS);
+-        let Some(section) = found.next() else {
+-            refusals.push(Refusal::at(
+-                1,
+-                DISAGREEMENTS,
+-                "missing; a read has a `## Disagreements` section",
+-            ));
+-            return Err(refusals);
+-        };
+-        for again in found {
+-            refusals.push(again_refusal(again.line, DISAGREEMENTS, section.line));
+-        }
+-        let earlier = refusals.len();
+-        let table = table(section, &mut refusals);
+-        // A table whose rows are refused has rows; saying it has none would add a second, wrong refusal.
+-        let rowless = table.rows.is_empty() && refusals.len() == earlier;
+-        match (rowless, table.none_found) {
+-            (true, None) => refusals.push(Refusal::at(
+-                section.line,
+-                DISAGREEMENTS,
+-                "has no rows; a read that found none says `None found.`",
+-            )),
+-            (false, Some(line)) => {
+-                refusals.push(Refusal::at(
+-                    line,
+-                    DISAGREEMENTS,
+-                    "says `None found.` beside rows",
+-                ));
+-            }
+-            (true, Some(_)) | (false, None) => {}
+-        }
+-        let mut first = BTreeMap::new();
+-        for row in &table.rows {
+-            if let Some(line) = first.insert(&row.id, row.line) {
+-                refusals.push(Refusal::at(
+-                    row.line,
+-                    "ID",
+-                    format!("{} is also on line {line}", row.id),
+-                ));
+-            }
+-        }
+-        let previous = match previous {
+-            Named::Previous(previous) => Some(previous),
+-            Named::First => None,
+-            Named::Refused => return Err(refusals),
+-        };
+-        if refusals.is_empty() {
+-            Ok(Self {
+-                previous,
+-                rows: table.rows,
+-                line: section.line,
+-            })
+-        } else {
+-            Err(refusals)
+-        }
+-    }
+-
+-    /// The previous read the header names, or none for a first read.
+-    pub(crate) fn previous(&self) -> Option<&Previous> {
+-        self.previous.as_ref()
+-    }
+-
+-    pub(crate) fn rows(&self) -> &[Row] {
+-        &self.rows
+-    }
+-
+-    /// A refusal of the table as a whole, at the "Disagreements" heading.
+-    pub(crate) fn refuse(&self, reason: String) -> Refusal {
+-        Refusal::at(self.line, DISAGREEMENTS, reason)
+-    }
+-
+-    /// The count of rows by status, or that the read found none.
+-    pub(crate) fn summary(&self) -> String {
+-        if self.rows.is_empty() {
+-            return "none found".to_owned();
+-        }
+-        let count = |status: Status| self.rows.iter().filter(|row| row.status == status).count();
+-        let statuses = [Status::New, Status::Open, Status::Resolved, Status::Parked];
+-        let counts: Vec<String> = statuses
+-            .iter()
+-            .map(|&status| format!("{} {status}", count(status)))
+-            .collect();
+-        format!("disagreements: {}", counts.join(", "))
+-    }
+-}
+-
+-/// The rows of the table in another read's "Disagreements" section, for comparison; the reason when it has no table
+-/// whose rows can be read. Nothing else in that read is checked.
+-pub(crate) fn rows_of(text: &str) -> Result<Vec<Row>, String> {
+-    let sections = Sections::of(text);
+-    let section = sections
+-        .titled(DISAGREEMENTS)
+-        .next()
+-        .ok_or("it has no `## Disagreements` section")?;
+-    let mut refusals = Vec::new();
+-    let table = table(section, &mut refusals);
+-    match refusals.first() {
+-        Some(refusal) => Err(refusal.to_string()),
+-        None => Ok(table.rows),
+-    }
+-}
+-
+-/// The previous read a header names, as written, relative to the read naming it.
+-#[derive(Debug)]
+-pub(crate) struct Previous {
+-    path: Utf8PathBuf,
+-    line: usize,
+-}
+-
+-impl Previous {
+-    pub(crate) fn path(&self) -> &Utf8Path {
+-        &self.path
+-    }
+-
+-    /// A refusal of the `Previous` field.
+-    pub(crate) fn refuse(&self, reason: String) -> Refusal {
+-        Refusal::at(self.line, PREVIOUS, reason)
+-    }
+-}
+-
+-/// One row of a disagreements table.
+-#[derive(Debug, Clone)]
+-pub(crate) struct Row {
+-    pub(crate) id: RowId,
+-    pub(crate) status: Status,
+-    pub(crate) line: usize,
+-}
+-
+-/// A disagreement's ID, qualified by the read that found it: `<read>-D<n>`, the read's name in lowercase letters,
+-/// digits and hyphens, and `n` a positive number. The qualifier keeps two reads' IDs apart, so an ID is not reused by
+-/// accident.
+-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+-pub(crate) struct RowId(String);
+-
+-impl RowId {
+-    fn new(text: &str) -> Option<Self> {
+-        let (read, number) = text.rsplit_once("-D")?;
+-        let read_ok = !read.is_empty()
+-            && !read.starts_with('-')
+-            && !read.ends_with('-')
+-            && read
+-                .chars()
+-                .all(|character| matches!(character, 'a'..='z' | '0'..='9' | '-'));
+-        let number_ok = !number.starts_with('0')
+-            && !number.is_empty()
+-            && number.chars().all(|digit| digit.is_ascii_digit());
+-        (read_ok && number_ok).then(|| Self(text.to_owned()))
+-    }
+-}
+-
+-impl fmt::Display for RowId {
+-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+-        f.write_str(&self.0)
+-    }
+-}
+-
+-/// Where a disagreement stands in this read.
+-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+-pub(crate) enum Status {
+-    /// Found by this read; not in the previous read.
+-    New,
+-    /// From the previous read, still unresolved, in this read's area.
+-    Open,
+-    /// From the previous read, and its completion condition is met.
+-    Resolved,
+-    /// From the previous read, still unresolved, outside this read's area; its `Done when` says where it is tracked.
+-    Parked,
+-}
+-
+-impl Status {
+-    fn new(text: &str) -> Option<Self> {
+-        match text {
+-            "new" => Some(Self::New),
+-            "open" => Some(Self::Open),
+-            "resolved" => Some(Self::Resolved),
+-            "parked" => Some(Self::Parked),
+-            _ => None,
+-        }
+-    }
+-}
+-
+-impl fmt::Display for Status {
+-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+-        f.write_str(match self {
+-            Self::New => "new",
+-            Self::Open => "open",
+-            Self::Resolved => "resolved",
+-            Self::Parked => "parked",
+-        })
+-    }
+-}
+-
+-/// Why a read is refused, at one line and field of it.
++/// Why an area file is refused, at one line and field of it.
+ #[derive(Debug, PartialEq, Eq)]
+ pub(crate) struct Refusal {
+     line: usize,
+-    field: &'static str,
++    field: String,
+     reason: String,
+ }
+ 
+ impl Refusal {
+-    pub(crate) fn at(line: usize, field: &'static str, reason: impl Into<String>) -> Self {
++    fn at(line: usize, field: impl Into<String>, reason: impl Into<String>) -> Self {
+         Self {
+             line,
+-            field,
++            field: field.into(),
+             reason: reason.into(),
+         }
+     }
+@@ -264,50 +46,92 @@ impl fmt::Display for Refusal {
+     }
+ }
+ 
+-/// What a header's `Previous` field names.
+-enum Named {
+-    /// The field is refused, so nothing that depends on it is checked.
+-    Refused,
+-    /// `none`: this is a first read.
+-    First,
+-    Previous(Previous),
++/// Every refusal of the shape of the area file in `text`; none when it passes.
++pub(crate) fn refusals(text: &str) -> Vec<Refusal> {
++    let sections = Sections::of(text);
++    let mut refusals = Vec::new();
++    header(&sections.lead, &mut refusals);
++    let mut found = sections.titled(DISAGREEMENTS);
++    let Some(section) = found.next() else {
++        refusals.push(Refusal::at(
++            1,
++            DISAGREEMENTS,
++            "missing; an area file has a `## Disagreements` section",
++        ));
++        return refusals;
++    };
++    for again in found {
++        refusals.push(again_refusal(again.line, DISAGREEMENTS, section.line));
++    }
++    let earlier = refusals.len();
++    let table = table(section, &mut refusals);
++    // A table left after deleting its last row is still a table, so `None found.` beside it is refused.
++    let present = section.body.iter().any(|line| markdown::is_row(line.text));
++    // A table whose rows are refused has rows; saying it has none would add a second, wrong refusal.
++    let rowless = table.rows.is_empty() && refusals.len() == earlier;
++    match (present, table.none_found) {
++        (true, Some(line)) => refusals.push(Refusal::at(
++            line,
++            DISAGREEMENTS,
++            "says `None found.` beside a table",
++        )),
++        (_, None) if rowless => refusals.push(Refusal::at(
++            section.line,
++            DISAGREEMENTS,
++            "has no rows; an area file with no open disagreements says `None found.` instead of a table",
++        )),
++        (_, None) | (false, Some(_)) => {}
++    }
++    // Briefs and prose cite a row by its Concept, so two rows that differ only in case cannot be told apart.
++    let mut first = BTreeMap::new();
++    for row in table.rows.iter().filter(|row| !row.concept.is_empty()) {
++        if let Some(line) = first.insert(row.concept.to_lowercase(), row.line) {
++            refusals.push(Refusal::at(
++                row.line,
++                "Concept",
++                format!("`{}` is also on line {line}", row.concept),
++            ));
++        }
++    }
++    refusals
++}
++
++/// One row of a disagreements table: its Concept, trimmed, and its line.
++struct Row {
++    concept: String,
++    line: usize,
+ }
+ 
+ fn again_refusal(line: usize, field: &'static str, first: usize) -> Refusal {
+     Refusal::at(line, field, format!("given again; first on line {first}"))
+ }
+ 
+-/// What the header's `Previous` field names. Refuses each field that is missing, repeated or empty, and a malformed
+-/// `Revision` or `Previous`.
+-fn header(lead: &[Line<'_>], refusals: &mut Vec<Refusal>) -> Named {
++/// Refuses each header field that is missing, repeated, empty or not one of [`FIELDS`], and a `Last full read` that
++/// is not a full commit id.
++fn header(lead: &[Line<'_>], refusals: &mut Vec<Refusal>) {
++    for line in lead {
++        if let Some((name, _)) = named(line.text)
++            && !FIELDS.contains(&name)
++        {
++            refusals.push(Refusal::at(
++                line.number,
++                name,
++                "not a header field; an area file's header has exactly Area, Last full read and Inspected",
++            ));
++        }
++    }
+     for name in ["Area", "Inspected"] {
+         field(lead, name, refusals);
+     }
+-    if let Some((line, value)) = field(lead, "Revision", refusals)
++    if let Some((line, value)) = field(lead, LAST_FULL_READ, refusals)
+         && !(value.len() == 40 && value.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')))
+     {
+         refusals.push(Refusal::at(
+             line,
+-            "Revision",
++            LAST_FULL_READ,
+             format!("`{value}` is not a full commit id, 40 lowercase hexadecimal digits"),
+         ));
+     }
+-    match field(lead, PREVIOUS, refusals) {
+-        None => Named::Refused,
+-        Some((_, "none")) => Named::First,
+-        Some((line, value)) if Utf8Path::new(value).is_absolute() => {
+-            refusals.push(Refusal::at(
+-                line,
+-                PREVIOUS,
+-                format!("`{value}` is absolute; name the previous read relative to this one"),
+-            ));
+-            Named::Refused
+-        }
+-        Some((line, value)) => Named::Previous(Previous {
+-            path: value.into(),
+-            line,
+-        }),
+-    }
+ }
+ 
+ /// The line and value of the header field `name`, the first where it is given more than once; refuses it missing,
+@@ -318,14 +142,14 @@ fn field<'a>(
+     refusals: &mut Vec<Refusal>,
+ ) -> Option<(usize, &'a str)> {
+     let mut given = lead.iter().filter_map(|line| {
+-        let (named, value) = line.text.strip_prefix("- ")?.split_once(':')?;
+-        (named.trim() == name).then(|| (line.number, value.trim()))
++        let (named, value) = named(line.text)?;
++        (named == name).then_some((line.number, value))
+     });
+     let Some((line, value)) = given.next() else {
+         refusals.push(Refusal::at(
+             1,
+             name,
+-            format!("missing; a read's header has `- {name}: ...`"),
++            format!("missing; an area file's header has `- {name}: ...`"),
+         ));
+         return None;
+     };
+@@ -339,34 +163,10 @@ fn field<'a>(
+     Some((line, value))
+ }
+ 
+-/// Refuses an "After the last phase" section that does not fit the previous read: required and non-empty when there
+-/// is one, absent when there is none. Not checked when the `Previous` field is refused.
+-fn after_note(sections: &Sections<'_>, previous: &Named, refusals: &mut Vec<Refusal>) {
+-    let mut found = sections.titled(AFTER);
+-    let first = found.next();
+-    if let Some(first) = first {
+-        for again in found {
+-            refusals.push(again_refusal(again.line, AFTER, first.line));
+-        }
+-    }
+-    match (previous, first) {
+-        (Named::Previous(previous), None) => refusals.push(Refusal::at(
+-            previous.line,
+-            AFTER,
+-            "missing; a read with a previous read begins with what changed since it",
+-        )),
+-        (Named::Previous(_), Some(section))
+-            if section.body.iter().all(|line| line.text.trim().is_empty()) =>
+-        {
+-            refusals.push(Refusal::at(section.line, AFTER, "empty"));
+-        }
+-        (Named::First, Some(section)) => refusals.push(Refusal::at(
+-            section.line,
+-            AFTER,
+-            "present in a first read; only a read with a previous read has one",
+-        )),
+-        (Named::Previous(_), Some(_)) | (Named::First, None) | (Named::Refused, _) => {}
+-    }
++/// The field name and value of a `- Field: value` line, each trimmed.
++fn named(text: &str) -> Option<(&str, &str)> {
++    let (name, value) = text.strip_prefix("- ")?.split_once(':')?;
++    Some((name.trim(), value.trim()))
+ }
+ 
+ /// A disagreements section's rows, and the line saying `None found.` if any.
+@@ -376,8 +176,8 @@ struct Table {
+ }
+ 
+ /// The rows of the first table in `section`, refusing its header, a missing or malformed delimiter row, every
+-/// incomplete row and any second table. A row is kept when its ID and status parse, so the rest of the table is still
+-/// checked.
++/// incomplete row and any second table. A row with the right number of cells is kept, so the rest of the table is
++/// still checked.
+ fn table(section: &Section<'_>, refusals: &mut Vec<Refusal>) -> Table {
+     let none_found = section
+         .body
+@@ -388,30 +188,27 @@ fn table(section: &Section<'_>, refusals: &mut Vec<Refusal>) -> Table {
+         .body
+         .split(|line| !markdown::is_row(line.text))
+         .filter(|block| !block.is_empty());
++    let empty = Table {
++        rows: Vec::new(),
++        none_found,
++    };
+     let Some((header, lines)) = blocks.next().and_then(<[Line<'_>]>::split_first) else {
+-        return Table {
+-            rows: Vec::new(),
+-            none_found,
+-        };
++        return empty;
+     };
+     for again in blocks {
+         refusals.push(Refusal::at(
+             again[0].number,
+             DISAGREEMENTS,
+-            "a second table; a read has one disagreements table",
++            "a second table; an area file has one disagreements table",
+         ));
+     }
+-    let empty = Table {
+-        rows: Vec::new(),
+-        none_found,
+-    };
+     let cells = markdown::cells(header.text);
+     if cells != COLUMNS {
+         refusals.push(Refusal::at(
+             header.number,
+             DISAGREEMENTS,
+             format!(
+-                "columns are `{}`; a read's are `{}`",
++                "columns are `{}`; an area file's are `{}`",
+                 cells.join(" | "),
+                 COLUMNS.join(" | ")
+             ),
+@@ -427,7 +224,7 @@ fn table(section: &Section<'_>, refusals: &mut Vec<Refusal>) -> Table {
+         refusals.push(Refusal::at(
+             line,
+             DISAGREEMENTS,
+-            "the header row is not followed by a delimiter row, `|---|` for each of the 7 columns",
++            "the header row is not followed by a delimiter row, `|---|` for each of the 5 columns",
+         ));
+         return empty;
+     }
+@@ -438,43 +235,26 @@ fn table(section: &Section<'_>, refusals: &mut Vec<Refusal>) -> Table {
+     Table { rows, none_found }
+ }
+ 
+-/// The row on `line`, refusing a wrong number of cells, each empty cell, and a malformed ID or status.
++/// The row on `line`, refusing a wrong number of cells and each empty cell.
+ fn row(line: Line<'_>, refusals: &mut Vec<Refusal>) -> Option<Row> {
+     let cells = markdown::cells(line.text);
+     let count = cells.len();
+-    let Ok(cells) = <[String; 7]>::try_from(cells) else {
++    let Ok(cells) = <[String; 5]>::try_from(cells) else {
+         refusals.push(Refusal::at(
+             line.number,
+             DISAGREEMENTS,
+-            format!("has {count} cells; a row has 7"),
++            format!("has {count} cells; a row has 5"),
+         ));
+         return None;
+     };
+     for (column, cell) in COLUMNS.iter().zip(&cells) {
+         if cell.is_empty() {
+-            refusals.push(Refusal::at(line.number, column, "empty"));
++            refusals.push(Refusal::at(line.number, *column, "empty"));
+         }
+     }
+-    let [id, .., status] = &cells;
+-    let parsed_id = RowId::new(id);
+-    if parsed_id.is_none() && !id.is_empty() {
+-        refusals.push(Refusal::at(
+-            line.number,
+-            "ID",
+-            format!("`{id}` is not qualified by its read as `<read>-D<n>`, such as `mm4-D1`"),
+-        ));
+-    }
+-    let parsed_status = Status::new(status);
+-    if parsed_status.is_none() && !status.is_empty() {
+-        refusals.push(Refusal::at(
+-            line.number,
+-            "Status",
+-            format!("`{status}` is not new, open, resolved or parked"),
+-        ));
+-    }
++    let [concept, ..] = cells;
+     Some(Row {
+-        id: parsed_id?,
+-        status: parsed_status?,
++        concept,
+         line: line.number,
+     })
+ }
+@@ -483,143 +263,111 @@ fn row(line: Line<'_>, refusals: &mut Vec<Refusal>) -> Option<Row> {
+ mod tests {
+     use super::*;
+ 
+-    const REVISION: &str = "0123456789abcdef0123456789abcdef01234567";
++    const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
++    const HEAD: &str =
++        "| Concept | Owner | Sites | Consequence | Done when |\n|---|---|---|---|---|\n";
+ 
+-    fn read(previous: &str, sections: &str) -> String {
++    fn area(last_full_read: &str, disagreements: &str) -> String {
+         format!(
+-            "# t design read\n\n- Area: a\n- Revision: {REVISION}\n- Previous: {previous}\n- Inspected: i\n\n{sections}"
++            "# t design read\n\n- Area: a\n- Last full read: {last_full_read}\n- Inspected: i\n\n\
++             ## Disagreements\n\n{disagreements}"
+         )
+     }
+ 
+     fn reasons(text: &str) -> Vec<String> {
+-        Read::parse(text)
+-            .expect_err("refused")
+-            .iter()
+-            .map(ToString::to_string)
+-            .collect()
++        refusals(text).iter().map(ToString::to_string).collect()
+     }
+ 
+-    const HEAD: &str = "| ID | Concept | Owner | Sites | Consequence | Done when | Status |\n|---|---|---|---|---|---|---|\n";
+-    const TABLE: &str = concat!(
+-        "## Disagreements\n\n",
+-        "| ID | Concept | Owner | Sites | Consequence | Done when | Status |\n|---|---|---|---|---|---|---|\n"
+-    );
++    #[test]
++    fn an_area_file_with_rows_or_none_found_passes() {
++        let rows = format!("{HEAD}| a | o | s | x | d |\n| b | o | s | x | d |\n");
++        assert_eq!(reasons(&area(COMMIT, &rows)), Vec::<String>::new());
++        assert_eq!(
++            reasons(&area(COMMIT, "None found.\n")),
++            Vec::<String>::new()
++        );
++    }
+ 
+     #[test]
+-    fn a_first_read_gives_its_rows_with_their_lines() {
+-        let text = read(
+-            "none",
+-            &format!(
+-                "{TABLE}| a-D1 | c | o | s | x | d | new |\n| a-D2 | c | o | s | x | d | new |\n"
+-            ),
++    fn a_field_beyond_the_three_is_refused_and_prose_and_fenced_examples_are_not() {
++        let text = area(COMMIT, "None found.\n").replace(
++            "- Inspected: i\n",
++            "- Inspected: i\n- Previous: old.md\nA note: prose.\n```\n- Revision: x\n```\n",
+         );
+-        let parsed = Read::parse(&text).expect("passes");
+-        assert!(parsed.previous().is_none());
+-        let rows: Vec<_> = parsed
+-            .rows()
+-            .iter()
+-            .map(|row| (row.id.to_string(), row.status, row.line))
+-            .collect();
+         assert_eq!(
+-            rows,
++            reasons(&text),
+             [
+-                ("a-D1".to_owned(), Status::New, 12),
+-                ("a-D2".to_owned(), Status::New, 13)
++                "6: Previous: not a header field; an area file's header has exactly Area, Last full read and Inspected"
+             ]
+         );
+-        assert_eq!(
+-            parsed.summary(),
+-            "disagreements: 2 new, 0 open, 0 resolved, 0 parked"
+-        );
+     }
+ 
+     #[test]
+-    fn a_follow_up_names_its_previous_read_as_written() {
+-        let text = read(
+-            "../x/design-read.md",
+-            &format!(
+-                "## After the last phase\n\nn\n\n{TABLE}| a-D1 | c | o | s | x | d | open |\n"
+-            ),
+-        );
+-        let parsed = Read::parse(&text).expect("passes");
++    fn none_found_is_refused_beside_a_table_without_rows() {
+         assert_eq!(
+-            parsed.previous().map(Previous::path),
+-            Some(Utf8Path::new("../x/design-read.md"))
++            reasons(&area(COMMIT, &format!("{HEAD}\nNone found.\n"))),
++            ["12: Disagreements: says `None found.` beside a table"]
+         );
+     }
+ 
+     #[test]
+-    fn an_id_is_a_lowercase_read_name_then_d_and_a_positive_number() {
+-        for good in ["mm4-D1", "cm1-b-D12", "x-D9"] {
+-            assert!(RowId::new(good).is_some(), "{good}");
+-        }
+-        for bad in [
+-            "D1", "-D1", "MM4-D1", "mm4-d1", "mm4-D0", "mm4-D01", "mm4-D", "mm4--D1", "mm4-D1a",
+-            "mm 4-D1",
+-        ] {
+-            assert!(RowId::new(bad).is_none(), "{bad}");
++    fn the_last_full_read_is_forty_lowercase_hexadecimal_digits() {
++        let upper = COMMIT.to_uppercase();
++        let long = format!("{COMMIT}0");
++        for bad in [&COMMIT[..39], &upper, &long, "main"] {
++            assert_eq!(
++                reasons(&area(bad, "None found.\n")),
++                [format!(
++                    "4: Last full read: `{bad}` is not a full commit id, 40 lowercase hexadecimal digits"
++                )],
++                "{bad}"
++            );
+         }
+     }
+ 
+     #[test]
+-    fn a_previous_field_with_a_value_is_refused_when_absolute() {
++    fn a_concept_is_compared_ignoring_case() {
++        let rows =
++            format!("{HEAD}| Read trigger | o | s | x | d |\n| read TRIGGER | o | s | x | d |\n");
+         assert_eq!(
+-            reasons(&read(
+-                "/reads/design-read.md",
+-                &format!("{TABLE}None found.\n")
+-            )),
+-            [
+-                "5: Previous: `/reads/design-read.md` is absolute; name the previous read relative to this one"
+-            ]
++            reasons(&area(COMMIT, &rows)),
++            ["12: Concept: `read TRIGGER` is also on line 11"]
+         );
+     }
+ 
+     #[test]
+-    fn a_table_inside_fenced_code_is_an_example_not_the_reads_table() {
+-        let text = read(
+-            "none",
+-            &format!(
+-                "## Disagreements\n\n```\n{HEAD}| a-D1 | c | o | s | x | d | new |\n```\n\nNone found.\n"
+-            ),
++    fn empty_concepts_are_refused_as_empty_and_not_as_repeated() {
++        let rows = format!("{HEAD}|  | o | s | x | d |\n|  | o | s | x | d |\n");
++        assert_eq!(
++            reasons(&area(COMMIT, &rows)),
++            ["11: Concept: empty", "12: Concept: empty"]
++        );
++    }
++
++    #[test]
++    fn a_table_inside_fenced_code_is_an_example_not_the_area_files_table() {
++        let text = area(
++            COMMIT,
++            &format!("```\n{HEAD}| a | o | s | x | d |\n```\n\nNone found.\n"),
+         );
+-        assert_eq!(Read::parse(&text).expect("passes").summary(), "none found");
++        assert_eq!(reasons(&text), Vec::<String>::new());
+     }
+ 
+     #[test]
+     fn a_delimiter_row_has_a_cell_for_each_column_and_is_required() {
+         let refused =
+-            "the header row is not followed by a delimiter row, `|---|` for each of the 7 columns";
++            "the header row is not followed by a delimiter row, `|---|` for each of the 5 columns";
+         let header = HEAD.lines().next().expect("a header row");
+         for (table, line) in [
+-            (
+-                format!("{header}\n|---|\n| a-D1 | c | o | s | x | d | new |\n"),
+-                11,
+-            ),
+-            (
+-                format!("{header}\n| a-D1 | c | o | s | x | d | new |\n"),
+-                11,
+-            ),
+-            (format!("{header}\n"), 10),
++            (format!("{header}\n|---|\n| a | o | s | x | d |\n"), 10),
++            (format!("{header}\n| a | o | s | x | d |\n"), 10),
++            (format!("{header}\n"), 9),
+         ] {
+-            let text = read("none", &format!("## Disagreements\n\n{table}"));
+             assert_eq!(
+-                reasons(&text),
++                reasons(&area(COMMIT, &table)),
+                 [format!("{line}: Disagreements: {refused}")],
+                 "{table}"
+             );
+         }
+     }
+-
+-    #[test]
+-    fn rows_of_another_read_refuse_a_table_they_cannot_read() {
+-        assert_eq!(
+-            rows_of("# x\n").map(|rows| rows.len()),
+-            Err("it has no `## Disagreements` section".to_owned())
+-        );
+-        assert_eq!(
+-            rows_of(&format!("{TABLE}| a-D1 | c | o | s | x | d | closed |\n"))
+-                .map(|rows| rows.len()),
+-            Err("5: Status: `closed` is not new, open, resolved or parked".to_owned())
+-        );
+-    }
+ }
+diff --git a/tools/crates/design-read/tests/fixtures/mm4/design-read.md b/tools/crates/design-read/tests/fixtures/mm4/design-read.md
+deleted file mode 100644
+index bedcdbd5..00000000
+--- a/tools/crates/design-read/tests/fixtures/mm4/design-read.md
++++ /dev/null
+@@ -1,64 +0,0 @@
+-# MM4 design read
+-
+-- Area: motion matching's runtime: the motion database, the body's motion source and the gym's steering
+-- Revision: 80adaf90f355bb9ead3e0b8de86f0632f72c34d8
+-- Previous: none
+-- Inspected: `tdoll-motion`; `stages/motion.rs`, `records/motion.rs`, `explain/database.rs`; `GFMotionDatabase`, `GFBodyPerformance`; `addons/body/` motor, navigation, motion source, clip motion, clips, clip graph, executors; the gym's steering, stage and clip browser
+-
+-**Answer.** Nothing needs its own slice before MM4. Two small changes are MM4's first commits, because without them MM4 would add a second model: remove the unused locomotion-node seam, and give a cut frame its own travel inside the clip composition. The brief settles four seams: one source per body, a typed intent, the source's owner contract, one database owner. One question goes to the maintainer before MM6: what moves a character with no pack.
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| mm4-D1 | Locomotion enters the tree three ways: the stand-in's thresholds, the plan's cuts, and an unused locomotion-node seam | MM4 | `GFBodyClips` `install_locomotion_node`, `play_locomotion_node`; blink's `authored_closure` branch; `docs/body-api.md` | the matcher would be a fourth way in | MM4's first commit removes the seam, its two probes and its doc paragraph | new |
+-| mm4-D2 | A cut frame's travel: `motion_delta` is zero on a cut frame, and playback reads the root track instead | MM4 | `GFBodyClips` `motion_delta`, `travel`; `GFBodyPlayback` | a matcher cutting about six times a second loses a frame of travel per cut | MM4's second commit takes a cut frame's travel from `clips.travel` and playback drops its copy | new |
+-| mm4-D3 | The motion database in four shapes with no owner of its invariants | MM4 | `tdoll-motion` `Group`, `Row`; `records/motion.rs` `Header`; `GFMotionDatabase` | each shape checks a different subset, and MM4 would add a fifth | one `Database` in `tdoll-motion`, built once at native load and read by `explain` | new |
+-| mm4-D4 | One dictionary carries three intents: segment move, heading-only turn and steering | MM4, then MM6 | `GFBodyNavigation`; `GFBodyMotionSource`; `GFGymSteering` | the matcher would guess which intent it was given | a typed intent, `Steer` in MM4; `Path` and `Face` in MM6 | new |
+-| mm4-D5 | The source's lifetime is inferred: one shared source, and `rest()` means both "play idle" and "reset" | MM4 | `GFBodyMotionSource` `rest`; `GFBodyInteraction`; `GFBodyLocomotion` | a matcher loses its continuity across steer-to-move | reset is separate from `rest()`, and every change of owner aborts the source | new |
+-| mm4-D6 | The stand-in and the matcher side by side | MM6 | `GFBodyPerformance` `locomotion_is_stand_in`, `locomotion_time_scale`; `GFBodyClipGraph` rate | two sources to keep correct until one goes | MM6 removes the stand-in, or keeps it as the named fallback | new |
+-| mm4-D7 | Characters with no pack have nothing to move them once the stand-in goes | the maintainer | Paperbot, Gymbot, CesiumMan, runtime imports; the body suite's fixture | MM6 would strand every packless character | the maintainer decides before MM6 | new |
+-
+-## Models in play
+-
+-- Rust: `tdoll-motion` owns the feature layout (36 columns as `Group`, f64 `Row`, horizons in seconds), extraction, `Normalisation`, `Coverage`; no database type, no search. `stages/motion.rs` poses capture clips. `records/motion.rs` owns the wire `Header` and f32 `motion.bin`; `explain/database.rs` reads it back.
+-- Doll contract: `GFMotionDatabase` (flat f32 arrays), loaded by `GFDollAnimation._motion`, read by nothing after. `GFBodyPerformance` holds the stand-in's walk, time scale, stand-in flag, four turns and idle.
+-- Body: `GFBodyMotor` (sole transform writer); `GFBodyNavigation` (path, arrival, stop; builds an intent dictionary or a heading-only intent); `GFBodyMotionSource` (the source contract, dictionary intent, one per body); `GFBodyClipMotion` (the stand-in: thresholds, rate from speed, stride); `GFBodyClips` (base via crossfade or cut, locomotion-node seam, overlay, `motion_delta`, `travel`, `clip_planar_speed`); `GFBodyClipGraph`; `GFBodyGestureEnvelope`; executors `GFBodyLocomotion`, `GFBodyInteraction`, `GFBodyPlayback`.
+-- Gym: `GFGymSteering` (WASD to a steer action; stops the source when no key is held), `GFGymStage`, `GFObstacleDisks`, the clip browser.
+-
+-## Overlaps
+-
+-- Three ways to put locomotion in the tree: the stand-in's thresholds; the plan's `play_at` cuts with inertialisation; the unused `install_locomotion_node`/`play_locomotion_node` seam from the plugin trial (two probes, blink's `authored_closure` branch, `docs/body-api.md`).
+-- Two ways to change the base (travel crossfade or cut); a matcher stop would mix them unless the brief chooses.
+-- Two ways to get travel: `motion_delta` is zero on a cut frame; `clips.travel` reads the root track and playback uses it. A matcher cutting about six times a second would lose a frame of travel per cut or copy playback's workaround.
+-- The database in four shapes with no owner of its invariants: core f64, wire header and bin, `GFMotionDatabase`, MM4's native copy. Rows are committed twice, an accepted cost.
+-- One dictionary carries three intents: segment move, heading-only turn, steering with `distance: INF`.
+-- The source's lifetime is inferred: one shared source for move, interaction and steer; interaction alignment can leave it un-aborted; `rest()` means both "play idle" and "reset" and every action start calls it, breaking a matcher's continuity across steer-to-move.
+-- Two places could smooth steering: the refactor list's "trajectory spring" for steering vs MM0's spring in `tdoll-motion`.
+-- Names: "motion" means the database, the pack bindings, the runtime source and the Blender sampler; "clip" is three Rust types; the database names (set, clip) while the body plays "set/name"; features use the ground role's joint and travel uses each clip set's `root_motion_bone`, assumed equal and unchecked.
+-- Navigation grounds transforms; steering keeps height (minor).
+-
+-## Half-done transitions
+-
+-- Stand-in vs matcher: `locomotion_is_stand_in` read by nothing; `locomotion_time_scale`, the clip-graph rate and `PLANTED_FRAMES` wait for MM6.
+-- O3DE-only vs both packs: MM4 adds EMM to `makiatto.kdl`, rebuilds, commits EMM clips and the ~16 MB database twice; the earlier pack cuts are undone if MM4 shows a gap.
+-- Navigation gives only the next segment; the path ahead is MM6's.
+-- The finish pose and the source owner were meant to come before the matcher.
+-- Two MM0 questions are still open: a second native owner, and checks above unit tests.
+-- Disk derivation to a runtime owner in MM5; ARM64 build never run; `docs/motion-diagnostics.md` and `docs/doll-format.md` go stale with MM4.
+-
+-## What later phases need
+-
+-- MM5: footprint columns and clip boundaries from the database owner; the last match; obstacle disks as plain values a runtime owner reads.
+-- MM6: path and face intents, re-target keeping the trajectory, idle and stop on matched data, the stand-in gone.
+-- magrasea drives the body through actions, never steering, so the matched source must serve navigation's intents.
+-- New characters: packless characters (Paperbot, Gymbot, CesiumMan, runtime imports) have no answer; the body suite walks Paperbot on the stand-in. MM6's removal closes this off unless every walking character gets a pack (and the suite a fixture database) or the clip source stays as the named fallback.
+-- Headset: horizons in seconds, f32 rows, core/binding split and inertialisation as a modifier serve it; search time and ARM64 unproven.
+-
+-## Recommendation
+-
+-First commits of MM4: (1) remove the locomotion-node seam (`install_locomotion_node`, `play_locomotion_node`, `_forecast`, `_motion_state`, blink's branch, the doc paragraph, the two probes; ~40 lines); (2) the composition takes a cut frame's travel from `clips.travel` so `motion_delta` is right on every frame and playback drops its copy (~30 lines; the change report must move nothing for playback).
+-
+-Not yet: removing the stand-in, the clip-graph rate, the unread flag, the trial check, navigation's path, f16 rows, the finish pose.
+-
+-MM4's brief says where the design is going: one motion source per body chosen at binding from the skin, never swapped live; a typed intent (`Steer` now, `Path` and `Face` in MM6) reduced to one desired trajectory at the database's horizons, smoothed only by the spring in `tdoll-motion`, `steering.gd` mapping keys to a velocity, zero velocity still a steer; the owner contract (reset separate from `rest()`, abort on every change of owner); one `Database` in `tdoll-motion` (f32 rows, layout from `Group`, selectable ranges, normalisation) built once at native load from `GFMotionDatabase`, resolving (set, clip) to animation names and checking the ground joint is each set's root bone, read by `explain` too; transitions are cuts plus inertialisation, with the stop to idle chosen; names `GFBodyMatchedMotion`, `GFMotionMatcher`. The maintainer decides on a second native owner before code; MM4 adds EMM; the packless question comes before MM6, which MM4 must not depend on.
+diff --git a/tools/crates/design-read/tests/fixtures/mm5/design-read.md b/tools/crates/design-read/tests/fixtures/mm5/design-read.md
+deleted file mode 100644
+index 3ffffc38..00000000
+--- a/tools/crates/design-read/tests/fixtures/mm5/design-read.md
++++ /dev/null
+@@ -1,29 +0,0 @@
+-# MM5 design read
+-
+-- Area: the matcher's footprint and obstacle columns, and where obstacle disks are derived
+-- Revision: 4f1c0d2a9b8e7f6a5d4c3b2a1908f7e6d5c4b3a2
+-- Previous: ../mm4/design-read.md
+-- Inspected: `tdoll-motion` `Group`, `Database`; `GFBodyMatchedMotion`; `GFObstacleDisks`; `GFBodyNavigation`
+-
+-## After the last phase
+-
+-MM4 landed its two first commits, so the locomotion-node seam is gone and a cut frame carries its own travel. The database has one owner in `tdoll-motion`, and the source's owner contract separates reset from `rest()`. The typed intent has only `Steer`; `Path` and `Face` remain MM6's. The stand-in and the packless question are outside this read's area and stay where MM4 left them.
+-
+-**Answer.** MM5 can add footprint columns to the one database without a slice of its own. One new disagreement: obstacle disks are derived in the gym and again in navigation.
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| mm4-D1 | Locomotion enters the tree three ways | MM4 | `GFBodyClips` | none left | the seam is removed | resolved |
+-| mm4-D2 | A cut frame's travel | MM4 | `GFBodyClips` `motion_delta` | none left | a cut frame's travel comes from `clips.travel` | resolved |
+-| mm4-D3 | The motion database's owner | MM4 | `tdoll-motion` `Database` | none left | one `Database` owns its invariants | resolved |
+-| mm4-D4 | One intent type with only `Steer` so far | MM6 | `GFBodyMotionSource` `Intent` | navigation still reduces a path to a steer | `Path` and `Face` exist and navigation sends them | open |
+-| mm4-D5 | The source's lifetime | MM4 | `GFBodyMotionSource` `reset` | none left | reset is separate from `rest()` | resolved |
+-| mm4-D6 | The stand-in and the matcher side by side | MM6 | `GFBodyPerformance` `locomotion_is_stand_in` | two sources to keep correct | tracked in MM6's brief | parked |
+-| mm4-D7 | Characters with no pack | the maintainer | Paperbot, Gymbot, CesiumMan | MM6 would strand them | tracked as the maintainer's decision before MM6 | parked |
+-| mm5-D1 | Obstacle disks are derived twice | MM5 | `GFObstacleDisks`; `GFBodyNavigation` | the matcher and navigation would avoid different obstacles | one runtime owner derives the disks and both read it | new |
+-
+-## What later phases need
+-
+-- MM6: the path intent closes mm4-D4 and needs the disks' one owner from mm5-D1.
+diff --git a/tools/crates/design-read/tests/fixtures/previous/design-read.md b/tools/crates/design-read/tests/fixtures/previous/design-read.md
+deleted file mode 100644
+index e135bb1f..00000000
+--- a/tools/crates/design-read/tests/fixtures/previous/design-read.md
++++ /dev/null
+@@ -1,13 +0,0 @@
+-# Previous design read
+-
+-- Area: an earlier area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
+-- Inspected: `site`
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| prev-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+-| prev-D2 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+diff --git a/tools/crates/design-read/tests/fixtures/previous/notes.md b/tools/crates/design-read/tests/fixtures/previous/notes.md
+deleted file mode 100644
+index 120b0ef6..00000000
+--- a/tools/crates/design-read/tests/fixtures/previous/notes.md
++++ /dev/null
+@@ -1,3 +0,0 @@
+-# Notes
+-
+-Prose with no disagreements section.
+diff --git a/tools/crates/design-read/tests/fixtures/project/docs/design-reads/README.md b/tools/crates/design-read/tests/fixtures/project/docs/design-reads/README.md
+new file mode 100644
+index 00000000..bb39419c
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/project/docs/design-reads/README.md
+@@ -0,0 +1,6 @@
++# Design reads
++
++This README is prose for readers and holds no header or table; the check does not read it.
++
++- `motion.md`: the motion area.
++- `quiet.md`: an area with no open disagreements.
+diff --git a/tools/crates/design-read/tests/fixtures/project/docs/design-reads/motion.md b/tools/crates/design-read/tests/fixtures/project/docs/design-reads/motion.md
+new file mode 100644
+index 00000000..2f5cc60a
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/project/docs/design-reads/motion.md
+@@ -0,0 +1,35 @@
++# Motion design read
++
++- Area: clip playback and the matcher, and the records the bake writes for them
++- Last full read: 3ddf4c52ef5079f3f4f977b1e3c62721dccc8b1f
++- Inspected: `src/clips/`, `src/matcher.rs`, `records/motion.rs`
++
++## Models in play
++
++- A clip: `src/clips/clip.rs` `Clip` holds its frames; the matcher reads the same frames through `records/motion.rs` `Frame`.
++
++An example of a row, which the check does not read:
++
++```markdown
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++```
++
++## Overlaps
++
++- Frame rate is held by both `Clip` and `Frame`.
++
++## Half-done transitions
++
++- None.
++
++## What later work needs
++
++- Root motion read from one place.
++
++## Disagreements
++
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| Frame rate | `src/clips` | `src/clips/clip.rs` `Clip::rate`; `records/motion.rs` `Frame::rate` | The two rates drift and the matcher picks frames at the wrong time. | One rate, held by `Clip`, and `Frame` reads it. |
++| Root motion \| translation | the maintainer | `src/matcher.rs` `root` | The matcher and playback move the root differently. | Both read the root from the clip. |
+diff --git a/tools/crates/design-read/tests/fixtures/none-found/design-read.md b/tools/crates/design-read/tests/fixtures/project/docs/design-reads/quiet.md
+similarity index 51%
+rename from tools/crates/design-read/tests/fixtures/none-found/design-read.md
+rename to tools/crates/design-read/tests/fixtures/project/docs/design-reads/quiet.md
+index d2403fef..604b5342 100644
+--- a/tools/crates/design-read/tests/fixtures/none-found/design-read.md
++++ b/tools/crates/design-read/tests/fixtures/project/docs/design-reads/quiet.md
+@@ -1,14 +1,13 @@
+ # Quiet design read
+ 
+-- Area: an area with no disagreements
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Area: an area with no open disagreements
++- Last full read: 3ddf4c52ef5079f3f4f977b1e3c62721dccc8b1f
+ - Inspected: `site`, `other`
+ 
+-## Disagreements
+-
+-None found.
+-
+ ## Models in play
+ 
+ - One model.
++
++## Disagreements
++
++None found.
+diff --git a/tools/crates/design-read/tests/fixtures/refused/after-empty.md b/tools/crates/design-read/tests/fixtures/refused/after-empty.md
+deleted file mode 100644
+index a62996cd..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/after-empty.md
++++ /dev/null
+@@ -1,16 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: ../previous/design-read.md
+-- Inspected: `site`
+-
+-## After the last phase
+-
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| prev-D1 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+-| prev-D2 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/after-in-first-read.md b/tools/crates/design-read/tests/fixtures/refused/after-in-first-read.md
+deleted file mode 100644
+index bc330fa7..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/after-in-first-read.md
++++ /dev/null
+@@ -1,16 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
+-- Inspected: `site`
+-
+-## After the last phase
+-
+-A first read has no last phase.
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/after-missing.md b/tools/crates/design-read/tests/fixtures/refused/after-missing.md
+deleted file mode 100644
+index aed77a2f..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/after-missing.md
++++ /dev/null
+@@ -1,13 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: ../previous/design-read.md
+-- Inspected: `site`
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| prev-D1 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+-| prev-D2 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/carried-status-for-new-id.md b/tools/crates/design-read/tests/fixtures/refused/carried-status-for-new-id.md
+deleted file mode 100644
+index 4536b69b..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/carried-status-for-new-id.md
++++ /dev/null
+@@ -1,12 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
+-- Inspected: `site`
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/cell-count.md b/tools/crates/design-read/tests/fixtures/refused/cell-count.md
+index 83449319..9d0cdc0b 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/cell-count.md
++++ b/tools/crates/design-read/tests/fixtures/refused/cell-count.md
+@@ -1,12 +1,11 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/empty-cell.md b/tools/crates/design-read/tests/fixtures/refused/empty-cell.md
+index aaa28f00..d47cd854 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/empty-cell.md
++++ b/tools/crates/design-read/tests/fixtures/refused/empty-cell.md
+@@ -1,12 +1,11 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept |  | `site` | what goes wrong | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept |  | `site` | what goes wrong | when it is done |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/empty-field.md b/tools/crates/design-read/tests/fixtures/refused/empty-field.md
+index 5c297ba2..4544be14 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/empty-field.md
++++ b/tools/crates/design-read/tests/fixtures/refused/empty-field.md
+@@ -1,12 +1,11 @@
+ # Refused design read
+ 
+-- Area: 
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Area:
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong | when it is done |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/missing-delimiter.md b/tools/crates/design-read/tests/fixtures/refused/missing-delimiter.md
+index ff793165..e4363848 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/missing-delimiter.md
++++ b/tools/crates/design-read/tests/fixtures/refused/missing-delimiter.md
+@@ -1,11 +1,10 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++| a concept | the owner | `site` | what goes wrong | when it is done |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/missing-disagreements.md b/tools/crates/design-read/tests/fixtures/refused/missing-disagreements.md
+index bd24f77f..e1548eee 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/missing-disagreements.md
++++ b/tools/crates/design-read/tests/fixtures/refused/missing-disagreements.md
+@@ -1,10 +1,9 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+-## Overlaps
++## Models in play
+ 
+-- Prose only.
++- One model.
+diff --git a/tools/crates/design-read/tests/fixtures/refused/missing-field.md b/tools/crates/design-read/tests/fixtures/refused/missing-field.md
+index 45b61e75..3f801412 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/missing-field.md
++++ b/tools/crates/design-read/tests/fixtures/refused/missing-field.md
+@@ -1,11 +1,10 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong | when it is done |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/new-for-carried-id.md b/tools/crates/design-read/tests/fixtures/refused/new-for-carried-id.md
+deleted file mode 100644
+index 9f024006..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/new-for-carried-id.md
++++ /dev/null
+@@ -1,17 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: ../previous/design-read.md
+-- Inspected: `site`
+-
+-## After the last phase
+-
+-MM4 landed; the seam is gone.
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| prev-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+-| prev-D2 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/no-rows.md b/tools/crates/design-read/tests/fixtures/refused/no-rows.md
+index 66eadbb6..c251686b 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/no-rows.md
++++ b/tools/crates/design-read/tests/fixtures/refused/no-rows.md
+@@ -1,11 +1,9 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
++Nothing to say.
+diff --git a/tools/crates/design-read/tests/fixtures/refused/none-found-beside-empty-table.md b/tools/crates/design-read/tests/fixtures/refused/none-found-beside-empty-table.md
+new file mode 100644
+index 00000000..7d0030c1
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/refused/none-found-beside-empty-table.md
+@@ -0,0 +1,12 @@
++# Refused design read
++
++- Area: a test area
++- Last full read: 0123456789abcdef0123456789abcdef01234567
++- Inspected: `site`
++
++## Disagreements
++
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++
++None found.
+diff --git a/tools/crates/design-read/tests/fixtures/refused/none-found-beside-rows.md b/tools/crates/design-read/tests/fixtures/refused/none-found-beside-rows.md
+index 61939024..479923af 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/none-found-beside-rows.md
++++ b/tools/crates/design-read/tests/fixtures/refused/none-found-beside-rows.md
+@@ -1,14 +1,13 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong | when it is done |
+ 
+ None found.
+diff --git a/tools/crates/design-read/tests/fixtures/refused/previous-field.md b/tools/crates/design-read/tests/fixtures/refused/previous-field.md
+new file mode 100644
+index 00000000..e83c17d7
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/refused/previous-field.md
+@@ -0,0 +1,10 @@
++# Refused design read
++
++- Area: a test area
++- Last full read: 0123456789abcdef0123456789abcdef01234567
++- Inspected: `site`
++- Previous: ../earlier/design-read.md
++
++## Disagreements
++
++None found.
+diff --git a/tools/crates/design-read/tests/fixtures/refused/previous-missing.md b/tools/crates/design-read/tests/fixtures/refused/previous-missing.md
+deleted file mode 100644
+index d27e7616..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/previous-missing.md
++++ /dev/null
+@@ -1,17 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: ../nowhere/design-read.md
+-- Inspected: `site`
+-
+-## After the last phase
+-
+-MM4 landed; the seam is gone.
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| prev-D1 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+-| prev-D2 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/previous-without-table.md b/tools/crates/design-read/tests/fixtures/refused/previous-without-table.md
+deleted file mode 100644
+index 3be218bf..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/previous-without-table.md
++++ /dev/null
+@@ -1,16 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: ../previous/notes.md
+-- Inspected: `site`
+-
+-## After the last phase
+-
+-MM4 landed; the seam is gone.
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| prev-D1 | a concept | the writer | `site` | what goes wrong | when it is done | open |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/repeated-concept.md b/tools/crates/design-read/tests/fixtures/refused/repeated-concept.md
+new file mode 100644
+index 00000000..9d040e34
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/refused/repeated-concept.md
+@@ -0,0 +1,12 @@
++# Refused design read
++
++- Area: a test area
++- Last full read: 0123456789abcdef0123456789abcdef01234567
++- Inspected: `site`
++
++## Disagreements
++
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong | when it is done |
++| A Concept | another owner | `other` | what else goes wrong | when that is done |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/repeated-disagreements.md b/tools/crates/design-read/tests/fixtures/refused/repeated-disagreements.md
+new file mode 100644
+index 00000000..959a7352
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/refused/repeated-disagreements.md
+@@ -0,0 +1,15 @@
++# Refused design read
++
++- Area: a test area
++- Last full read: 0123456789abcdef0123456789abcdef01234567
++- Inspected: `site`
++
++## Disagreements
++
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong | when it is done |
++
++## Disagreements
++
++None found.
+diff --git a/tools/crates/design-read/tests/fixtures/refused/repeated-field.md b/tools/crates/design-read/tests/fixtures/refused/repeated-field.md
+index 7317c4af..39c80110 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/repeated-field.md
++++ b/tools/crates/design-read/tests/fixtures/refused/repeated-field.md
+@@ -1,13 +1,12 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ - Area: another area
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong | when it is done |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/repeated-id.md b/tools/crates/design-read/tests/fixtures/refused/repeated-id.md
+deleted file mode 100644
+index 21c5ef2d..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/repeated-id.md
++++ /dev/null
+@@ -1,13 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
+-- Inspected: `site`
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/second-table.md b/tools/crates/design-read/tests/fixtures/refused/second-table.md
+index 53d8facd..6bc3a334 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/second-table.md
++++ b/tools/crates/design-read/tests/fixtures/refused/second-table.md
+@@ -1,18 +1,15 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong | when it is done |
+ 
+-A second table:
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D2 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| another concept | the owner | `site` | what goes wrong | when it is done |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/short-commit.md b/tools/crates/design-read/tests/fixtures/refused/short-commit.md
+new file mode 100644
+index 00000000..24f02fd2
+--- /dev/null
++++ b/tools/crates/design-read/tests/fixtures/refused/short-commit.md
+@@ -0,0 +1,11 @@
++# Refused design read
++
++- Area: a test area
++- Last full read: 3ddf4c52
++- Inspected: `site`
++
++## Disagreements
++
++| Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|
++| a concept | the owner | `site` | what goes wrong | when it is done |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/short-revision.md b/tools/crates/design-read/tests/fixtures/refused/short-revision.md
+deleted file mode 100644
+index 7a41d940..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/short-revision.md
++++ /dev/null
+@@ -1,12 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 80adaf9
+-- Previous: none
+-- Inspected: `site`
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/unknown-status.md b/tools/crates/design-read/tests/fixtures/refused/unknown-status.md
+deleted file mode 100644
+index 091bd67c..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/unknown-status.md
++++ /dev/null
+@@ -1,12 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
+-- Inspected: `site`
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | closed |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/unqualified-id.md b/tools/crates/design-read/tests/fixtures/refused/unqualified-id.md
+deleted file mode 100644
+index 6d3037d8..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/unqualified-id.md
++++ /dev/null
+@@ -1,12 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
+-- Inspected: `site`
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/unresolved-id-omitted.md b/tools/crates/design-read/tests/fixtures/refused/unresolved-id-omitted.md
+deleted file mode 100644
+index a8d16338..00000000
+--- a/tools/crates/design-read/tests/fixtures/refused/unresolved-id-omitted.md
++++ /dev/null
+@@ -1,16 +0,0 @@
+-# Refused design read
+-
+-- Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: ../previous/design-read.md
+-- Inspected: `site`
+-
+-## After the last phase
+-
+-MM4 landed; the seam is gone.
+-
+-## Disagreements
+-
+-| ID | Concept | Owner | Sites | Consequence | Done when | Status |
+-|---|---|---|---|---|---|---|
+-| prev-D2 | a concept | the writer | `site` | what goes wrong | when it is done | resolved |
+diff --git a/tools/crates/design-read/tests/fixtures/refused/wrong-columns.md b/tools/crates/design-read/tests/fixtures/refused/wrong-columns.md
+index 63a92e35..2f1d9134 100644
+--- a/tools/crates/design-read/tests/fixtures/refused/wrong-columns.md
++++ b/tools/crates/design-read/tests/fixtures/refused/wrong-columns.md
+@@ -1,12 +1,11 @@
+ # Refused design read
+ 
+ - Area: a test area
+-- Revision: 0123456789abcdef0123456789abcdef01234567
+-- Previous: none
++- Last full read: 0123456789abcdef0123456789abcdef01234567
+ - Inspected: `site`
+ 
+ ## Disagreements
+ 
+-| ID | Concept | Owner | Sites | Consequence | Fix | Status |
+-|---|---|---|---|---|---|---|
+-| r-D1 | a concept | the writer | `site` | what goes wrong | when it is done | new |
++| ID | Concept | Owner | Sites | Consequence | Done when |
++|---|---|---|---|---|---|
++| r-D1 | a concept | the owner | `site` | what goes wrong | when it is done |
+diff --git a/tools/crates/design-read/tests/scenarios.rs b/tools/crates/design-read/tests/scenarios.rs
+index 0409345e..33d31d3b 100644
+--- a/tools/crates/design-read/tests/scenarios.rs
++++ b/tools/crates/design-read/tests/scenarios.rs
+@@ -1,18 +1,23 @@
+-//! design-read through its command, on the reads under `tests/fixtures/`. Its uses, most common first:
++//! design-read through its command, on the area files under `tests/fixtures/`. Its uses, most common first:
+ //!
+-//! 1. A coordinator checks a read before a writer starts: a first read passes, and so does a follow-up that carries
+-//!    forward every disagreement its previous read left unresolved.
+-//! 2. A read with a fault: one line per refusal on standard error, naming the file, line and field, and exit 1. Each
+-//!    fixture under `refused/` breaks one rule and is refused for that one alone.
+-//! 3. A read that cannot be read, or a malformed command line: exit 2.
++//! 1. A writer checks a project's area files with no argument: every `*.md` in `docs/design-reads/` but the README.
++//! 2. A writer checks the files they name, one or several.
++//! 3. An area file with a fault: one line per refusal on standard error, naming the file, line and field, and exit 1.
++//!    Each fixture under `refused/` breaks one rule and is refused for that one alone.
++//! 4. A missing folder, a file that cannot be read, or a malformed command line: exit 2.
+ 
+ use std::path::Path;
+ use std::process::{Command, Output};
+ 
+-fn design_read(arguments: &[&str]) -> Output {
++/// Runs design-read with `arguments` in the fixtures folder `folder`.
++fn design_read(folder: &str, arguments: &[&str]) -> Output {
+     Command::new(env!("CARGO_BIN_EXE_design-read"))
+         .args(arguments)
+-        .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures"))
++        .current_dir(
++            Path::new(env!("CARGO_MANIFEST_DIR"))
++                .join("tests/fixtures")
++                .join(folder),
++        )
+         .output()
+         .expect("design-read runs")
+ }
+@@ -22,137 +27,138 @@ fn text(bytes: &[u8]) -> &str {
+ }
+ 
+ #[test]
+-fn a_first_read_and_its_follow_up_pass_with_their_rows_counted() {
+-    for (read, summary) in [
+-        (
+-            "mm4/design-read.md",
+-            "disagreements: 7 new, 0 open, 0 resolved, 0 parked",
+-        ),
+-        (
+-            "mm5/design-read.md",
+-            "disagreements: 1 new, 1 open, 4 resolved, 2 parked",
+-        ),
+-        (
+-            "previous/design-read.md",
+-            "disagreements: 2 new, 0 open, 0 resolved, 0 parked",
+-        ),
+-        ("none-found/design-read.md", "none found"),
+-    ] {
+-        let output = design_read(&["check", read]);
+-        assert_eq!(text(&output.stderr), "", "{read}");
+-        assert_eq!(text(&output.stdout), format!("{read}: passes: {summary}\n"));
+-        assert_eq!(output.status.code(), Some(0), "{read}");
+-    }
++fn with_no_file_every_area_file_in_the_folder_is_checked_and_the_readme_is_not() {
++    let output = design_read("project", &["check"]);
++    assert_eq!(text(&output.stderr), "");
++    assert_eq!(
++        text(&output.stdout),
++        "docs/design-reads/motion.md: passes\ndocs/design-reads/quiet.md: passes\n"
++    );
++    assert_eq!(output.status.code(), Some(0));
++}
++
++#[test]
++fn named_files_are_each_checked_and_any_refusal_fails_the_run() {
++    let passing = design_read(
++        "project/docs/design-reads",
++        &["check", "quiet.md", "motion.md"],
++    );
++    assert_eq!(text(&passing.stderr), "");
++    assert_eq!(
++        text(&passing.stdout),
++        "quiet.md: passes\nmotion.md: passes\n"
++    );
++    assert_eq!(passing.status.code(), Some(0));
++
++    let mixed = design_read(
++        "",
++        &[
++            "check",
++            "refused/empty-cell.md",
++            "project/docs/design-reads/quiet.md",
++        ],
++    );
++    assert_eq!(
++        text(&mixed.stderr),
++        "refused/empty-cell.md:11: Owner: empty\n"
++    );
++    assert_eq!(
++        text(&mixed.stdout),
++        "project/docs/design-reads/quiet.md: passes\n"
++    );
++    assert_eq!(mixed.status.code(), Some(1));
+ }
+ 
+ #[test]
+ fn each_broken_rule_is_refused_alone_at_its_line_and_field() {
+-    for (read, refusal) in [
++    for (file, refusal) in [
+         (
+             "missing-field",
+-            "1: Inspected: missing; a read's header has `- Inspected: ...`",
++            "1: Inspected: missing; an area file's header has `- Inspected: ...`",
+         ),
+-        ("repeated-field", "7: Area: given again; first on line 3"),
++        ("repeated-field", "6: Area: given again; first on line 3"),
+         ("empty-field", "3: Area: empty"),
+         (
+-            "short-revision",
+-            "4: Revision: `80adaf9` is not a full commit id, 40 lowercase hexadecimal digits",
++            "short-commit",
++            "4: Last full read: `3ddf4c52` is not a full commit id, 40 lowercase hexadecimal digits",
+         ),
+         (
+-            "previous-missing",
+-            "5: Previous: ../nowhere/design-read.md cannot be read: No such file or directory (os error 2)",
++            "missing-disagreements",
++            "1: Disagreements: missing; an area file has a `## Disagreements` section",
+         ),
+         (
+-            "previous-without-table",
+-            "5: Previous: ../previous/notes.md has no table to compare with: it has no `## Disagreements` section",
++            "repeated-disagreements",
++            "13: Disagreements: given again; first on line 7",
+         ),
+         (
+             "wrong-columns",
+-            "10: Disagreements: columns are `ID | Concept | Owner | Sites | Consequence | Fix | Status`; \
+-             a read's are `ID | Concept | Owner | Sites | Consequence | Done when | Status`",
++            "9: Disagreements: columns are `ID | Concept | Owner | Sites | Consequence | Done when`; \
++             an area file's are `Concept | Owner | Sites | Consequence | Done when`",
+         ),
+         (
+             "missing-delimiter",
+-            "11: Disagreements: the header row is not followed by a delimiter row, `|---|` for each of the 7 columns",
+-        ),
+-        ("cell-count", "12: Disagreements: has 6 cells; a row has 7"),
+-        ("empty-cell", "12: Owner: empty"),
+-        ("repeated-id", "13: ID: r-D1 is also on line 12"),
+-        (
+-            "unqualified-id",
+-            "12: ID: `D1` is not qualified by its read as `<read>-D<n>`, such as `mm4-D1`",
++            "10: Disagreements: the header row is not followed by a delimiter row, `|---|` for each of the 5 columns",
+         ),
++        ("cell-count", "11: Disagreements: has 4 cells; a row has 5"),
++        ("empty-cell", "11: Owner: empty"),
+         (
+-            "unknown-status",
+-            "12: Status: `closed` is not new, open, resolved or parked",
++            "repeated-concept",
++            "12: Concept: `A Concept` is also on line 11",
+         ),
+         (
+-            "new-for-carried-id",
+-            "16: Status: `new`, but prev-D1 is in the previous read; carry it as open, resolved or parked",
+-        ),
+-        (
+-            "carried-status-for-new-id",
+-            "12: Status: `open`, but r-D1 is not in a previous read; a disagreement this read found is new",
+-        ),
+-        (
+-            "unresolved-id-omitted",
+-            "12: Disagreements: prev-D1 is new in the previous read and missing here; \
+-             carry it as open, resolved or parked",
++            "no-rows",
++            "7: Disagreements: has no rows; an area file with no open disagreements says `None found.` instead of a table",
+         ),
+         (
+-            "after-missing",
+-            "5: After the last phase: missing; a read with a previous read begins with what changed since it",
++            "none-found-beside-rows",
++            "13: Disagreements: says `None found.` beside a table",
+         ),
+-        ("after-empty", "8: After the last phase: empty"),
+         (
+-            "after-in-first-read",
+-            "8: After the last phase: present in a first read; only a read with a previous read has one",
++            "none-found-beside-empty-table",
++            "12: Disagreements: says `None found.` beside a table",
+         ),
+         (
+-            "no-rows",
+-            "8: Disagreements: has no rows; a read that found none says `None found.`",
+-        ),
+-        (
+-            "none-found-beside-rows",
+-            "14: Disagreements: says `None found.` beside rows",
++            "previous-field",
++            "6: Previous: not a header field; an area file's header has exactly Area, Last full read and Inspected",
+         ),
+         (
+             "second-table",
+-            "16: Disagreements: a second table; a read has one disagreements table",
+-        ),
+-        (
+-            "missing-disagreements",
+-            "1: Disagreements: missing; a read has a `## Disagreements` section",
++            "13: Disagreements: a second table; an area file has one disagreements table",
+         ),
+     ] {
+-        let file = format!("refused/{read}.md");
+-        let output = design_read(&["check", &file]);
++        let file = format!("refused/{file}.md");
++        let output = design_read("", &["check", &file]);
+         assert_eq!(
+             text(&output.stderr),
+             format!("{file}:{refusal}\n"),
+-            "{read}"
++            "{file}"
+         );
+-        assert_eq!(text(&output.stdout), "", "{read}");
+-        assert_eq!(output.status.code(), Some(1), "{read}");
++        assert_eq!(text(&output.stdout), "", "{file}");
++        assert_eq!(output.status.code(), Some(1), "{file}");
+     }
+ }
+ 
+ #[test]
+-fn a_read_that_cannot_be_read_or_a_malformed_command_line_exits_2() {
+-    let missing = design_read(&["check", "nowhere.md"]);
++fn a_missing_folder_an_unreadable_file_or_a_malformed_command_line_exits_2() {
++    let no_folder = design_read("refused", &["check"]);
++    assert_eq!(
++        text(&no_folder.stderr),
++        "docs/design-reads: cannot be listed: No such file or directory (os error 2)\n"
++    );
++    assert_eq!(text(&no_folder.stdout), "");
++    assert_eq!(no_folder.status.code(), Some(2));
++
++    let missing = design_read("", &["check", "nowhere.md", "refused/empty-cell.md"]);
+     assert_eq!(
+         text(&missing.stderr),
+-        "nowhere.md: cannot be read: No such file or directory (os error 2)\n"
++        "nowhere.md: cannot be read: No such file or directory (os error 2)\n\
++         refused/empty-cell.md:11: Owner: empty\n"
+     );
+     assert_eq!(missing.status.code(), Some(2));
+-    for arguments in [
+-        &[][..],
+-        &["check"],
+-        &["check", "a.md", "b.md"],
+-        &["verify", "a.md"],
+-    ] {
++
++    for arguments in [&[][..], &["verify", "a.md"], &["check", "--all"]] {
+         assert_eq!(
+-            design_read(arguments).status.code(),
++            design_read("", arguments).status.code(),
+             Some(2),
+             "{arguments:?}"
+         );

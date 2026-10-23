@@ -1,12 +1,14 @@
 # Evals
 
-These evals ask a coding agent to finish small changes taken from real review findings in this repository's own tools, once with the standards available to it and once without, and check each result with hidden tests. This file says how to run them. [The evals design read](../docs/design-reads/evals.md) defines the tasks, the two conditions, the verifier and the accounting, and lists what is still unsettled.
+These evals give a coding agent work taken from this repository's own tools, once with the standards available to it and once without, and check each result with hidden tests. This file says how to run them. [The evals design read](../docs/design-reads/evals.md) defines the tasks, the two conditions, the verifiers and the accounting, and lists what is still unsettled.
 
 ## What they measure
 
-Each task starts from a reviewed revision whose review found a defect, states the behaviour the change must have, and scores 1 only when the crate's existing tests and the task's hidden tests both pass. A comparison runs each task in two conditions that differ only in the standards guidance bundle, so its pass counts and costs show whether supplying that bundle made a difference for these tasks, with this model, at these limits.
+There are two kinds of task: a bug-fix task, which asks for the fix of a defect a review found, and a feature task, which gives the agent a past change's brief. Each scores 1 only when the crate's existing tests and the task's hidden tests both pass; [the design read](../docs/design-reads/evals.md#models-in-play) defines each kind, its verifier and its reference.
 
-They cannot show whether the standards improve code in general, or which rule helped: three tasks are three cases, and repeated attempts at one task are not independent tasks. A task that every attempt solves, or that none does, says nothing about the bundle for that model. The model also knows much of what the standards say without being told.
+A comparison runs each task in two conditions that differ only in the standards guidance bundle, so its pass counts and costs show whether supplying that bundle made a difference for these tasks, with this model, at these limits.
+
+They cannot show whether the standards improve code in general, or which rule helped: each task is one case, and repeated attempts at one task are not independent tasks. A task that every attempt solves, or that none does, says nothing about the bundle for that model. The model also knows much of what the standards say without being told.
 
 ## Tools
 
@@ -227,7 +229,7 @@ What an agent writes can name it too, so `blind.sh` checks each packet against w
 
 ### The reference control
 
-The reference is analysed the same way, from the oracle trials of a free-check run, as a control: it shows what the evaluator says of a reference production fix that passes the task verifier. The reference omits its tests by design, so it is no baseline for the regression-test criterion; [the design read](../docs/design-reads/evals.md#disagreements) says why, and `results.json` marks that baseline unavailable while keeping the reference's own outcomes. Each trial is analysed twice (`-k 2`), so `results.json` shows how often the evaluator gives one change two outcomes. [`review/results.sh`](review/results.sh) refuses a key and an analysis that do not describe the same packets, each the number of times the analysis asked.
+The reference is analysed the same way, from the oracle trials of a free-check run, as a control: it shows what the evaluator says of a reference production fix that passes the task verifier. A bug-fix task's reference omits its tests by design, so it is no baseline for the regression-test criterion; [the design read](../docs/design-reads/evals.md#disagreements) says why, and `results.json` marks that baseline unavailable while keeping the reference's own outcomes. A feature task's reference is the whole landed change, its tests included, and is a baseline for every criterion. Each trial is analysed twice (`-k 2`), so `results.json` shows how often the evaluator gives one change two outcomes. [`review/results.sh`](review/results.sh) refuses a key and an analysis that do not describe the same packets, each the number of times the analysis asked.
 
 Agreement compares the attempts within this run. It establishes neither correctness nor reproducibility across runs; the same reviewer settings can yield different verdicts. Comparisons must also account for rubric and prompt changes.
 
@@ -276,16 +278,29 @@ The task images build, and their verifiers run, under rootless Podman 6.1.4 (cgr
 
 Each trial runs its agent's container, stops it, then runs the verifier's. Each task container is limited to 4 CPUs and 6 GiB; the network sidecar beside each container and the image builds come on top.
 
-## Adding a task from a finding
+## Adding a task
 
-A finding qualifies when its code is public, its defect shows on valid input a person can produce, and a hidden test can tell the defect from the fix through the crate's own interface.
+Every task copies a task folder of its kind and changes its names, ids and tree ids. Add the new task directory to [`.dockerignore`](.dockerignore)'s explicit directory exceptions, and admit there any file the Dockerfile copies besides those the task folders already have. Build the image (`podman build -t evals-<task> -f tasks/<task>/environment/Dockerfile .`), run the crate's tests offline in it, and list in `environment/AGENTS.md` and `tests/test.sh` any existing test the container cannot run, with the reason. Record the commit the image makes in `task.toml`, in the metadata and the first collect hook. The task's code must be public.
 
-1. Find the reviewed revision and the landed correction, both by full commit id, and the public base on `main` the reviewed revision grew from. Copy a task folder, write `git diff --binary <base> <reviewed> -- tools/` to `environment/start.patch`, set the base, the tree id of `<reviewed>:tools` and the crate in `environment/Dockerfile`, and set the task's folder in the Dockerfile's `COPY` lines and in `environment/docker-compose.yaml`. Add the new task directory to [`.dockerignore`](.dockerignore)'s explicit directory exceptions, and admit there any file the Dockerfile copies besides those the task folder already has.
-2. Build the image (`podman build -t evals-<task> -f tasks/<task>/environment/Dockerfile .`), run the crate's tests offline in it, and list in `environment/AGENTS.md` and `tests/test.sh` any existing test the container cannot run, with the reason. Record the commit the image makes in `task.toml`, in the metadata and the first collect hook.
-3. Write `instruction.md` from the original requirement: the behaviour the change must have and where the code is, never the failing example or the fix.
-4. Write the hidden tests through the crate's own interface, as [Checks](../rules/general.md#checks) requires, under an `evaluation` module in one integration-test target, and put them in `tests/test.patch`. Set that target and the number of tests in `tests/test.sh`.
-5. Put the production part of the landed correction in `solution/solution.patch`.
-6. Write the obvious wrong answers as patches in `shortcuts/`: refusing the input, returning nothing, ignoring the rule, turning off the crate's test discovery, pointing the hidden target at other tests, and any shortcut the code invites.
+### A bug-fix task, from a finding
+
+A finding qualifies when its defect shows on valid input a person can produce, and a hidden test can tell the defect from the fix through the crate's own interface.
+
+1. Find the reviewed revision and the landed correction, both by full commit id, and the public base on `main` the reviewed revision grew from. Copy `tasks/design-read-fenced-code`, write `git diff --binary <base> <reviewed> -- tools/` to `environment/start.patch`, and set the base, the tree id of `<reviewed>:tools` and the crate in `environment/Dockerfile`, and the task's folder in its `COPY` lines and in `environment/docker-compose.yaml`.
+2. Write `instruction.md` from the original requirement: the behaviour the change must have and where the code is, never the failing example or the fix.
+3. Write the hidden tests through the crate's own interface, as [Checks](../rules/general.md#checks) requires, under an `evaluation` module in one integration-test target, and put them in `tests/test.patch`. Set that target and the number of tests in `tests/test.sh`.
+4. Put the production part of the landed correction in `solution/solution.patch`.
+5. Write the obvious wrong answers as patches in `shortcuts/`: refusing the input, returning nothing, ignoring the rule, turning off the crate's test discovery, pointing the hidden target at other tests, and any shortcut the code invites.
+
+### A feature task, from a past change
+
+A change qualifies when it adds behaviour across several files, with tests, at a size an agent can finish within the experiment's turns, and a brief or a commit message says what it had to do.
+
+1. Find the landed change by full commit id; its parent on `main` is the base. Copy `tasks/dandegate-step-durations` and set the base, the tree id of `<base>:tools` and the crate in `environment/Dockerfile`, and the task's folder in its `COPY` lines and in `environment/docker-compose.yaml`. There is no `start.patch`: the base is public.
+2. Write `instruction.md` from the change's brief, as a self-contained instruction: what the tool is and where, the behaviour required with every interface detail a hidden test checks, what must not change, and the tests the brief asked for. Leave out the landed code, its private names, review documents and any decision the brief did not make that no hidden test checks.
+3. Write the hidden tests from the brief's requirements, through the command, in a new integration-test target, `tests/evaluation.rs`, whose tests are in an `evaluation` module, with a copy of any scenario helpers they need from the base in `tests/evaluation/`. Put them in `tests/test.patch`, and set the target and the number of tests in `tests/test.sh`.
+4. Put the whole landed change under `tools/`, its tests included, in `solution/solution.patch`.
+5. Write as patches in `shortcuts/` the wrong answers above that apply, and the landed change with each of its required parts left out in turn.
 
 ## The free checks every task passes
 

@@ -64,13 +64,16 @@ for trial in "$@"; do
         "$trial/verifier/test-stdout.txt" > "$packet/verifier/test-stdout.txt"
     git -C .. archive "$rev" rules skills | tar -x -C "$packet/standards"
 
-    # The starting tree, rebuilt as the task's Dockerfile builds it and checked against the tree id task.toml records.
+    # The starting tree, rebuilt as the task's Dockerfile builds it and checked against the tree id task.toml records:
+    # a bug-fix task's base with its start.patch, a feature task's base alone.
     base=$(sed -n 's/^source_base = "\([0-9a-f]*\)"$/\1/p' "$task/task.toml")
     tree=$(sed -n 's/^source_tree = "\([0-9a-f]*\)"$/\1/p' "$task/task.toml")
     index=$(mktemp)
     rm -f "$index"
     GIT_INDEX_FILE=$index git -C .. read-tree "$base"
-    GIT_INDEX_FILE=$index git -C .. apply --cached --whitespace=nowarn "$PWD/$task/environment/start.patch"
+    if [ -f "$task/environment/start.patch" ]; then
+        GIT_INDEX_FILE=$index git -C .. apply --cached --whitespace=nowarn "$PWD/$task/environment/start.patch"
+    fi
     built=$(GIT_INDEX_FILE=$index git -C .. write-tree --prefix=tools/)
     rm -f "$index"
     [ "$built" = "$tree" ] || stop "$task's starting tree is $built, not the $tree task.toml records"

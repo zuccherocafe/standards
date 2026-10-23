@@ -1,0 +1,227 @@
+diff --git a/tools/crates/dandegate/src/page.rs b/tools/crates/dandegate/src/page.rs
+index 1d2e3df2..b6958659 100644
+--- a/tools/crates/dandegate/src/page.rs
++++ b/tools/crates/dandegate/src/page.rs
+@@ -2,7 +2,8 @@
+ //! reads in light and dark themes, and links only to files inside the output folder.
+ //!
+ //! The page's sections, in order, are what makes the report incomplete, the host programs not found, the reader's
+-//! notices about the steps file, the measuring-code warning, the measures that got worse, every step's outcome, what dandegate reused or kept, the steps'
++//! notices about the steps file, the measuring-code warning, the measures that got worse, every step's outcome with how
++//! long it ran and, when the report shared the CPUs out, the CPUs it ran on, what dandegate reused or kept, the steps'
+ //! sections, every measure, and the images.
+ 
+ use std::fmt::Write as _;
+@@ -24,6 +25,8 @@ pub(crate) struct Shown {
+     pub(crate) reuse: Option<String>,
+     /// The CPUs it ran on, when the report shared them out.
+     pub(crate) cpus: Option<String>,
++    /// How long it ran, when it ran in this report.
++    pub(crate) time: Option<String>,
+ }
+ 
+ /// One linked section.
+@@ -267,7 +270,7 @@ fn steps(html: &mut String, shown: &[Shown]) {
+     html.push_str("<h2 id=\"steps\">Steps</h2>\n");
+     // The CPUs show only when the report shared them out.
+     let shared = shown.iter().any(|shown| shown.cpus.is_some());
+-    let mut header = vec!["Side", "Step", "Outcome", "Log"];
++    let mut header = vec!["Side", "Step", "Outcome", "Time", "Log"];
+     if shared {
+         header.push("CPUs");
+     }
+@@ -282,6 +285,7 @@ fn steps(html: &mut String, shown: &[Shown]) {
+                 escape(&shown.place),
+                 escape(&shown.step),
+                 escape(&shown.outcome),
++                escape(shown.time.as_deref().unwrap_or_default()),
+                 log,
+             ];
+             if shared {
+diff --git a/tools/crates/dandegate/src/report.rs b/tools/crates/dandegate/src/report.rs
+index 65a97c03..5d56733a 100644
+--- a/tools/crates/dandegate/src/report.rs
++++ b/tools/crates/dandegate/src/report.rs
+@@ -10,7 +10,7 @@
+ //! 2. Share the CPUs between the enabled steps with a CPU share and the others ([`cpus`]).
+ //! 3. For each reusable step, work out its identity, running its collector, and look for a kept result.
+ //! 4. Decide which steps run. A step that only other steps need runs only when one of them runs fresh.
+-//! 5. Run the steps, and keep each complete success.
++//! 5. Run the steps, timing each, and keep each complete success.
+ //! 6. Remove the checkouts, keep the build caches within their bound and let go of them ([`cache`]).
+ //! 7. Compare the two sides, and write the page, `measures.json` and the printed lines.
+ //!
+@@ -32,7 +32,7 @@ use std::fs::{self, File, OpenOptions};
+ use std::io::{self, Write as _};
+ use std::sync::Mutex;
+ use std::sync::atomic::{AtomicU64, Ordering};
+-use std::time::Instant;
++use std::time::{Duration, Instant};
+ 
+ use camino::{Utf8Path, Utf8PathBuf};
+ 
+@@ -109,6 +109,8 @@ struct Session<'a> {
+     /// The CPUs each instance runs on.
+     cpus: Allocation,
+     notes: Mutex<BTreeMap<InstanceId, Vec<String>>>,
++    /// How long each instance that ran took, from its start to its outcome.
++    durations: Mutex<BTreeMap<InstanceId, Duration>>,
+ }
+ 
+ /// What a report printed, and whether its page was written.
+@@ -187,6 +189,7 @@ pub(crate) fn report(request: &Request) -> Finished {
+         builds: builds.and_then(Result::ok),
+         cpus,
+         notes: Mutex::new(BTreeMap::new()),
++        durations: Mutex::new(BTreeMap::new()),
+     };
+     if let Some(why) = busy {
+         for (at, cache) in session.caches.iter() {
+@@ -584,6 +587,7 @@ impl Session<'_> {
+ 
+     /// Run one instance and keep its result when it is a complete success.
+     fn execute(&self, at: InstanceId) -> Outcome {
++        let started = Instant::now();
+         let instance = self.graph.instance(at);
+         self.log.write(&format!(
+             "=== {} {}: started\n",
+@@ -610,10 +614,15 @@ impl Session<'_> {
+         if let Ok(mut log) = OpenOptions::new().append(true).open(&log_path) {
+             let _ = writeln!(log, "--- {outcome}");
+         }
++        let took = started.elapsed();
++        if let Ok(mut durations) = self.durations.lock() {
++            durations.insert(at, took);
++        }
+         self.log.write(&format!(
+-            "=== {} {}: {outcome}\n{}",
++            "=== {} {}: {outcome} in {}\n{}",
+             instance.place,
+             instance.step,
++            seconds(took),
+             fs::read_to_string(&log_path).unwrap_or_default()
+         ));
+         if let Some(Ok(identity)) = &self.identities[at]
+@@ -771,6 +780,11 @@ impl Session<'_> {
+     }
+ }
+ 
++/// A duration as the log and the page show it: seconds, to a tenth.
++pub(crate) fn seconds(duration: Duration) -> String {
++    format!("{:.1} s", duration.as_secs_f64())
++}
++
+ /// An error and each of its causes, once, on one line.
+ pub(crate) fn rendered(error: &dyn std::error::Error) -> String {
+     let mut parts = vec![error.to_string()];
+diff --git a/tools/crates/dandegate/src/report/summary.rs b/tools/crates/dandegate/src/report/summary.rs
+index ffd8a469..d78e867d 100644
+--- a/tools/crates/dandegate/src/report/summary.rs
++++ b/tools/crates/dandegate/src/report/summary.rs
+@@ -11,7 +11,7 @@ use crate::page::{self, Images, Page, Section, Shown};
+ use crate::plan::Output;
+ use crate::report::schedule::{Instance, PerInstance, Place};
+ use crate::report::step::{Outcome, OutputCheck, expected_names};
+-use crate::report::{Finished, Session};
++use crate::report::{Finished, Session, seconds};
+ use crate::revision::{PerSide, Side};
+ 
+ impl Session<'_> {
+@@ -61,6 +61,10 @@ impl Session<'_> {
+             })
+             .collect();
+         let notes = self.notes.lock().map_or_default(|notes| notes.clone());
++        let durations = self
++            .durations
++            .lock()
++            .map_or_default(|durations| durations.clone());
+         let steps: Vec<Shown> = outcomes
+             .iter()
+             .map(|(at, outcome)| (at, self.graph.instance(at), outcome))
+@@ -73,6 +77,7 @@ impl Session<'_> {
+                     .then(|| relative(&self.request.out, &self.folder(instance).join("log.txt"))),
+                 reuse: notes.get(&at).map(|notes| notes.join("; ")),
+                 cpus: self.cpus.label(at),
++                time: durations.get(&at).map(|&took| seconds(took)),
+             })
+             .collect();
+         let notices: Vec<String> = self
+diff --git a/tools/crates/dandegate/tests/scenarios/invocation.rs b/tools/crates/dandegate/tests/scenarios/invocation.rs
+index f862e380..627058bf 100644
+--- a/tools/crates/dandegate/tests/scenarios/invocation.rs
++++ b/tools/crates/dandegate/tests/scenarios/invocation.rs
+@@ -331,3 +331,58 @@ env = ["DANDEGATE_*"]
+         )
+     );
+ }
++
++/// Whether `text` is a duration as the page and log show one: seconds, to a tenth.
++fn is_seconds(text: &str) -> bool {
++    text.strip_suffix(" s")
++        .and_then(|number| number.split_once('.'))
++        .is_some_and(|(whole, tenth)| {
++            !whole.is_empty()
++                && whole.chars().all(|digit| digit.is_ascii_digit())
++                && tenth.len() == 1
++                && tenth.chars().all(|digit| digit.is_ascii_digit())
++        })
++}
++
++#[test]
++fn each_step_that_runs_has_its_duration_in_the_log_and_on_the_page() {
++    let fixture = Fixture::new("durations");
++    fixture.write(
++        "dandegate.toml",
++        &format!(
++            "{PROJECT}\n[[steps.step]]\nname = \"spare\"\nruns = \"once\"\noptional = true\nrun = [\"true\"]\n"
++        ),
++    );
++    fixture.write("fixture/notes/notes.md", "# Notes\n");
++    fixture.write("fixture/notes/notes.md.status", "complete\n");
++    let only = fixture.commit("only");
++    let run = fixture.run("out", &["--before", &only]);
++    let page = run.page();
++    let log = run.file("report.log");
++    for instance in ["before visual", "after visual", "both notes"] {
++        let lead = format!("=== {instance}: ");
++        let line = log
++            .lines()
++            .find_map(|line| {
++                line.strip_prefix(&lead)
++                    .filter(|rest| rest.contains(" in "))
++            })
++            .unwrap_or_else(|| panic!("{instance} has no outcome line: {log}"));
++        let (_, took) = line.rsplit_once(" in ").expect("a duration");
++        assert!(is_seconds(took), "{line}");
++        let (place, step) = instance.split_once(' ').expect("a place and a step");
++        let row = format!("<td>{place}</td><td>{step}</td><td>");
++        let cells = &page[page.find(&row).expect("the step's row") + row.len()..];
++        let cells: Vec<&str> = cells
++            .split("</tr>")
++            .next()
++            .expect("the row")
++            .split("</td><td>")
++            .collect();
++        assert!(is_seconds(cells[1]), "{instance}: {cells:?}");
++    }
++    assert!(
++        page.contains("<td>both</td><td>spare</td><td>not selected</td><td></td>"),
++        "a step that did not run has no duration: {page}"
++    );
++}
+diff --git a/tools/crates/dandegate/tests/scenarios/scheduling.rs b/tools/crates/dandegate/tests/scenarios/scheduling.rs
+index 69bcb211..a038d679 100644
+--- a/tools/crates/dandegate/tests/scenarios/scheduling.rs
++++ b/tools/crates/dandegate/tests/scenarios/scheduling.rs
+@@ -127,9 +127,8 @@ fn independent_steps_run_four_at_once_and_exclusive_steps_last_and_alone() {
+             "{name} started early: {instances:?}"
+         );
+         // Nothing was launched or ended between its launch and its end.
+-        assert_eq!(
+-            instances[start + 1],
+-            format!("{name}: exited 0"),
++        assert!(
++            instances[start + 1].starts_with(&format!("{name}: exited 0 in ")),
+             "{name} ran beside another: {instances:?}"
+         );
+     }

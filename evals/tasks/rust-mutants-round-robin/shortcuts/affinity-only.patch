@@ -1,0 +1,77 @@
+diff --git a/tools/crates/rust-mutants/src/machine.rs b/tools/crates/rust-mutants/src/machine.rs
+index 45b7476..a0cac76 100644
+--- a/tools/crates/rust-mutants/src/machine.rs
++++ b/tools/crates/rust-mutants/src/machine.rs
+@@ -1,5 +1,5 @@
+-//! The machine's facts, discovered once before any command is built: how many CPUs it has, whether a memory-capped
+-//! user scope can be started, and whether each test binary can run in a PID namespace of its own.
++//! The machine's facts, discovered once before any command is built: how many CPUs the tool may run on, whether a
++//! memory-capped user scope can be started, and whether each test binary can run in a PID namespace of its own.
+ //!
+ //! Each fact is found by trying it. A scope is available when `systemd-run --user --scope` runs `true`. Test binaries
+ //! are contained when rustc names its host, whose Cargo runner variable sets the runner, and `unshare` runs `true` in a
+@@ -7,7 +7,6 @@
+ 
+ use std::env;
+ use std::ffi::OsString;
+-use std::fs;
+ use std::num::{NonZeroU32, NonZeroUsize};
+ use std::path::Path;
+ use std::process::{Command, Output, Stdio};
+@@ -27,13 +26,10 @@ const NAMESPACE: [&str; 7] = [
+     "--kill-child",
+ ];
+ 
+-/// Where Linux lists the CPUs online, as ranges such as `0-3,8-11`.
+-const ONLINE: &str = "/sys/devices/system/cpu/online";
+-
+ /// What the machine offers the shards.
+ #[derive(Clone, Debug)]
+ pub(crate) struct Machine {
+-    /// The CPUs online, shared among the shards as jobserver tasks.
++    /// The CPUs this process may run on, shared among the shards as jobserver tasks.
+     pub(crate) cpus: NonZeroUsize,
+     /// Whether each shard runs in a memory-capped user scope.
+     pub(crate) capped: bool,
+@@ -137,24 +133,10 @@ fn host_of(output: &Output) -> Option<String> {
+         .map(|host| host.trim().to_owned())
+ }
+ 
+-/// The CPUs online; where Linux does not list them, the CPUs this process may use; failing both, one.
++/// The CPUs this process may run on, its affinity, as the standard library counts them; failing that, one. A caller
++/// that gives the tool part of the machine, as dandegate does a step, so gives its shards that part.
+ fn cpus() -> NonZeroUsize {
+-    fs::read_to_string(ONLINE)
+-        .ok()
+-        .and_then(|list| online(&list))
+-        .or_else(|| thread::available_parallelism().ok())
+-        .unwrap_or(NonZeroUsize::MIN)
+-}
+-
+-/// How many CPUs a list of ranges such as `0-3,8-11` names, or none for one that is malformed or names none.
+-fn online(ranges: &str) -> Option<NonZeroUsize> {
+-    let mut count = 0_usize;
+-    for range in ranges.trim().split(',') {
+-        let (first, last) = range.split_once('-').unwrap_or((range, range));
+-        let (first, last): (usize, usize) = (first.parse().ok()?, last.parse().ok()?);
+-        count = count.checked_add(last.checked_sub(first)?.checked_add(1)?)?;
+-    }
+-    NonZeroUsize::new(count)
++    thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
+ }
+ 
+ #[cfg(test)]
+@@ -209,13 +191,4 @@ mod tests {
+         );
+         assert_eq!(Runner::Uncontained.variable(), None);
+     }
+-
+-    #[test]
+-    fn the_cpus_online_are_counted_from_their_ranges() {
+-        assert_eq!(online("0-15\n").map(NonZeroUsize::get), Some(16));
+-        assert_eq!(online("0\n").map(NonZeroUsize::get), Some(1));
+-        assert_eq!(online("0-3,8-11,14\n").map(NonZeroUsize::get), Some(9));
+-        assert_eq!(online("3-1\n"), None);
+-        assert_eq!(online("\n"), None);
+-    }
+ }

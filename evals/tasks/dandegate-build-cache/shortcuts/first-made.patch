@@ -1,0 +1,849 @@
+diff --git a/tools/crates/dandegate/Cargo.toml b/tools/crates/dandegate/Cargo.toml
+index 281fe20..f726979 100644
+--- a/tools/crates/dandegate/Cargo.toml
++++ b/tools/crates/dandegate/Cargo.toml
+@@ -11,7 +11,7 @@ camino.workspace = true
+ clap.workspace = true
+ indexmap.workspace = true
+ png.workspace = true
+-rustix.workspace = true
++rustix = { workspace = true, features = ["fs"] }
+ serde.workspace = true
+ serde_json.workspace = true
+ sha2.workspace = true
+diff --git a/tools/crates/dandegate/src/main.rs b/tools/crates/dandegate/src/main.rs
+index ad935bb..5b96470 100644
+--- a/tools/crates/dandegate/src/main.rs
++++ b/tools/crates/dandegate/src/main.rs
+@@ -91,7 +91,7 @@ dandegate resolves both revisions to commits and checks each one out under the r
+ It reads dandegate.toml from the after revision and runs its steps in each checkout's `nix develop` shell. It \
+ compares the images, measures and sections the steps write, and writes <out>/index.html, with every file it links \
+ inside <out>. dandegate keeps each step's complete success in .cache/dandegate/ and reuses it while its identity \
+-holds.
++holds. A step's {cache} folder, under .cache/dandegate/builds/, is kept from one report to the next.
+ 
+ It prints DANDEGATE-INCOMPLETE, DANDEGATE-NOTICE, DANDEGATE-MEASURE-CODE, DANDEGATE-WORSE, DANDEGATE-REUSED and \
+ DANDEGATE-STEP-FAILED lines, then a DANDEGATE line naming the page. It exits with 0 whenever it writes the page, \
+diff --git a/tools/crates/dandegate/src/plan.rs b/tools/crates/dandegate/src/plan.rs
+index 76bb0dd..bbef8d6 100644
+--- a/tools/crates/dandegate/src/plan.rs
++++ b/tools/crates/dandegate/src/plan.rs
+@@ -536,6 +536,16 @@ impl Step {
+         self.runs.inputs()
+     }
+ 
++    /// Whether any of the step's templates names its build cache, `{cache}`.
++    pub(crate) fn uses_cache(&self) -> bool {
++        match &self.runs {
++            Runs::PerRevision(recipe) | Runs::After(recipe) => {
++                recipe.templates().any(Template::uses_cache)
++            }
++            Runs::Once(recipe) => recipe.templates().any(Template::uses_cache),
++        }
++    }
++
+     /// The built-in Rust report the step runs, if it is one.
+     pub(crate) fn report(&self) -> Option<Report> {
+         match &self.runs {
+diff --git a/tools/crates/dandegate/src/plan/template.rs b/tools/crates/dandegate/src/plan/template.rs
+index 0af503e..544ab44 100644
+--- a/tools/crates/dandegate/src/plan/template.rs
++++ b/tools/crates/dandegate/src/plan/template.rs
+@@ -2,7 +2,8 @@
+ //!
+ //! A template's argument type decides which placeholders it can hold. A per-revision or after step's templates take
+ //! [`TreeArg`], and a once step's templates take [`PairArg`], so no template can hold the other kind's placeholder.
+-//! `{out}`, `{adapters}` and `{input.<name>}` are open to both kinds.
++//! `{out}`, `{adapters}`, `{cache}` and `{input.<name>}` are open to both kinds. `{cache}` is the step's build cache at
++//! its place, a folder kept from one report to the next (`crate::report::cache`).
+ 
+ use std::fmt::Write as _;
+ 
+@@ -40,7 +41,7 @@ pub(crate) struct TreeValues<'a> {
+ 
+ impl Arg for TreeArg {
+     type Values<'a> = TreeValues<'a>;
+-    const NAMES: &'static str = "{tree}, {commit}, {out}, {adapters} and {input.<name>}";
++    const NAMES: &'static str = "{tree}, {commit}, {out}, {adapters}, {cache} and {input.<name>}";
+ 
+     fn named(name: &str) -> Option<Self> {
+         match name {
+@@ -83,8 +84,7 @@ pub(crate) struct PairValues<'a> {
+ 
+ impl Arg for PairArg {
+     type Values<'a> = PairValues<'a>;
+-    const NAMES: &'static str =
+-        "{before}, {after}, {before-commit}, {after-commit}, {out}, {adapters} and {input.<name>}";
++    const NAMES: &'static str = "{before}, {after}, {before-commit}, {after-commit}, {out}, {adapters}, {cache} and {input.<name>}";
+ 
+     fn named(name: &str) -> Option<Self> {
+         match name {
+@@ -123,6 +123,7 @@ pub(crate) enum Piece<A> {
+     Input(InputName),
+     Out,
+     Adapters,
++    Cache,
+ }
+ 
+ /// A command word or environment value with its placeholders parsed.
+@@ -149,6 +150,7 @@ pub(crate) struct Expansion<'a, 'v, A: Arg> {
+     pub(crate) inputs: &'a IndexMap<InputName, Input>,
+     pub(crate) out: &'a Utf8Path,
+     pub(crate) adapters: &'a Utf8Path,
++    pub(crate) cache: &'a Utf8Path,
+ }
+ 
+ impl<A: Arg> Template<A> {
+@@ -205,6 +207,7 @@ impl<A: Arg> Template<A> {
+         match name {
+             "out" => Ok(Piece::Out),
+             "adapters" => Ok(Piece::Adapters),
++            "cache" => Ok(Piece::Cache),
+             _ => A::named(name)
+                 .map(Piece::Arg)
+                 .ok_or_else(|| TemplateError::Unknown {
+@@ -226,6 +229,7 @@ impl<A: Arg> Template<A> {
+                 }
+                 Piece::Out => text.push_str(expansion.out.as_str()),
+                 Piece::Adapters => text.push_str(expansion.adapters.as_str()),
++                Piece::Cache => text.push_str(expansion.cache.as_str()),
+             }
+         }
+         text
+@@ -243,6 +247,7 @@ impl<A: Arg> Template<A> {
+                 Piece::Input(name) => write!(text, "{{input.{name}}}"),
+                 Piece::Out => write!(text, "{{out}}"),
+                 Piece::Adapters => write!(text, "{{adapters}}"),
++                Piece::Cache => write!(text, "{{cache}}"),
+             };
+         }
+         text
+@@ -252,9 +257,14 @@ impl<A: Arg> Template<A> {
+     pub(crate) fn inputs(&self) -> impl Iterator<Item = &InputName> {
+         self.0.iter().filter_map(|piece| match piece {
+             Piece::Input(name) => Some(name),
+-            Piece::Text(_) | Piece::Arg(_) | Piece::Out | Piece::Adapters => None,
++            Piece::Text(_) | Piece::Arg(_) | Piece::Out | Piece::Adapters | Piece::Cache => None,
+         })
+     }
++
++    /// Whether the template names the step's build cache.
++    pub(crate) fn uses_cache(&self) -> bool {
++        self.0.iter().any(|piece| matches!(piece, Piece::Cache))
++    }
+ }
+ 
+ #[cfg(test)]
+@@ -273,7 +283,7 @@ mod tests {
+     #[test]
+     fn placeholders_are_filled_and_text_is_kept() {
+         let template = Template::<TreeArg>::parse(
+-            "--at={tree}/x:{commit} {input.renders}{out}{adapters}",
++            "--at={tree}/x:{commit} {input.renders}{out}{adapters}{cache}",
+             &inputs(),
+         )
+         .expect("a template");
+@@ -287,15 +297,17 @@ mod tests {
+             inputs: &inputs(),
+             out: Utf8Path::new("/o"),
+             adapters: Utf8Path::new("/a"),
++            cache: Utf8Path::new("/c"),
+         };
+         assert_eq!(
+             template.expand(&expansion),
+-            "--at=/t/x:0123456789abcdef0123456789abcdef01234567 3/o/a"
++            "--at=/t/x:0123456789abcdef0123456789abcdef01234567 3/o/a/c"
+         );
+         assert_eq!(
+             template.written(),
+-            "--at={tree}/x:{commit} {input.renders}{out}{adapters}"
++            "--at={tree}/x:{commit} {input.renders}{out}{adapters}{cache}"
+         );
++        assert!(template.uses_cache());
+     }
+ 
+     #[test]
+diff --git a/tools/crates/dandegate/src/report.rs b/tools/crates/dandegate/src/report.rs
+index 72d98ac..e93c688 100644
+--- a/tools/crates/dandegate/src/report.rs
++++ b/tools/crates/dandegate/src/report.rs
+@@ -4,18 +4,20 @@
+ //!
+ //! A report runs in this order:
+ //!
+-//! 1. Check out both commits as detached worktrees in a folder of `.cache/dandegate/scratch/` that this run makes for
+-//!    itself, and link the host programs the plan names into a folder beside them ([`step::host`]).
++//! 1. Take the build caches when a step names one ([`cache`]). Then check out both commits as detached worktrees in a
++//!    folder of `.cache/dandegate/scratch/` that this run makes for itself, and link the host programs the plan names
++//!    into a folder beside them ([`step::host`]).
+ //! 2. For each reusable step, work out its identity, running its collector, and look for a kept result.
+ //! 3. Decide which steps run. A step that only other steps need runs only when one of them runs fresh.
+ //! 4. Run the steps, and keep each complete success.
+-//! 5. Remove the checkouts.
++//! 5. Remove the checkouts, keep the build caches within their bound and let go of them ([`cache`]).
+ //! 6. Compare the two sides, and write the page, `measures.json` and the printed lines.
+ //!
+ //! [`schedule`] orders the steps and runs up to four at once. [`step`] runs one command and records what happened to a
+ //! step. [`store`] keeps complete successes. [`identity`] lists what a kept result depends on. [`summary`] compares the
+-//! two sides and writes the page.
++//! two sides and writes the page. [`cache`] holds the build caches that `{cache}` names.
+ 
++pub(crate) mod cache;
+ mod identity;
+ mod schedule;
+ pub(crate) mod step;
+@@ -36,6 +38,7 @@ use crate::plan::{
+     Arg, Expansion, HostProgram, PairArg, PairValues, Plan, Recipe, Report, Runs, Step, Template,
+     TreeArg, TreeValues, Work,
+ };
++use crate::report::cache::{BOUND, Builds};
+ use crate::report::schedule::{Graph, Instance, InstanceId, PerInstance, Place, Start, run_all};
+ use crate::report::step::{Launch, LaunchError, Outcome, Skip, check_outputs, host, launch, shown};
+ use crate::report::store::{Identity, Lookup, Store};
+@@ -95,6 +98,10 @@ struct Session<'a> {
+     log: Log,
+     store: Store,
+     identities: PerInstance<Option<Result<Identity, String>>>,
++    /// Each enabled instance's build cache, when its step names one, or why it has none.
++    caches: PerInstance<Option<Result<Utf8PathBuf, String>>>,
++    /// The kept build caches, which this report owns until they are dropped; none when it builds in scratch.
++    builds: Option<Builds>,
+     notes: Mutex<BTreeMap<InstanceId, Vec<String>>>,
+ }
+ 
+@@ -117,6 +124,19 @@ pub(crate) fn report(request: &Request) -> Finished {
+         request.revisions.before, request.revisions.after
+     ));
+     let scratch = prepare_cache(&cache);
++    // Taken before either checkout is made, so no checkout's files are older than what the caches hold.
++    let builds = request
++        .plan
++        .steps()
++        .values()
++        .any(|step| step.enabled() && step.uses_cache())
++        .then(
++            || match Builds::take(cache.join("builds"), &cache.join("builds.lock")) {
++                Ok(Some(builds)) => Ok(builds),
++                Ok(None) => Err("the build caches are in use by another report".to_owned()),
++                Err(error) => Err(format!("the build caches cannot be locked: {error}")),
++            },
++        );
+     let checkouts = PerSide::from_fn(|side| {
+         let folder = scratch.as_ref().map_err(Clone::clone)?.join(side.as_str());
+         request
+@@ -140,6 +160,25 @@ pub(crate) fn report(request: &Request) -> Finished {
+     }
+     let graph = Graph::new(&request.plan);
+     let identities = graph.each(|_| None);
++    let caches = graph.each(|at| {
++        let instance = graph.instance(at);
++        let step = &request.plan.steps()[&instance.step];
++        (step.enabled() && step.uses_cache()).then(|| match &builds {
++            Some(Ok(builds)) => builds
++                .folder(&instance.step, instance.place)
++                .map_err(|error| format!("its build cache cannot be made: {error}")),
++            Some(Err(why)) => scratch_cache(&scratch, instance).map_err(|error| {
++                format!("{why}, and no folder of this report's can be made: {error}")
++            }),
++            None => Err("the build caches were not taken".to_owned()),
++        })
++    });
++    let busy = match &builds {
++        Some(Err(why)) => Some(format!(
++            "{why}, so it builds in a new folder of this report's"
++        )),
++        _ => None,
++    };
+     let mut session = Session {
+         request,
+         graph,
+@@ -156,14 +195,45 @@ pub(crate) fn report(request: &Request) -> Finished {
+         log,
+         store: Store::new(cache.join("results")),
+         identities,
++        caches,
++        builds: builds.and_then(Result::ok),
+         notes: Mutex::new(BTreeMap::new()),
+     };
++    if let Some(note) = busy {
++        for (at, cache) in session.caches.iter() {
++            if matches!(cache, Some(Ok(_))) {
++                session.note(at, note.clone());
++            }
++        }
++    }
+     let starts = session.starts();
+     let outcomes = run_all(&session.graph, starts, &|at| session.execute(at));
+     session.remove_checkouts();
++    if let Some(builds) = session.builds.take() {
++        for line in builds.bound(BOUND) {
++            session.log.write(&format!("=== {line}\n"));
++        }
++    }
+     session.page(&outcomes)
+ }
+ 
++/// A new build cache for `instance` in this report's scratch folder, for when another report holds the kept ones.
++fn scratch_cache(
++    scratch: &Result<Utf8PathBuf, String>,
++    instance: &Instance,
++) -> io::Result<Utf8PathBuf> {
++    let scratch = scratch
++        .as_ref()
++        .map_err(|why| io::Error::other(why.clone()))?;
++    let folder = scratch.join("cache").join(format!(
++        "{}-{}",
++        instance.place.as_str(),
++        instance.step.as_str()
++    ));
++    fs::create_dir_all(&folder)?;
++    Ok(folder)
++}
++
+ /// Make the cache folder, ignored by git whatever the project ignores, and a new scratch folder for this run.
+ fn prepare_cache(cache: &Utf8Path) -> Result<Utf8PathBuf, String> {
+     let made = (|| -> io::Result<Utf8PathBuf> {
+@@ -449,19 +519,27 @@ impl Session<'_> {
+         }
+     }
+ 
+-    /// `command` with its placeholders filled in, and the recipe's environment.
++    /// `command` with its placeholders filled in for the instance, and the recipe's environment, or why its build
++    /// cache cannot be given.
+     fn prepared<A: Arg>(
+         &self,
++        at: InstanceId,
+         recipe: &Recipe<A>,
+         values: &A::Values<'_>,
+         out: &Utf8Path,
+         command: &[Template<A>],
+-    ) -> Prepared {
++    ) -> Result<Prepared, String> {
++        let cache = match &self.caches[at] {
++            None => Utf8Path::new(""),
++            Some(Ok(folder)) => folder,
++            Some(Err(why)) => return Err(why.clone()),
++        };
+         let expansion = Expansion {
+             values,
+             inputs: self.plan().inputs(),
+             out,
+             adapters: &self.adapters,
++            cache,
+         };
+         let command = expanded(command, &expansion);
+         let mut env = self.env.clone();
+@@ -471,7 +549,7 @@ impl Session<'_> {
+                 .iter()
+                 .map(|(name, value)| (name.as_str().to_owned(), value.expand(&expansion))),
+         );
+-        Prepared { command, env }
++        Ok(Prepared { command, env })
+     }
+ 
+     /// Run one instance and keep its result when it is a complete success.
+@@ -552,7 +630,10 @@ impl Session<'_> {
+         };
+         match recipe.work() {
+             Work::Command(run) => {
+-                let Prepared { command, env } = self.prepared(recipe, values, out, run);
++                let Prepared { command, env } = match self.prepared(at, recipe, values, out, run) {
++                    Ok(prepared) => prepared,
++                    Err(why) => return Outcome::LaunchFailed(why),
++                };
+                 let opened = OpenOptions::new()
+                     .append(true)
+                     .open(log_path)
+diff --git a/tools/crates/dandegate/src/report/cache.rs b/tools/crates/dandegate/src/report/cache.rs
+new file mode 100644
+index 0000000..e2943a0
+--- /dev/null
++++ b/tools/crates/dandegate/src/report/cache.rs
+@@ -0,0 +1,206 @@
++//! The build caches that outlive a report. `{cache}` names one folder for each step and place under the repository's
++//! ignored `.cache/dandegate/builds/<step>/<place>/`, kept from one report to the next, so a step that builds into it
++//! finds what its last run built.
++//!
++//! One report at a time owns all of them. A report whose steps name `{cache}` takes an `flock` on
++//! `.cache/dandegate/builds.lock` before it checks out either revision, so its checkouts' files are always newer than
++//! anything in the caches, and Cargo, for one, builds the workspace's own crates again and reuses only their
++//! dependencies. Every process the report starts inherits the lock, so it is let go only when the last of them has
++//! ended, even when dandegate itself is killed first. When another report holds the lock, each step gets a new folder
++//! in this report's scratch folder instead, which goes with the scratch folder, and the page says so.
++//!
++//! The caches together are bounded by [`BOUND`]. At the end of its report, still holding the lock, dandegate removes
++//! whole folders, least recently used first, until the total is under the bound, and its log names each one. Deleting
++//! `.cache/dandegate/builds/` by hand while no report runs clears them all.
++
++use std::fs::{self, File};
++use std::io;
++use std::os::fd::OwnedFd;
++use std::time::SystemTime;
++
++use camino::{Utf8Path, Utf8PathBuf};
++use rustix::fs::{FlockOperation, Mode, OFlags, flock, open};
++
++use crate::plan::StepName;
++use crate::report::schedule::Place;
++
++/// The size the caches may reach together before the least recently used are removed: room for both revisions' release
++/// and test builds of a large workspace.
++pub(crate) const BOUND: u64 = 32 << 30;
++
++/// The build caches, owned by this report until it is dropped and every process it started has ended.
++#[derive(Debug)]
++pub(crate) struct Builds {
++    folder: Utf8PathBuf,
++    _lock: OwnedFd,
++}
++
++impl Builds {
++    /// The caches in `folder`, locked through the file `lock` outside it; none when another report holds them.
++    ///
++    /// # Errors
++    /// Why the lock file cannot be opened or locked.
++    pub(crate) fn take(folder: Utf8PathBuf, lock: &Utf8Path) -> io::Result<Option<Self>> {
++        // Opened without close-on-exec, unlike every file the standard library opens, so each supervisor and command
++        // inherits the lock, and it is let go only when the last process holding it ends: a step still writing after
++        // dandegate is killed keeps the caches from the next report.
++        let file = open(
++            lock.as_std_path(),
++            OFlags::CREATE | OFlags::RDWR,
++            Mode::from_raw_mode(0o644),
++        )?;
++        match flock(&file, FlockOperation::NonBlockingLockExclusive) {
++            Ok(()) => Ok(Some(Self {
++                folder,
++                _lock: file,
++            })),
++            Err(rustix::io::Errno::WOULDBLOCK) => Ok(None),
++            Err(error) => Err(error.into()),
++        }
++    }
++
++    /// The cache of `step` at `place`, made if missing and marked as used now, which the bound removes the oldest by.
++    ///
++    /// # Errors
++    /// Why the folder cannot be made or marked.
++    pub(crate) fn folder(&self, step: &StepName, place: Place) -> io::Result<Utf8PathBuf> {
++        let folder = self.folder.join(step.as_str()).join(place.as_str());
++        if !folder.exists() {
++            fs::create_dir_all(&folder)?;
++            File::open(&folder)?.set_modified(SystemTime::now())?;
++        }
++        Ok(folder)
++    }
++
++    /// Remove whole cache folders, least recently used first, until the caches together are no larger than `bound`.
++    /// Gives a line for each folder removed, or that could not be.
++    pub(crate) fn bound(&self, bound: u64) -> Vec<String> {
++        let mut found: Vec<(SystemTime, Utf8PathBuf, u64)> = self
++            .folders()
++            .into_iter()
++            .map(|folder| {
++                let used = folder
++                    .metadata()
++                    .and_then(|metadata| metadata.modified())
++                    .unwrap_or(SystemTime::UNIX_EPOCH);
++                let size = size_of(&folder);
++                (used, folder, size)
++            })
++            .collect();
++        found.sort();
++        let mut total = found
++            .iter()
++            .fold(0_u64, |total, (_, _, size)| total.saturating_add(*size));
++        let mut lines = Vec::new();
++        for (_, folder, size) in found {
++            if total <= bound {
++                break;
++            }
++            match fs::remove_dir_all(&folder) {
++                Ok(()) => {
++                    total = total.saturating_sub(size);
++                    lines.push(format!(
++                        "removed the build cache {folder} ({size} bytes), the least recently used"
++                    ));
++                }
++                Err(error) => lines.push(format!(
++                    "the build cache {folder} could not be removed: {error}"
++                )),
++            }
++        }
++        lines
++    }
++
++    /// Every cache folder, `<step>/<place>`.
++    fn folders(&self) -> Vec<Utf8PathBuf> {
++        let folders_in = |folder: &Utf8Path| -> Vec<Utf8PathBuf> {
++            folder.read_dir_utf8().map_or_default(|entries| {
++                entries
++                    .filter_map(Result::ok)
++                    .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
++                    .map(|entry| entry.path().to_owned())
++                    .collect()
++            })
++        };
++        folders_in(&self.folder)
++            .iter()
++            .flat_map(|step| folders_in(step))
++            .collect()
++    }
++}
++
++/// The length of every file under `folder`, links not followed.
++fn size_of(folder: &Utf8Path) -> u64 {
++    let mut total = 0_u64;
++    let mut pending = vec![folder.to_owned()];
++    while let Some(current) = pending.pop() {
++        let Ok(entries) = current.read_dir_utf8() else {
++            continue;
++        };
++        for entry in entries.filter_map(Result::ok) {
++            // A directory entry's metadata does not follow a link.
++            match entry.metadata() {
++                Ok(metadata) if metadata.is_dir() => pending.push(entry.path().to_owned()),
++                Ok(metadata) => total = total.saturating_add(metadata.len()),
++                Err(_) => {}
++            }
++        }
++    }
++    total
++}
++
++#[cfg(test)]
++mod tests {
++    use std::time::Duration;
++
++    use super::*;
++    use crate::revision::Side;
++
++    /// A new folder for one test.
++    fn root(name: &str) -> Utf8PathBuf {
++        let temporary =
++            Utf8PathBuf::try_from(std::env::temp_dir()).expect("a UTF-8 temporary folder");
++        super::super::acquire(&temporary, name).expect("a folder of its own")
++    }
++
++    #[test]
++    fn one_report_at_a_time_holds_the_caches() {
++        let root = root("dandegate-cache-take-");
++        let take = || Builds::take(root.join("builds"), &root.join("builds.lock")).expect("a lock");
++        let first = take().expect("free");
++        assert!(take().is_none(), "held by the first");
++        let step = StepName::new("prepare").expect("a name");
++        let folder = first
++            .folder(&step, Place::Revision(Side::Before))
++            .expect("a cache");
++        assert_eq!(folder, root.join("builds/prepare/before"));
++        assert!(folder.is_dir());
++        drop(first);
++        assert!(take().is_some(), "free again");
++        let _ = fs::remove_dir_all(&root);
++    }
++
++    #[test]
++    fn the_least_recently_used_caches_are_removed_until_under_the_bound() {
++        let root = root("dandegate-cache-bound-");
++        let builds = Builds::take(root.join("builds"), &root.join("builds.lock"))
++            .expect("a lock")
++            .expect("free");
++        let cache = |step: &str, age: u64| {
++            let folder = root.join("builds").join(step).join("after");
++            fs::create_dir_all(folder.join("deep")).expect("a folder");
++            fs::write(folder.join("deep/file"), vec![0_u8; 300]).expect("a file");
++            let used = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000 - age);
++            File::open(&folder)
++                .and_then(|handle| handle.set_modified(used))
++                .expect("a time");
++            folder
++        };
++        let (oldest, older, newest) = (cache("a", 20), cache("b", 10), cache("c", 0));
++        // 900 bytes: the two oldest go, leaving 300.
++        assert_eq!(builds.bound(400).len(), 2);
++        assert!(!oldest.exists() && !older.exists() && newest.exists());
++        assert_eq!(builds.bound(400), Vec::<String>::new());
++        let _ = fs::remove_dir_all(&root);
++    }
++}
+diff --git a/tools/crates/dandegate/src/report/identity.rs b/tools/crates/dandegate/src/report/identity.rs
+index d63771b..0a3d5b7 100644
+--- a/tools/crates/dandegate/src/report/identity.rs
++++ b/tools/crates/dandegate/src/report/identity.rs
+@@ -198,11 +198,13 @@ impl Session<'_> {
+         let prepared = match self.target(at) {
+             Target::Tree(recipe, side) => match recipe.collect() {
+                 None => None,
+-                Some(collect) => Some(self.prepared(recipe, &self.tree(side)?, &out, collect)),
++                Some(collect) => {
++                    Some(self.prepared(at, recipe, &self.tree(side)?, &out, collect)?)
++                }
+             },
+             Target::Pair(recipe) => match recipe.collect() {
+                 None => None,
+-                Some(collect) => Some(self.prepared(recipe, &self.pair()?, &out, collect)),
++                Some(collect) => Some(self.prepared(at, recipe, &self.pair()?, &out, collect)?),
+             },
+         };
+         let Some(Prepared { command, env }) = prepared else {
+diff --git a/tools/crates/dandegate/tests/scenarios.rs b/tools/crates/dandegate/tests/scenarios.rs
+index 168c307..e2b1d99 100644
+--- a/tools/crates/dandegate/tests/scenarios.rs
++++ b/tools/crates/dandegate/tests/scenarios.rs
+@@ -13,8 +13,11 @@
+ //! 4. A page that stands alone, and earlier reports read back (`durable`).
+ //! 5. A Rust workspace's built-in reports (`rust`).
+ //! 6. Host programs a step takes from the caller's machine (`host`).
+-//! 7. Every refusal, before any step runs (`invocation`).
++//! 7. A step's build cache, kept between reports (`caches`).
++//! 8. Every refusal, before any step runs (`invocation`).
+ 
++#[path = "scenarios/caches.rs"]
++mod caches;
+ #[path = "scenarios/comparisons.rs"]
+ mod comparisons;
+ #[path = "scenarios/durable.rs"]
+diff --git a/tools/crates/dandegate/tests/scenarios/caches.rs b/tools/crates/dandegate/tests/scenarios/caches.rs
+new file mode 100644
+index 0000000..d929ebf
+--- /dev/null
++++ b/tools/crates/dandegate/tests/scenarios/caches.rs
+@@ -0,0 +1,225 @@
++//! A step's build cache, `{cache}`: kept from one report to the next for each step and place, and never used by two
++//! reports at once.
++
++use std::fs::File;
++
++use rustix::fs::{FlockOperation, flock};
++use rustix::process::{Signal, WaitOptions, getpid, kill_process, set_child_subreaper, waitpid};
++
++use crate::support::{Fixture, Reporter, Run};
++
++/// Starts a child that would outlive the step, records it and the step's supervisor, its parent, and waits.
++const HOLDS: &str = r#". "$(dirname "$0")/lib.sh"
++sleep 600 &
++record child $!
++record supervisor $PPID
++event "start holds"
++wait
++"#;
++
++/// Whether no process holds the lock file `lock`.
++fn free(lock: &std::path::Path) -> bool {
++    let file = File::open(lock).expect("the lock file");
++    flock(&file, FlockOperation::NonBlockingLockExclusive).is_ok()
++}
++
++/// Counts its runs in the cache it is given and records the count, then, with `HOLD` set, holds until released.
++const BUILD: &str = r#". "$(dirname "$0")/lib.sh"
++released() { [ -f "$EVENTS/release" ]; }
++count=$(cat "$1/count" 2>/dev/null || echo 0)
++count=$((count + 1))
++echo "$count" > "$1/count"
++event "build $2 $1 $count"
++if [ -n "${HOLD:-}" ]; then wait_until released; fi
++"#;
++
++fn project(fixture: &Fixture) -> String {
++    fixture.write("dandegate/build.sh", BUILD);
++    fixture.write(
++        "dandegate.toml",
++        r#"
++[[steps.step]]
++name = "build"
++run = ["sh", "{adapters}/build.sh", "{cache}", "{tree}"]
++
++[[steps.step]]
++name = "plain"
++runs = "once"
++run = ["true"]
++
++[[steps.step]]
++name = "spare"
++runs = "once"
++optional = true
++run = ["true", "{cache}"]
++"#,
++    );
++    fixture.commit("only")
++}
++
++/// Each build event's side, cache folder and count, sorted.
++fn builds(fixture: &Fixture) -> Vec<(String, String, String)> {
++    let mut found: Vec<(String, String, String)> = fixture
++        .events()
++        .iter()
++        .filter_map(|event| event.strip_prefix("build "))
++        .map(|event| {
++            let words: Vec<&str> = event.split(' ').collect();
++            let side = if words[0].ends_with("/before") {
++                "before"
++            } else {
++                "after"
++            };
++            (side.to_owned(), words[1].to_owned(), words[2].to_owned())
++        })
++        .collect();
++    found.sort();
++    found
++}
++
++#[test]
++fn a_build_cache_is_kept_for_each_step_and_side_from_one_report_to_the_next() {
++    let fixture = Fixture::new("cache-kept");
++    let only = project(&fixture);
++    let kept = |side: &str| {
++        fixture
++            .repo()
++            .join(".cache/dandegate/builds/build")
++            .join(side)
++            .to_str()
++            .expect("UTF-8")
++            .to_owned()
++    };
++    for (out, count) in [("first", "1"), ("second", "2")] {
++        fixture.clear_events();
++        fixture.run(out, &["--before", &only]).page();
++        assert_eq!(
++            builds(&fixture),
++            [
++                ("after".to_owned(), kept("after"), count.to_owned()),
++                ("before".to_owned(), kept("before"), count.to_owned()),
++            ]
++        );
++    }
++    // Only an enabled step that names its cache has one: not a step that names none, nor one not selected.
++    let steps: Vec<String> = std::fs::read_dir(fixture.repo().join(".cache/dandegate/builds"))
++        .expect("the caches")
++        .map(|entry| {
++            entry
++                .expect("an entry")
++                .file_name()
++                .to_string_lossy()
++                .into_owned()
++        })
++        .collect();
++    assert_eq!(steps, ["build"]);
++}
++
++#[test]
++fn a_build_cache_another_report_holds_is_not_shared_and_the_page_says_so() {
++    let fixture = Fixture::new("cache-held");
++    let only = project(&fixture);
++    let out = |name: &str| fixture.outside(name).to_str().expect("UTF-8").to_owned();
++    let (first_out, second_out) = (out("first"), out("second"));
++
++    let mut held = fixture.command(&["--before", &only, "--out", &first_out]);
++    held.env("HOLD", "1");
++    let mut first = Reporter::start(held);
++    while builds(&fixture).len() < 2 {
++        assert!(first.running(), "the first report ended before both builds");
++        std::thread::sleep(std::time::Duration::from_millis(10));
++    }
++    let second = Run {
++        output: Reporter::start(fixture.command(&["--before", &only, "--out", &second_out]))
++            .finish(),
++        out: fixture.outside("second"),
++    };
++    std::fs::write(fixture.events_folder().join("release"), "").expect("the release");
++    let first = Run {
++        output: first.finish(),
++        out: fixture.outside("first"),
++    };
++    first.page();
++    let page = second.page();
++    assert!(
++        page.contains(
++            "in use by another report, so it builds in a new folder of this report&#39;s"
++        ),
++        "{page}"
++    );
++
++    let found = builds(&fixture);
++    assert_eq!(found.len(), 4, "{found:?}");
++    let kept = fixture.repo().join(".cache/dandegate/builds/build");
++    let in_kept = found
++        .iter()
++        .filter(|(_, folder, _)| folder.starts_with(kept.to_str().expect("UTF-8")))
++        .count();
++    assert_eq!(
++        in_kept, 2,
++        "only the first report used the kept folders: {found:?}"
++    );
++    let scratch = fixture.repo().join(".cache/dandegate/scratch");
++    assert!(
++        found.iter().all(
++            |(_, folder, _)| folder.starts_with(kept.to_str().expect("UTF-8"))
++                || folder.starts_with(scratch.to_str().expect("UTF-8"))
++        ),
++        "the second report's folders were its own scratch's: {found:?}"
++    );
++    assert!(
++        found.iter().all(|(_, _, count)| count == "1"),
++        "the second report's folders were new: {found:?}"
++    );
++}
++
++#[test]
++fn the_caches_stay_locked_until_every_process_of_a_killed_report_has_ended() {
++    let fixture = Fixture::new("cache-inherited");
++    fixture.write("dandegate/holds.sh", HOLDS);
++    fixture.write(
++        "dandegate.toml",
++        "[[steps.step]]\nname = \"holds\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/holds.sh\", \"{cache}\"]\n",
++    );
++    let only = fixture.commit("only");
++    // The step's supervisor becomes this process's child when dandegate ends, so this test can wait for it.
++    set_child_subreaper(Some(getpid())).expect("this process can adopt orphans");
++    let out = fixture.outside("out");
++    let mut reporter = Reporter::start(fixture.command(&[
++        "--before",
++        &only,
++        "--out",
++        out.to_str().expect("UTF-8"),
++    ]));
++    fixture.wait_for_event("start holds", &mut reporter);
++    let (supervisor, _) = fixture.recorded("supervisor");
++    // Stopped, the supervisor cannot stop the step when dandegate ends, so the step and its child live on.
++    kill_process(supervisor, Signal::STOP).expect("the supervisor runs");
++    reporter.stop(Signal::KILL);
++    let lock = fixture.repo().join(".cache/dandegate/builds.lock");
++    assert!(
++        !free(&lock),
++        "the step's processes still hold the lock dandegate took"
++    );
++    kill_process(supervisor, Signal::CONT).expect("the supervisor is stopped");
++    waitpid(Some(supervisor), WaitOptions::empty())
++        .expect("the supervisor is this process's child");
++    assert!(fixture.ended("child"), "the step's child was not reaped");
++    assert!(free(&lock), "the last process holding the lock has ended");
++}
++
++#[test]
++fn a_report_whose_running_steps_name_no_cache_leaves_the_caches_alone() {
++    let fixture = Fixture::new("cache-unnamed");
++    fixture.write(
++        "dandegate.toml",
++        "[[steps.step]]\nname = \"plain\"\nruns = \"once\"\nrun = [\"true\"]\n\n\
++         [[steps.step]]\nname = \"spare\"\nruns = \"once\"\noptional = true\nrun = [\"true\", \"{cache}\"]\n",
++    );
++    let only = fixture.commit("only");
++    fixture.run("out", &["--before", &only]).page();
++    assert!(
++        !fixture.repo().join(".cache/dandegate/builds.lock").exists(),
++        "only a report with an enabled step that names {{cache}} takes the caches"
++    );
++}
+diff --git a/tools/crates/dandegate/tests/scenarios/invocation.rs b/tools/crates/dandegate/tests/scenarios/invocation.rs
+index 1428491..b2fb236 100644
+--- a/tools/crates/dandegate/tests/scenarios/invocation.rs
++++ b/tools/crates/dandegate/tests/scenarios/invocation.rs
+@@ -161,7 +161,7 @@ fn every_refusal_comes_before_any_step_runs() {
+             &["--before", &valid, "--after", &placeholder],
+             "placeholder",
+             "dandegate: dandegate.toml:4: step \"visual\": run: {before} is not a placeholder this kind of step has; \
+-             it has {tree}, {commit}, {out}, {adapters} and {input.<name>}",
++             it has {tree}, {commit}, {out}, {adapters}, {cache} and {input.<name>}",
+         ),
+         (
+             &["--before", &valid, "--after", &valid, "--with", "nope"],

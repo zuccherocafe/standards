@@ -32,9 +32,14 @@ mismatch=$(jq -nr --slurpfile key "$review/key.json" --slurpfile analysis "$job/
 $mismatch"
 
 versions=$(cat "$job"/*/result.json | jq -s '[.[].agent_info.version] | unique')
+# A bug-fix task's reference is its correction's production part alone, so its tests are no baseline; a feature
+# task's reference carries the landed change's tests.
+bug_fixes=$(grep -l '^keywords = .*"review-finding"' tasks/*/task.toml | xargs -r -n 1 dirname | xargs -r -n 1 basename \
+    | jq -R . | jq -s .) || stop "cannot read the tasks' keywords"
 
 jq -n --slurpfile key "$review/key.json" --slurpfile analysis "$job/analysis.json" \
-    --slurpfile config "$job/config.json" --argjson versions "$versions" --arg job "$job" '
+    --slurpfile config "$job/config.json" --argjson versions "$versions" --argjson bug_fixes "$bug_fixes" \
+    --arg job "$job" '
     def agreement:
         [.[] | select(.error == null) | .checks] as $done
         | if ($done | length) < 2 then null
@@ -47,7 +52,9 @@ jq -n --slurpfile key "$review/key.json" --slurpfile analysis "$job/analysis.jso
        trials: [$key[0] | to_entries[] | .key as $id
          | .value + {id: $id, attempts: [$by_id[$id][] | {summary, checks, error}]}
          | .agreement = (.attempts | agreement)
-         | if .reference then .baseline = {regression_test: "unavailable: the reference omits its tests by design"}
+         | (.task | split("/") | last) as $task
+         | if .reference and ($bug_fixes | index([$task]) != null)
+           then .baseline = {regression_test: "unavailable: the reference of a bug-fix task omits its tests by design"}
            else . end]}
     | .agreement = ([.trials[].agreement | select(. != null) | to_entries[]] | group_by(.key)
         | map({key: .[0].key, value: {agreed: map(select(.value)) | length, compared: length}}) | from_entries)

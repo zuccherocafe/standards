@@ -1,0 +1,54 @@
+schema_version = "1.3"
+artifacts = ["/var/tmp/model.patch", "/var/tmp/agent-identity.txt"]
+
+[task]
+name = "standards/dandegate-steps-at-once"
+description = "dandegate takes --steps-at-once, the number of ordinary steps it runs at once, four by default, refusing 0."
+authors = []
+keywords = ["rust", "feature"]
+
+[metadata]
+source_repository = "https://github.com/zuccherocafe/standards"
+# The starting tree is the base revision's tools/.
+source_base = "3772b60212de6052e5182cb503b0a53f485543a9"
+source_tree = "05a0dceb5fb2a291b0e0c91eb4c1baa9279e094a"
+# The landed revision whose change under tools/ solution/solution.patch holds.
+solution_revision = "d38fefcdc494673c9fe332856245a004487bc197"
+# The commit the image makes of the starting tree; the agent's change is the difference from it.
+starting_commit = "05ad6ca7a793d348e40ee21a47afcb2420c1d4a7"
+
+[environment]
+# The model provider only, from start to teardown, so no phase that follows the agent's run, such as collecting its
+# change, reopens the network. The image holds Node and pi, so the agent's setup needs no network.
+network_mode = "allowlist"
+allowed_hosts = ["openrouter.ai"]
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 6144
+storage_mb = 10240
+
+[agent]
+timeout_sec = 3600.0
+network_mode = "allowlist"
+allowed_hosts = ["openrouter.ai"]
+
+[verifier]
+timeout_sec = 1800.0
+environment_mode = "separate"
+
+# The agent's change, captured in its own container before it stops, is all the verifier receives.
+[[verifier.collect]]
+command = "cd /app && git add -A && git diff --cached --binary 05ad6ca7a793d348e40ee21a47afcb2420c1d4a7 > /var/tmp/model.patch"
+timeout_sec = 120.0
+
+# What the agent ran on: the Node, npm and pi the image holds, and pi's installed tree.
+[[verifier.collect]]
+command = '{ echo "node $(node --version 2>&1)"; echo "npm $(npm --version 2>&1)"; echo "pi $(pi --version 2>&1)"; sha256sum /opt/pi/package-lock.json; (cd /opt/pi && npm ls --all --json 2>&1); } > /var/tmp/agent-identity.txt'
+timeout_sec = 120.0
+
+[verifier.environment]
+network_mode = "no-network"
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 6144
+storage_mb = 10240
