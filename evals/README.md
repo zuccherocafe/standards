@@ -206,7 +206,7 @@ Agreement compares the attempts within this run. It establishes neither correctn
 
 The reviewer is a setting. [`review/codex/review.sh`](review/codex/review.sh) runs Harbor's Codex agent on a Codex login, which Harbor copies into the evaluator's container for the run; a review spends the login's subscription, not an OpenRouter key. Any Harbor agent and model can replace Codex, with an image that holds the agent, a task configuration like [`review/codex/task.toml`](review/codex/task.toml) that allows its provider's hosts, and a script like `review.sh` for its credentials. `results.json` records the reviewer, and findings compare only between reviews by one reviewer, since another agent or model reads the same change differently.
 
-`review.sh` reads no login until it is told which: `CODEX_AUTH_JSON_PATH=<file>`, or `REVIEW_REAL_LOGIN=1` for `~/.codex/auth.json`. It also requires `REVIEW_LOGIN_RISK=accepted`, which acknowledges the limits below. It copies the login once into a private folder and gives that copy to Harbor's upload, to Harbor's scrubber and to the scan. It takes no argument but the review folder, which it resolves to its real path, so nothing can move Harbor's output, its configuration or the agent's environment; it writes Harbor's output to `harbor.log` inside the review folder, waits for Harbor to exit even when interrupted, and prints nothing from the review until the scan has passed.
+`review.sh` reads no login until it is told which: `CODEX_AUTH_JSON_PATH=<file>`, or `REVIEW_REAL_LOGIN=1` for `~/.codex/auth.json`. It also requires `REVIEW_LOGIN_RISK=accepted`, which acknowledges the limits below. `REVIEW_ANALYSES_AT_ONCE` sets how many analyses run at once, from 1 to 9, and is 3 when unset or empty; `review.sh` refuses any other value before it reads the login. Analyses running at once share the one Codex login: each container gets the same copy, and they draw on the same subscription's usage limits. It copies the login once into a private folder and gives that copy to Harbor's upload, to Harbor's scrubber and to the scan. It takes no argument but the review folder, which it resolves to its real path, so nothing can move Harbor's output, its configuration or the agent's environment; it writes Harbor's output to `harbor.log` inside the review folder, waits for Harbor to exit even when interrupted, and prints nothing from the review until the scan has passed.
 
 ### What protects the login, and what does not
 
@@ -223,7 +223,7 @@ The shell's Harbor carries two patches for reviews. [`harbor/analyze-task-config
 
 ### Running a review
 
-With `name` set to the review's name and `trials` to the trial folders to review, these commands build the reviewer's image, make the packets, run the review on the host's login one analysis at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
+With `name` set to the review's name and `trials` to the trial folders to review, these commands build the reviewer's image, make the packets, run the review on the host's login three analyses at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
 
 ```sh
 (

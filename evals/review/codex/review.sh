@@ -1,8 +1,9 @@
 #!/bin/bash
-# Reviews the packets review/blind.sh made, with Harbor's Codex agent on a Codex login, one analysis at a time and
-# each packet twice, joins the verdicts with the key, and scans everything the review wrote for the login before
-# printing any of it. Run it from evals/ inside the development shell, after building the image as evals/README.md
-# says. It takes no other argument, so nothing can move Harbor's output, its configuration or the agent's environment:
+# Reviews the packets review/blind.sh made, with Harbor's Codex agent on a Codex login, REVIEW_ANALYSES_AT_ONCE
+# analyses at a time (1 to 9, and 3 when unset or empty) and each packet twice, joins the verdicts with the key, and
+# scans everything the review wrote for the login before printing any of it. Run it from evals/ inside the development
+# shell, after building the image as evals/README.md says. It takes no other argument, so nothing can move Harbor's
+# output, its configuration or the agent's environment:
 #
 #   CODEX_AUTH_JSON_PATH=<login file> REVIEW_LOGIN_RISK=accepted review/codex/review.sh <review folder>
 #   REVIEW_REAL_LOGIN=1 REVIEW_LOGIN_RISK=accepted review/codex/review.sh <review folder>
@@ -19,6 +20,9 @@ stop() {
 }
 
 [ "$#" -eq 1 ] || stop "usage: review/codex/review.sh <review folder>"
+# Every analysis at once runs its own container on the one login, so the count stays small.
+at_once=${REVIEW_ANALYSES_AT_ONCE:-3}
+[[ $at_once =~ ^[1-9]$ ]] || stop "REVIEW_ANALYSES_AT_ONCE must be a whole number from 1 to 9, not '$at_once'"
 # The folder by its real path, so that what Harbor writes and what the scan reads are one folder.
 review=$(realpath -e -- "$1") || stop "$1 does not exist"
 if [ -n "${CODEX_AUTH_JSON_PATH:-}" ] && [ "${REVIEW_REAL_LOGIN:-}" = 1 ]; then
@@ -63,7 +67,7 @@ export CODEX_LOGIN_ACCESS_TOKEN CODEX_LOGIN_REFRESH_TOKEN CODEX_LOGIN_ID_TOKEN
 # treats the names as secrets and replaces their values with [REDACTED] in each trial's files.
 # shellcheck disable=SC2016
 harbor analyze "$review/blind" -r review/rubric.toml -p review/prompt.txt --task-config review/codex/task.toml \
-    -e podman -n 1 -k 2 -a codex -m gpt-6-astra --ak version=0.163.0 --ak reasoning_effort=high \
+    -e podman -n "$at_once" -k 2 -a codex -m gpt-6-astra --ak version=0.163.0 --ak reasoning_effort=high \
     --ae 'CODEX_LOGIN_ACCESS_TOKEN=${CODEX_LOGIN_ACCESS_TOKEN}' \
     --ae 'CODEX_LOGIN_REFRESH_TOKEN=${CODEX_LOGIN_REFRESH_TOKEN}' \
     --ae 'CODEX_LOGIN_ID_TOKEN=${CODEX_LOGIN_ID_TOKEN}' \
