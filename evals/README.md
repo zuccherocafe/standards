@@ -54,7 +54,7 @@ The free checks, which call no model, run the nop agent and the reference soluti
 
 A paid run uses an experiment: in the pilot, pi 1.4.0 through OpenRouter with two models, reasoning `high`, at most 80 model turns, five attempts at every task, three trials at a time and no automatic trial retry. pi's own settings, [`configs/pi-settings.json`](configs/pi-settings.json), turn its compaction and cache warming off, so a trial that fills the model's context ends there, and keep its own retry of a failed request: one initial attempt plus up to three retries, with exponential backoff. Before a paid run starts:
 
-1. Check how its tokens and costs will be reported. The maintainer has approved, for the smoke run and the pilot, the reduced reporting that the recipe under Results gives, reconciled with the key's spend after the run as the last step below says. A later run has its reporting approved with its estimate. For a model pi calls in Anthropic's Messages format, that reporting is the reconciliation alone, as Results says.
+1. Check how its tokens and costs will be reported. The maintainer has approved, for the smoke run and the pilot, the reduced reporting that the recipe under Results gives, reconciled with the key's spend after the run as the last step below says. A later run has its reporting approved with its estimate. For a model pi calls in Anthropic's Messages format, that reporting is the reconciliation, with pi's estimate for trial and condition splits, as Results says.
 2. Estimate each condition's cost separately: for each task, the input the agent re-sends every turn (the system prompt, the instruction and everything it has read so far) summed over the expected turns, and the expected output and reasoning, at cold-cache prices from a dated price list. Write the expected cost and the ceiling as separate numbers. OpenRouter can price a model by the time of day, so take the prices from its live model list (`GET https://openrouter.ai/api/v1/models`) with each model's `pricing.overrides`, which give other prices for some UTC days between `utc_start` and `utc_end`, and keep that list with the estimate. On 2026-10-23 every price of `deepseek/deepseek-v4.1-flash-1017` doubled on weekdays from 01:00 to 04:00 and from 06:00 to 10:00 UTC, so an estimate for a run that may reach those hours uses the doubled prices.
 3. Have the maintainer approve the estimate, the number of trials, and the spending ceiling, and set that ceiling on a key used for nothing else, at the provider.
 4. Check each agent's model in the experiment, a dated OpenRouter ID after `openrouter/`. Harbor's `-m` leaves a configured agent's model as it is, so a round with other models, attempts or concurrency is a new experiment in a commit of its own, and both conditions run from it.
@@ -104,7 +104,7 @@ After the run, once every trial has its rows (see Results), reconcile the rows w
 )
 ```
 
-Report the difference beside the run's totals. For a model pi calls in Anthropic's Messages format, the key's charge is the run's account of record, as Results says. A positive difference is spend missing from the summed charges. Report it once for the run. The reconciliation cannot allocate it to a trial or recover its token counts. OpenRouter may add a request's charge to the key's usage some time after the request ends, so treat the reconciliation as provisional until billing has settled. Repeat the lookup regardless of the initial difference, and explain any remaining negative difference. Until a later lookup shows billing has settled, report the run's account as incomplete.
+Report the difference beside the run's totals. For a model pi calls in Anthropic's Messages format, the key's charge is the run's account of record, as Results says; in a round that also runs a model with generation ids, the difference holds the Anthropic-format model's whole spend beside any spend missing from the other model's rows. A positive difference is spend missing from the summed charges. Report it once for the run. The reconciliation cannot allocate it to a trial or recover its token counts. OpenRouter may add a request's charge to the key's usage some time after the request ends, so treat the reconciliation as provisional until billing has settled. Repeat the lookup regardless of the initial difference, and explain any remaining negative difference. Until a later lookup shows billing has settled, report the run's account as incomplete.
 
 ## Results
 
@@ -173,7 +173,7 @@ For each request pi recorded, the tokens and the charge come from OpenRouter's g
 
 A row is unavailable when pi recorded no response id, the id is not an OpenRouter generation id, the lookup failed, the record cannot be read or it names another id; a row's `charge_unavailable` says its charge is not a number while its token counts stay as given. A request pi stopped with an error counts as unreported until its record says otherwise, never as zero. Report a total with any unreported row as a lower bound, with the count beside it, and where a charge is unavailable, label the trial's cost an estimate and keep the dated price list it used.
 
-For models pi calls in Anthropic's Messages format, this recipe cannot supply per-request or per-trial accounting. Report the settled key-charge delta for the whole run, without trial or condition splits or token totals. [The accounting model in the design read](../docs/design-reads/evals.md#models-in-play) explains the limitation.
+For models pi calls in Anthropic's Messages format, this recipe cannot supply per-request or per-trial accounting. The settled key-charge delta for the whole run is the account of record, without token totals; trial and condition splits come only from pi's estimate below, labelled as such. [The accounting model in the design read](../docs/design-reads/evals.md#models-in-play) explains the limitation.
 
 These totals are not a complete account, even when every row has numbers:
 
@@ -181,7 +181,30 @@ These totals are not a complete account, even when every row has numbers:
 - The rows cover the requests pi recorded, not every request sent. pi writes a response's row when the response ends, so a request in flight when pi is stopped, for example at the agent's deadline, leaves no row. The reconciliation after the run shows spend missing from the summed charges once for the whole run, without allocating it to a trial or request.
 - A trial that was interrupted stays incomplete, and so does a run whose rows have not been reconciled with what the key was charged.
 
-Harbor's own token counts and `cost_usd` are not the source; the design read says why.
+Harbor also records a cost for each trial, `agent_result.cost_usd` in its `result.json`, and their sum in the job's `stats.cost_usd`. Report it only as pi's estimate, never in place of the rows above for a model whose requests have generation ids; [the design read](../docs/design-reads/evals.md#overlaps) says where that estimate comes from, how it has compared with the key's charge, and what it cannot show. Harbor's token counts also come from pi.
+
+Once every trial has its `charges.jsonl`, these commands print, for each job and model of the round, the trials, the sum of pi's estimate with how many trials have none, the sum of the recorded charges and how many rows did not report a charge:
+
+```sh
+(
+  set -euo pipefail
+  # Every trial is read before anything is printed, so a missing or unreadable record prints no totals.
+  trials=$(for job in "$round-control" "$round-treatment"; do
+    for trial in "../.cache/evals/jobs/$job"/*/; do
+      jq -ec --arg job "$job" --slurpfile rows "$trial/charges.jsonl" \
+        '{job: $job, model: .agent_info.model_info.name, estimate: .agent_result.cost_usd,
+          charged: ($rows | map(.total_cost | numbers) | add // 0),
+          not_reported: ($rows | map(select(.total_cost | type != "number")) | length)}' "$trial/result.json" || exit 1
+    done
+  done)
+  printf '%s\n' "$trials" | jq -s 'group_by([.job, .model]) | map({job: .[0].job, model: .[0].model, trials: length,
+      pi_estimate: (map(.estimate | numbers) | add // 0),
+      no_estimate: map(select(.estimate | type != "number")) | length, charged: (map(.charged) | add),
+      not_reported: (map(.not_reported) | add)})'
+)
+```
+
+A group with rows that did not report a charge has its charged sum as a lower bound, as above, and so does a group with trials that have no estimate its estimate.
 
 ## Reviewing each trial's change
 
