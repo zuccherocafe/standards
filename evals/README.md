@@ -1,14 +1,14 @@
 # Evals
 
-These evals give a coding agent work taken from this repository's own tools, once with the standards available to it and once without, and score each result with no model. This file says how to run them. [The evals design read](../docs/design-reads/evals.md) defines the tasks, the two conditions, the verifiers and the accounting, and lists what is still unsettled.
+These evals give a coding agent work taken from this repository's own tools, with no guidance, with the standards, and with a widely used general bundle, and score each result with no model. This file says how to run them. [The evals design read](../docs/design-reads/evals.md) defines the tasks, the three conditions, the verifiers and the accounting, and lists what is still unsettled.
 
 ## What they measure
 
 There are three kinds of task: a bug-fix task, which asks for the fix of a defect a review found, a feature task, which gives the agent a past change's brief, and a review task, which gives the agent a past change to review. The first two score 1 only when the crate's existing tests and the task's hidden tests both pass; a review task is scored by where its must-fix findings fall. [The design read](../docs/design-reads/evals.md#models-in-play) defines each kind, its verifier and its reference.
 
-A comparison runs each task in two conditions that differ only in the standards guidance bundle, so its pass counts and costs show whether supplying that bundle made a difference for these tasks, with this model, at these limits.
+A comparison runs each task in three conditions that differ only in the guidance mounted for the agent: none (the control), the standards bundle (the treatment), and Addy Osmani's agent-skills (the agent-skills condition). Its pass counts and costs show whether supplying a bundle made a difference for these tasks, with this model, at these limits, and the agent-skills condition shows whether this one general bundle changes them too; it cannot show whether guidance in general does.
 
-They cannot show whether the standards improve code in general, or which rule helped: each task is one case, and repeated attempts at one task are not independent tasks. A task that every attempt solves, or that none does, says nothing about the bundle for that model. The model also knows much of what the standards say without being told.
+They cannot show whether the standards improve code in general, or which rule helped: each task is one case, and repeated attempts at one task are not independent tasks. A task that every attempt solves, or that none does, says nothing about a bundle for that model. The model also knows much of what the standards say without being told.
 
 ## Tools
 
@@ -22,14 +22,19 @@ Harbor writes `~/.cache/harbor/notifications.json` on its first run. This depart
 
 Run every command below from this folder; each job's records go under `.cache/evals/jobs/` at the repository root.
 
-An experiment is one committed job configuration in [`experiments/`](experiments/), such as [`experiments/pilot.yaml`](experiments/pilot.yaml), that names every model as an agent entry, the attempts and how many trials run at once. A round runs it once per condition, as one job each: the control runs the file alone, and the treatment layers [`configs/treatment.yaml`](configs/treatment.yaml) after it, so the two jobs differ only in the treatment's mounts; [the design read](../docs/design-reads/evals.md#models-in-play) says why the conditions are two jobs rather than two agent entries in one. Each task names itself as its `source`, so Harbor's job result gives the pass rate for each task and model, as Results says.
+An experiment is one committed job configuration in [`experiments/`](experiments/), such as [`experiments/calibration.yaml`](experiments/calibration.yaml), that names every model as an agent entry, the attempts and how many trials run at once. A round runs it once per condition, as one job each: the control runs the file alone, the treatment layers [`configs/treatment.yaml`](configs/treatment.yaml) after it, and the agent-skills condition layers [`configs/agent-skills.yaml`](configs/agent-skills.yaml), so the jobs differ only in their mounts; [the design read](../docs/design-reads/evals.md#models-in-play) says why the conditions are separate jobs rather than agent entries in one. Each task names itself as its `source`, so Harbor's job result gives the pass rate for each task and model, as Results says. [`experiments/pilot.yaml`](experiments/pilot.yaml) is the round that ran the bug-fix tasks in two conditions.
 
-Prepare the treatment's bundle once for the revision [`configs/treatment.yaml`](configs/treatment.yaml) names:
+Prepare each bundle once, for the revision its configuration names. The standards come from this repository, and agent-skills from its public repository, at the pinned commit, keeping only its `skills/` and `references/` folders, whose links reach each other, and its licence:
 
 ```sh
 rev=$(sed -n 's|.*standards-\([0-9a-f]\{40\}\)$|\1|p' configs/treatment.yaml)
 mkdir -p "../.cache/evals/standards-$rev"
 git -C .. archive "$rev" rules skills templates README.md CONTRIBUTING.md LICENSE | tar -x -C "../.cache/evals/standards-$rev"
+rev=$(sed -n 's|.*agent-skills-\([0-9a-f]\{40\}\)$|\1|p' configs/agent-skills.yaml)
+git init -q ../.cache/evals/agent-skills-source
+git -C ../.cache/evals/agent-skills-source fetch -q --depth 1 https://github.com/addyosmani/agent-skills.git "$rev"
+mkdir -p "../.cache/evals/agent-skills-$rev"
+git -C ../.cache/evals/agent-skills-source archive "$rev" skills references LICENSE | tar -x -C "../.cache/evals/agent-skills-$rev"
 ```
 
 The free checks, which call no model, run the nop agent and the reference solution on every task, in each condition. These commands stop after a job in which any trial errored, was cancelled or did not finish, before the next job starts; a score of 0 is not such a failure:
@@ -51,17 +56,19 @@ The free checks, which call no model, run the nop agent and the reference soluti
   finished free-control
   harbor run -c configs/free.yaml -c configs/treatment.yaml --job-name free-treatment -y
   finished free-treatment
+  harbor run -c configs/free.yaml -c configs/agent-skills.yaml --job-name free-agent-skills -y
+  finished free-agent-skills
 )
 ```
 
-A paid run uses an experiment: in the pilot, pi 1.4.0 through OpenRouter with two models, reasoning `high`, at most 80 model turns, five attempts at every task, three trials at a time and no automatic trial retry. pi's own settings, [`configs/pi-settings.json`](configs/pi-settings.json), turn its compaction and cache warming off, so a trial that fills the model's context ends there, and keep its own retry of a failed request: one initial attempt plus up to three retries, with exponential backoff. Before a paid run starts:
+A paid run uses an experiment: in the calibration round, pi 1.4.0 through OpenRouter with two models, reasoning `high`, at most 80 model turns, on the feature and review tasks, three trials at a time and no automatic trial retry. Its attempts are a placeholder, 1, until its cost estimate sets them in a commit of their own. pi's own settings, [`configs/pi-settings.json`](configs/pi-settings.json), turn its compaction and cache warming off, so a trial that fills the model's context ends there, and keep its own retry of a failed request: one initial attempt plus up to three retries, with exponential backoff. Before a paid run starts:
 
 1. Check how its tokens and costs will be reported. The maintainer has approved, for the smoke run and the pilot, the reduced reporting that the recipe under Results gives, reconciled with the key's spend after the run as the last step below says. A later run has its reporting approved with its estimate. For a model pi calls in Anthropic's Messages format, that reporting is the reconciliation, with pi's estimate for trial and condition splits, as Results says.
 2. Estimate each condition's cost separately: for each task, the input the agent re-sends every turn (the system prompt, the instruction and everything it has read so far) summed over the expected turns, and the expected output and reasoning, at cold-cache prices from a dated price list. Write the expected cost and the ceiling as separate numbers. OpenRouter can price a model by the time of day, so take the prices from its live model list (`GET https://openrouter.ai/api/v1/models`) with each model's `pricing.overrides`, which give other prices for some UTC days between `utc_start` and `utc_end`, and keep that list with the estimate. On 2026-10-23 every price of `deepseek/deepseek-v4.1-flash-1017` doubled on weekdays from 01:00 to 04:00 and from 06:00 to 10:00 UTC, so an estimate for a run that may reach those hours uses the doubled prices.
 3. Have the maintainer approve the estimate, the number of trials, and the spending ceiling, and set that ceiling on a key used for nothing else, at the provider.
-4. Check each agent's model in the experiment, a dated OpenRouter ID after `openrouter/`. Harbor's `-m` leaves a configured agent's model as it is, so a round with other models, attempts or concurrency is a new experiment in a commit of its own, and both conditions run from it.
+4. Check each agent's model in the experiment, a dated OpenRouter ID after `openrouter/`. Harbor's `-m` leaves a configured agent's model as it is, so a round with other models, attempts or concurrency is a new experiment in a commit of its own, and every condition runs from it.
 
-With `round` set to the experiment's name and `api=https://openrouter.ai/api/v1`, these commands record what the key has been charged so far, from OpenRouter's key endpoint, whose `usage` is the key's total charge in US dollars, and then run both jobs. They stop before any job when that reading cannot be taken or saved, and after a job in which any trial errored, was cancelled or did not finish:
+With `round` set to the experiment's name and `api=https://openrouter.ai/api/v1`, these commands record what the key has been charged so far, from OpenRouter's key endpoint, whose `usage` is the key's total charge in US dollars, and then run the three jobs. They stop before any job when that reading cannot be taken or saved, and after a job in which any trial errored, was cancelled or did not finish:
 
 ```sh
 export OPENROUTER_API_KEY=...   # the dedicated key
@@ -84,6 +91,8 @@ export OPENROUTER_API_KEY=...   # the dedicated key
   finished "$round-control"
   harbor run -c "experiments/$round.yaml" -c configs/treatment.yaml --job-name "$round-treatment" -y
   finished "$round-treatment"
+  harbor run -c "experiments/$round.yaml" -c configs/agent-skills.yaml --job-name "$round-agent-skills" -y
+  finished "$round-agent-skills"
 )
 ```
 
@@ -95,7 +104,8 @@ After the run, once every trial has its rows (see Results), reconcile the rows w
 (
   set -euo pipefail
   stop() { echo "reconciliation: $*" >&2; exit 1; }
-  trials=("../.cache/evals/jobs/$round-control"/*/ "../.cache/evals/jobs/$round-treatment"/*/)
+  trials=("../.cache/evals/jobs/$round-control"/*/ "../.cache/evals/jobs/$round-treatment"/*/
+          "../.cache/evals/jobs/$round-agent-skills"/*/)
   for trial in "${trials[@]}"; do [ -e "$trial/charges.jsonl" ] || stop "$trial has no charges.jsonl"; done
   before=$(cat "../.cache/evals/jobs/$round-key-usage-before")
   after=$(curl -fsS -H "Authorization: Bearer $OPENROUTER_API_KEY" "$api/key" | jq -e '.data.usage | numbers')
@@ -114,7 +124,7 @@ Each trial's folder holds `result.json` (the score, the stages and any exception
 
 A trial's outcome category comes from `reward.json`'s stages: the agent left no change record, the change does not apply, the hidden test target is not the crate's own, the change does not build, the existing tests fail, the hidden tests fail, time out or do not run, or it passed. A review task's `reward.json` says instead whether the agent left a findings file (`findings_captured`) and whether every line of it was a finding in the task's format (`findings_valid`), and counts its findings, its must-fix and should-fix findings, the task's known defects, those a must-fix finding of the defect's kind fell on (`defects_matched`), and the must-fix findings that find no known defect (`unmatched_must_fix`), and gives beside `reward` a precision score, `precision`, which [the design read](../docs/design-reads/evals.md#models-in-play) says how to read; [`findings/score.sh`](findings/score.sh) defines each. A review without a readable file scores 0 on both and has no counts, which Harbor's mean takes as 0. A trial with an exception and no `reward.json` failed in the infrastructure, not at the task, unless the exception is the agent's own deadline.
 
-Harbor computes the pass rates. A job's `result.json` holds, under `stats.evals`, one entry for each agent, model and task, named `<agent>__<model>__<task>`, whose `metrics` give the mean over its trials of every field of `reward.json`: `reward`'s mean is the pass rate, and each positive stage's mean is its success share. `timed_out` is the share of trials whose verifier commands timed out. Beside them are `n_trials`, `n_errors` and, under `reward_stats`, the trials behind each value. A condition is its job, so a round's two jobs give the pass rate for every task, model and condition. Harbor counts a trial with no reward as 0 in the mean, so read a job's rates only once the result check after it has passed.
+Harbor computes the pass rates. A job's `result.json` holds, under `stats.evals`, one entry for each agent, model and task, named `<agent>__<model>__<task>`, whose `metrics` give the mean over its trials of every field of `reward.json`: `reward`'s mean is the pass rate, and each positive stage's mean is its success share. `timed_out` is the share of trials whose verifier commands timed out. Beside them are `n_trials`, `n_errors` and, under `reward_stats`, the trials behind each value. A condition is its job, so a round's three jobs give the pass rate for every task, model and condition. Harbor counts a trial with no reward as 0 in the mean, so read a job's rates only once the result check after it has passed.
 
 `harbor view ../.cache/evals/jobs` serves Harbor's viewer of every job in that folder on 127.0.0.1, at the first free port from 8080 to 8089: each job's results, and each trial's trajectory, verifier output and records. Use it to browse a round; the figures a report gives come from the records themselves.
 
@@ -191,7 +201,7 @@ Once every trial has its `charges.jsonl`, these commands print, for each job and
 (
   set -euo pipefail
   # Every trial is read before anything is printed, so a missing or unreadable record prints no totals.
-  trials=$(for job in "$round-control" "$round-treatment"; do
+  trials=$(for job in "$round-control" "$round-treatment" "$round-agent-skills"; do
     for trial in "../.cache/evals/jobs/$job"/*/; do
       jq -ec --arg job "$job" --slurpfile rows "$trial/charges.jsonl" \
         '{job: $job, model: .agent_info.model_info.name, estimate: .agent_result.cost_usd,
@@ -217,7 +227,7 @@ A trial's score says whether the change works, not how it is built. A review has
 The evaluator must not learn which agent, model or condition made a change, or whether the change is the reference. [`review/blind.sh`](review/blind.sh) copies each trial to review into a packet named by a random id, which also shuffles the order Harbor reviews them in. It keeps the key from id to trial in `key.json` beside the packets, where the evaluator cannot read it, and what it found in `publication.txt`. Everything else a trial holds names its agent, model or condition, or tells the reference from an agent's change, so a packet leaves it out:
 
 - `config.json`, `lock.json` and `result.json`, at the trial's and the job's level, name the agent, its version and model and the condition's mounts, and record the trial's timings, tokens and cost; an oracle trial's agent time is near zero. `blind.sh` reads the trial's `result.json` for the key and the check below.
-- `agent/` holds the agent's own records: `trajectory.json`, pi's sessions and output, and the setup log. pi's system prompt carries the treatment's `AGENTS.md` and its skills, and a treated agent's commands read the bundle, so no edit could make a treated trajectory read as a control one, and the oracle leaves no trajectory at all. The rubric's reward-hacking criterion, Harbor's own, therefore judges from the change and the verifier's output.
+- `agent/` holds the agent's own records: `trajectory.json`, pi's sessions and output, and the setup log. pi's system prompt carries the treatment's `AGENTS.md` and its skills, or agent-skills' skills, and an agent's commands read its bundle, so no edit could make one condition's trajectory read as another's, and the oracle leaves no trajectory at all. The rubric's reward-hacking criterion, Harbor's own, therefore judges from the change and the verifier's output.
 - `artifacts/var/tmp/agent-identity.txt` names pi and its versions, and `artifacts/manifest.json` lists the artifacts.
 - `trial.log` and `job.log` narrate the run with the agent's name. A packet has an empty `trial.log`, and the packets' folder an empty `job.log`, the files by which Harbor recognises a trial and a job.
 - The trial's and the job's folder names carry the task, the job's name and Harbor's trial suffix; a packet's name is its id.
@@ -256,7 +266,7 @@ The shell's Harbor carries two patches for reviews. [`harbor/analyze-task-config
 
 ### Running a review
 
-With `name` set to the review's name and `trials` to the trial folders to review, for a round every trial of a bug-fix or feature task in both its jobs, never a review task's, so that one review covers the round, these commands build the reviewer's image, make the packets, run the review on the host's login three analyses at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
+With `name` set to the review's name and `trials` to the trial folders to review, for a round every trial of a bug-fix or feature task in all three of its condition jobs, never a review task's, so that one review covers the round (for the calibration round, every feature-task trial of its three jobs), these commands build the reviewer's image, make the packets, run the review on the host's login three analyses at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
 
 ```sh
 (
@@ -317,7 +327,7 @@ A change qualifies when it is small enough to review within the experiment's tur
 Before a task takes part in a paid run:
 
 - Its image builds, its trees' ids match, and the crate's existing tests pass offline in it, apart from the tests `environment/AGENTS.md` lists with their reason.
-- In both conditions, the nop agent scores 0 and the reference solution scores 1. For a task scored by tests, the nop fails by a hidden test's assertion or, for `dandegate-unicode-lines`, by reaching the hidden tests' timeout, never by failing to build; for a review task, it leaves no findings file.
+- In every condition, the nop agent scores 0 and the reference solution scores 1. For a task scored by tests, the nop fails by a hidden test's assertion or, for `dandegate-unicode-lines`, by reaching the hidden tests' timeout, never by failing to build; for a review task, it leaves no findings file.
 - Each file in `shortcuts/` scores 0. To check one, build the image and run the verifier on it as Harbor's separate verifier would, with the patch copied as `model.patch` or the findings as `findings.jsonl`:
 
   ```sh
@@ -327,5 +337,5 @@ Before a task takes part in a paid run:
     -v "$PWD/../.cache/evals/change:/var/tmp:ro" evals-<task> bash /tests/test.sh
   ```
 
-- `harbor run -c experiments/<round>.yaml --dry-run` refuses for the missing key and nothing else, and passes with a placeholder in `OPENROUTER_API_KEY`, in both conditions.
-- pi starts from the image's installation, with Harbor's agent installing nothing, in the task's container in both conditions with the task's `AGENTS.md` in its system prompt and compaction off, and in the treatment also the treatment's `AGENTS.md` and the standards' skills, with every relative link in the bundle resolving except those into `tools/`. Nothing in this folder runs that check yet: it needs a stand-in model endpoint that records what pi would send.
+- `harbor run -c experiments/<round>.yaml --dry-run` refuses for the missing key and nothing else, and passes with a placeholder in `OPENROUTER_API_KEY`, in every condition.
+- pi starts from the image's installation, with Harbor's agent installing nothing, in the task's container in every condition with the task's `AGENTS.md` in its system prompt and compaction off; in the treatment also the treatment's `AGENTS.md` and the standards' skills, with every relative link in the bundle resolving except those into `tools/`; and in the agent-skills condition also its skills, with every relative link resolving. Nothing in this folder runs that check yet: it needs a stand-in model endpoint that records what pi would send.

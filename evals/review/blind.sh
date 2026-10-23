@@ -136,12 +136,16 @@ for trial in "$@"; do
     fi
     echo "$trial: published as $id; $withheld verifier output lines had a name withheld" >> "$review/publication.txt"
 
-    # A trial runs the treatment when its environment mounts the standards bundle at ~/.agents, as
-    # configs/treatment.yaml does; Harbor's oracle agent applies the task's reference solution.
+    # A trial's condition is the bundle its environment mounts at ~/.agents: the standards, as configs/treatment.yaml
+    # mounts them, Addy Osmani's agent-skills, as configs/agent-skills.yaml does, or none for the control. Harbor's
+    # oracle agent applies the task's reference solution.
     jq --arg id "$id" --arg trial "$trial" --slurpfile result "$trial/result.json" \
         '.[$id] = ($result[0].config | {trial: $trial, job: ($trial | split("/") | .[-2]), task: .task.path,
           agent: .agent.name, model: .agent.model_name,
-          condition: (if any(.environment.mounts[]?; .target == "/root/.agents") then "treatment" else "control" end),
+          condition: ([.environment.mounts[]? | select(.target == "/root/.agents") | .source | split("/") | last
+                       | if startswith("standards-") then "treatment"
+                         elif startswith("agent-skills-") then "agent-skills"
+                         else error("an unknown bundle at ~/.agents: \(.)") end] | first // "control"),
           reference: (.agent.name == "oracle")})' \
         "$review/key.json" > "$review/key.json.part"
     mv "$review/key.json.part" "$review/key.json"
