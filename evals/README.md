@@ -52,7 +52,7 @@ The free checks, which call no model, run the nop agent and the reference soluti
 
 A paid run uses [`configs/pi.yaml`](configs/pi.yaml): pi 1.4.0 through OpenRouter, reasoning `high`, at most 80 model turns, one trial at a time and no automatic trial retry. pi's own settings, [`configs/pi-settings.json`](configs/pi-settings.json), turn its compaction and cache warming off, so a trial that fills the model's context ends there, and keep its own retry of a failed request: one initial attempt plus up to three retries, with exponential backoff. Before a paid run starts:
 
-1. Check how its tokens and costs will be reported. The maintainer has approved, for the smoke run and the pilot, the reduced reporting that the recipe under Results gives, reconciled with the key's spend after the run as the last step below says. A later run has its reporting approved with its estimate.
+1. Check how its tokens and costs will be reported. The maintainer has approved, for the smoke run and the pilot, the reduced reporting that the recipe under Results gives, reconciled with the key's spend after the run as the last step below says. A later run has its reporting approved with its estimate. For a model pi calls in Anthropic's Messages format, that reporting is the reconciliation alone, as Results says.
 2. Estimate each condition's cost separately: for each task, the input the agent re-sends every turn (the system prompt, the instruction and everything it has read so far) summed over the expected turns, and the expected output and reasoning, at cold-cache prices from a dated price list. Write the expected cost and the ceiling as separate numbers. OpenRouter can price a model by the time of day, so take the prices from its live model list (`GET https://openrouter.ai/api/v1/models`) with each model's `pricing.overrides`, which give other prices for some UTC days between `utc_start` and `utc_end`, and keep that list with the estimate. On 2026-10-23 every price of `deepseek/deepseek-v4.1-flash-1017` doubled on weekdays from 01:00 to 04:00 and from 06:00 to 10:00 UTC, so an estimate for a run that may reach those hours uses the doubled prices.
 3. Have the maintainer approve the estimate, the number of trials, and the spending ceiling, and set that ceiling on a key used for nothing else, at the provider.
 4. Check the model in `configs/pi.yaml`, a dated OpenRouter ID after `openrouter/`. Harbor's `-m` leaves a configured agent's model as it is, so a comparison with another model changes that line in a commit of its own, and both conditions run from it.
@@ -102,7 +102,7 @@ After the run, once every trial has its rows (see Results), reconcile the rows w
 )
 ```
 
-Report the difference beside the run's totals. A positive difference is spend missing from the summed charges. Report it once for the run. The reconciliation cannot allocate it to a trial or recover its token counts. OpenRouter may add a request's charge to the key's usage some time after the request ends, so treat the reconciliation as provisional until billing has settled. Repeat the lookup regardless of the initial difference, and explain any remaining negative difference. Until a later lookup shows billing has settled, report the run's account as incomplete.
+Report the difference beside the run's totals. For a model pi calls in Anthropic's Messages format, the key's charge is the run's account of record, as Results says. A positive difference is spend missing from the summed charges. Report it once for the run. The reconciliation cannot allocate it to a trial or recover its token counts. OpenRouter may add a request's charge to the key's usage some time after the request ends, so treat the reconciliation as provisional until billing has settled. Repeat the lookup regardless of the initial difference, and explain any remaining negative difference. Until a later lookup shows billing has settled, report the run's account as incomplete.
 
 ## Results
 
@@ -135,6 +135,8 @@ For each request pi recorded, the tokens and the charge come from OpenRouter's g
     record="$trial/generations/$id.json"
     if [ "$id" = - ]; then
       row=$(unavailable "$id" "$reason" "pi recorded no response id")
+    elif [[ ! $id =~ ^gen-[0-9A-Za-z-]+$ ]]; then
+      row=$(unavailable "$id" "$reason" "not an OpenRouter generation id")
     elif ! curl -fsS -o "$record" -H "Authorization: Bearer $OPENROUTER_API_KEY" "$api/generation?id=$id"; then
       row=$(unavailable "$id" "$reason" "generation lookup failed")
     elif ! jq -e '.data | type == "object"' "$record" > /dev/null 2>&1; then
@@ -163,7 +165,9 @@ For each request pi recorded, the tokens and the charge come from OpenRouter's g
 )
 ```
 
-A row is unavailable when pi recorded no response id, the lookup failed, the record cannot be read or it names another id; a row's `charge_unavailable` says its charge is not a number while its token counts stay as given. A request pi stopped with an error counts as unreported until its record says otherwise, never as zero. Report a total with any unreported row as a lower bound, with the count beside it, and where a charge is unavailable, label the trial's cost an estimate and keep the dated price list it used.
+A row is unavailable when pi recorded no response id, the id is not an OpenRouter generation id, the lookup failed, the record cannot be read or it names another id; a row's `charge_unavailable` says its charge is not a number while its token counts stay as given. A request pi stopped with an error counts as unreported until its record says otherwise, never as zero. Report a total with any unreported row as a lower bound, with the count beside it, and where a charge is unavailable, label the trial's cost an estimate and keep the dated price list it used.
+
+For models pi calls in Anthropic's Messages format, this recipe cannot supply per-request or per-trial accounting. Report the settled key-charge delta for the whole run, without trial or condition splits or token totals. [The accounting model in the design read](../docs/design-reads/evals.md#models-in-play) explains the limitation.
 
 These totals are not a complete account, even when every row has numbers:
 
