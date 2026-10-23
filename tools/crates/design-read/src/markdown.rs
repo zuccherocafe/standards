@@ -37,7 +37,11 @@ impl<'a> Sections<'a> {
             };
             match (open, Fence::on(text)) {
                 (Some(inside), Some((fence, rest))) => {
-                    if fence.closes(inside) && rest.trim().is_empty() {
+                    if fence.closes(inside)
+                        && rest
+                            .chars()
+                            .all(|character| matches!(character, ' ' | '\t'))
+                    {
                         open = None;
                     }
                     continue;
@@ -190,6 +194,29 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["E"]
         );
+    }
+
+    #[test]
+    fn a_closing_fence_may_be_followed_only_by_spaces_and_tabs() {
+        let titles = |closing: &str| {
+            Sections::of(&format!("```\n## In\n{closing}\n## After\n"))
+                .sections
+                .iter()
+                .map(|section| section.title.to_owned())
+                .collect::<Vec<_>>()
+        };
+        for closing in ["```", "```  ", "```\t", "``` \t \t"] {
+            assert_eq!(titles(closing), ["After"], "{closing:?}");
+        }
+        for closing in [
+            "```\u{a0}",
+            "``` \u{2003}",
+            "```\u{3000}",
+            "```\u{c}",
+            "```\u{b}",
+        ] {
+            assert!(titles(closing).is_empty(), "{closing:?}");
+        }
     }
 
     #[test]
