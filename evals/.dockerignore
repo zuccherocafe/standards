@@ -2,6 +2,9 @@
 # other file a task holds can enter an image. Each level is closed, then reopened for its build inputs alone, since
 # a builder does not search a closed folder for a reopened file.
 *
+!findings
+findings/*
+!findings/score.sh
 !pi
 pi/*
 !pi/install.sh
@@ -17,6 +20,12 @@ tasks/*
 !tasks/dandegate-unicode-lines
 !tasks/design-read-area-files
 !tasks/design-read-fenced-code
+!tasks/review-dandegate-report-names
+!tasks/review-dandegate-steps-file
+!tasks/review-dandegate-unicode-escapes
+!tasks/review-design-read-area-files
+!tasks/review-design-read-closing-fence
+!tasks/review-design-read-new
 !tasks/rust-mutants-round-robin
 tasks/*/*
 !tasks/*/environment
@@ -25,3 +34,5 @@ tasks/*/environment/*
 !tasks/*/environment/start.patch
 !tasks/*/environment/AGENTS.md
 !tasks/*/environment/gitignore
+!tasks/*/environment/change.patch
+!tasks/*/environment/message.txt

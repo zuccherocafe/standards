@@ -1,0 +1,74 @@
+diff --git a/tools/crates/design-read/src/markdown.rs b/tools/crates/design-read/src/markdown.rs
+index 35879406..3ced3573 100644
+--- a/tools/crates/design-read/src/markdown.rs
++++ b/tools/crates/design-read/src/markdown.rs
+@@ -29,19 +29,25 @@ impl<'a> Sections<'a> {
+     pub(crate) fn of(text: &'a str) -> Self {
+         let mut lead = Vec::new();
+         let mut sections: Vec<Section<'a>> = Vec::new();
+-        let mut fenced = false;
++        let mut open: Option<Fence> = None;
+         for (index, text) in text.lines().enumerate() {
+             let line = Line {
+                 number: index + 1,
+                 text,
+             };
+-            let trimmed = text.trim_start();
+-            if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+-                fenced = !fenced;
+-                continue;
+-            }
+-            if fenced {
+-                continue;
++            match (open, Fence::on(text)) {
++                (Some(inside), Some((fence, rest))) => {
++                    if fence.closes(inside) && rest.trim().is_empty() {
++                        open = None;
++                    }
++                    continue;
++                }
++                (Some(_), None) => continue,
++                (None, Some((fence, info))) if fence.marker != '`' || !info.contains('`') => {
++                    open = Some(fence);
++                    continue;
++                }
++                (None, Some(_) | None) => {}
+             }
+             if let Some(title) = text.strip_prefix("## ") {
+                 sections.push(Section {
+@@ -66,6 +72,35 @@ impl<'a> Sections<'a> {
+     }
+ }
+ 
++/// A run of three or more backticks or tildes, indented by at most three spaces, that opens or closes fenced code.
++#[derive(Debug, Clone, Copy)]
++struct Fence {
++    marker: char,
++    length: usize,
++}
++
++impl Fence {
++    /// The fence `text` begins with, and the rest of the line after it.
++    fn on(text: &str) -> Option<(Self, &str)> {
++        let rest = text.trim_start_matches(' ');
++        if text.len() - rest.len() > 3 {
++            return None;
++        }
++        let marker = rest
++            .chars()
++            .next()
++            .filter(|marker| matches!(marker, '`' | '~'))?;
++        let after = rest.trim_start_matches(marker);
++        let length = rest.len() - after.len();
++        (length >= 3).then_some((Self { marker, length }, after))
++    }
++
++    /// Whether this fence closes the block `open` began: the same marker, at least as long.
++    fn closes(self, open: Self) -> bool {
++        self.marker == open.marker && self.length >= open.length
++    }
++}
++
+ /// Whether `text` is a table row: its first character past indentation is a pipe.
+ pub(crate) fn is_row(text: &str) -> bool {
+     text.trim_start().starts_with('|')

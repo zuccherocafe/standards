@@ -1,0 +1,7 @@
+dandegate: name built-in reports by their tool
+
+Every built-in report was typed as a Rust report, and the Rust scans ran under the bare name scans, which a GDScript scan step would make ambiguous. The built-in reports are now one enumeration whose names say their tool, and the scans step is rust-scans.
+
+Reserved names, dispatch (Work::BuiltIn), the identity's settings and the reserved-name refusal read that enumeration. The refusal now says "a name dandegate's built-in reports use". A plan may now name a step scans.
+
+The section file stays scans.md and every report's content is unchanged; only the step's name, and so its folder and its line on the page, moves.

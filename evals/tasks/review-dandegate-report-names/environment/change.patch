@@ -1,0 +1,340 @@
+diff --git a/tools/crates/dandegate/src/plan.rs b/tools/crates/dandegate/src/plan.rs
+index fcc06369..a71a0ca4 100644
+--- a/tools/crates/dandegate/src/plan.rs
++++ b/tools/crates/dandegate/src/plan.rs
+@@ -41,8 +41,8 @@
+ //! after side, or after steps. A once step can need any step, on every side that step runs.
+ //!
+ //! When `[project.rust]` names a folder holding a Cargo workspace, the plan adds the Rust reports as built-in steps
+-//! under reserved names ([`Report`]). `[reports.rust]` without `[project.rust]` is refused, since it would tune
+-//! nothing; an empty one is the same as none.
++//! under names every plan reserves, whether or not it runs them ([`Report`]). `[reports.rust]` without
++//! `[project.rust]` is refused, since it would tune nothing; an empty one is the same as none.
+ //!
+ //! This module holds the types that the rest of dandegate reads. [`read`] builds them from the file's TOML shapes in
+ //! [`raw`]. [`template`] parses each command word's placeholders, [`repo`] holds the repository's paths and tree,
+@@ -319,11 +319,11 @@ pub(crate) struct RustSettings {
+     pub(crate) mutation: Vec<String>,
+ }
+ 
+-/// A Rust report, run as a step under its reserved name.
++/// A built-in report, run as a step under its reserved name, which names the report's language or tool.
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub(crate) enum Report {
+     /// Both revisions' rust-scans findings and counts, side by side. It fails nothing.
+-    Scans,
++    RustScans,
+     /// Each crate's production and test lines at both revisions.
+     Lines,
+     /// The mutation report of the Rust changed since the before commit, in the after checkout.
+@@ -336,7 +336,7 @@ pub(crate) enum Report {
+ 
+ impl Report {
+     const ALL: [Self; 5] = [
+-        Self::Scans,
++        Self::RustScans,
+         Self::Lines,
+         Self::Mutants,
+         Self::ApiListings,
+@@ -356,7 +356,7 @@ impl Report {
+ 
+     pub(crate) fn name(self) -> &'static str {
+         match self {
+-            Self::Scans => "scans",
++            Self::RustScans => "rust-scans",
+             Self::Lines => "lines",
+             Self::Mutants => "mutants",
+             Self::ApiListings => "api-listings",
+@@ -370,8 +370,8 @@ impl Report {
+ pub(crate) enum Work<A> {
+     /// The project's command, run in the measured checkout's development shell.
+     Command(Vec<Template<A>>),
+-    /// A built-in Rust report.
+-    Rust(Report),
++    /// A built-in report.
++    BuiltIn(Report),
+ }
+ 
+ /// A step's command and the values it fills in, typed by the placeholders its kind has.
+@@ -393,7 +393,7 @@ impl<A: Arg> Recipe<A> {
+ 
+     fn report(&self) -> Option<Report> {
+         match &self.work {
+-            Work::Rust(report) => Some(*report),
++            Work::BuiltIn(report) => Some(*report),
+             Work::Command(_) => None,
+         }
+     }
+@@ -406,7 +406,7 @@ impl<A: Arg> Recipe<A> {
+     fn templates(&self) -> impl Iterator<Item = &Template<A>> {
+         let run = match &self.work {
+             Work::Command(run) => &run[..],
+-            Work::Rust(_) => &[],
++            Work::BuiltIn(_) => &[],
+         };
+         run.iter()
+             .chain(self.env.values())
+@@ -566,7 +566,7 @@ impl Step {
+         }
+     }
+ 
+-    /// The built-in Rust report the step runs, if it is one.
++    /// The built-in report the step runs, if it is one.
+     pub(crate) fn report(&self) -> Option<Report> {
+         match &self.runs {
+             Runs::PerRevision(recipe) | Runs::After(recipe) => recipe.report(),
+@@ -592,7 +592,7 @@ impl Step {
+                 Work::Command(run) => {
+                     serde_json::json!({ "run": run.iter().map(Template::written).collect::<Vec<_>>() })
+                 }
+-                Work::Rust(report) => serde_json::json!({ "rust": report.name() }),
++                Work::BuiltIn(report) => serde_json::json!({ "built-in": report.name() }),
+             };
+             let env: BTreeMap<&str, String> = recipe
+                 .env()
+@@ -670,6 +670,24 @@ impl Plan {
+         self.rust.as_ref()
+     }
+ 
++    /// The settings of the steps file a built-in report reads, as a value its kept results' identity holds, or none
++    /// when the plan does not run it.
++    pub(crate) fn report_settings(&self, report: Report) -> Option<serde_json::Value> {
++        match report {
++            Report::RustScans
++            | Report::Lines
++            | Report::Mutants
++            | Report::ApiListings
++            | Report::Api => self.rust.as_ref().map(|settings| {
++                serde_json::json!({
++                    "workspace": settings.workspace.as_path().as_str(),
++                    "scans": settings.scans,
++                    "mutation": settings.mutation,
++                })
++            }),
++        }
++    }
++
+     pub(crate) fn notices(&self) -> &[Notice] {
+         &self.notices
+     }
+diff --git a/tools/crates/dandegate/src/plan/error.rs b/tools/crates/dandegate/src/plan/error.rs
+index acd7304e..3f9ba9e4 100644
+--- a/tools/crates/dandegate/src/plan/error.rs
++++ b/tools/crates/dandegate/src/plan/error.rs
+@@ -54,7 +54,7 @@ pub(crate) enum Problem {
+     StepName(BadName),
+     #[error("step {0:?} is declared twice")]
+     DuplicateStep(String),
+-    #[error("step {0:?} is a name dandegate's Rust reports use")]
++    #[error("step {0:?} is a name dandegate's built-in reports use")]
+     Reserved(String),
+     #[error("step \"{0}\": run: names no command")]
+     EmptyRun(StepName),
+diff --git a/tools/crates/dandegate/src/plan/read.rs b/tools/crates/dandegate/src/plan/read.rs
+index cebf5fc2..f619f184 100644
+--- a/tools/crates/dandegate/src/plan/read.rs
++++ b/tools/crates/dandegate/src/plan/read.rs
+@@ -589,20 +589,20 @@ fn rust_settings(
+     }))
+ }
+ 
+-/// A Rust report's step.
++/// A built-in report's step.
+ fn built_in(report: Report, settings: &RustSettings) -> Step {
+     let section = |file: &str| Output::Section {
+         file: OutPath(Utf8PathBuf::from(file)),
+     };
+     let once = |reportable, collect| {
+         Runs::Once(Recipe {
+-            work: Work::Rust(reportable),
++            work: Work::BuiltIn(reportable),
+             env: BTreeMap::new(),
+             collect,
+         })
+     };
+     let (runs, needs, optional, reuse, timeout, outputs) = match report {
+-        Report::Scans => (
++        Report::RustScans => (
+             once(report, None),
+             vec![],
+             false,
+@@ -631,7 +631,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
+         ),
+         Report::ApiListings => (
+             Runs::PerRevision(Recipe {
+-                work: Work::Rust(report),
++                work: Work::BuiltIn(report),
+                 env: BTreeMap::new(),
+                 collect: Some(collector(settings, &["cargo-public-api"])),
+             }),
+diff --git a/tools/crates/dandegate/src/plan/tests.rs b/tools/crates/dandegate/src/plan/tests.rs
+index 767769b6..25989fb4 100644
+--- a/tools/crates/dandegate/src/plan/tests.rs
++++ b/tools/crates/dandegate/src/plan/tests.rs
+@@ -73,12 +73,14 @@ fn a_name_is_lowercase_letters_digits_and_hyphens_unique_and_not_reserved() {
+         refusal(&format!("{MINIMAL}\n{MINIMAL}")),
+         "dandegate.toml:6: step \"visual\" is declared twice"
+     );
+-    for reserved in ["scans", "lines", "mutants", "api", "api-listings"] {
++    for reserved in ["rust-scans", "lines", "mutants", "api", "api-listings"] {
+         assert_eq!(
+             refusal(&format!(
+                 "[[steps.step]]\nname = \"{reserved}\"\nrun = [\"x\"]\n"
+             )),
+-            format!("dandegate.toml:2: step \"{reserved}\" is a name dandegate's Rust reports use")
++            format!(
++                "dandegate.toml:2: step \"{reserved}\" is a name dandegate's built-in reports use"
++            )
+         );
+     }
+ }
+@@ -310,7 +312,10 @@ fn the_rust_reports_run_on_the_workspace_project_rust_names() {
+     assert_eq!(settings.scans, ["--core", "a"]);
+     assert_eq!(settings.mutation, Vec::<String>::new());
+     let names: Vec<&str> = plan.steps().keys().map(StepName::as_str).collect();
+-    assert_eq!(names, ["scans", "lines", "mutants", "api-listings", "api"]);
++    assert_eq!(
++        names,
++        ["rust-scans", "lines", "mutants", "api-listings", "api"]
++    );
+     let api = &plan.steps()[&Report::Api.step()];
+     assert!(!api.enabled() && api.kind() == Kind::Once);
+     assert!(plan.steps()[&Report::ApiListings.step()].reuse());
+diff --git a/tools/crates/dandegate/src/report.rs b/tools/crates/dandegate/src/report.rs
+index 786ee05e..cfde9db7 100644
+--- a/tools/crates/dandegate/src/report.rs
++++ b/tools/crates/dandegate/src/report.rs
+@@ -722,7 +722,7 @@ impl Session<'_> {
+                     Err(error) => Outcome::LaunchFailed(rendered(&error)),
+                 }
+             }
+-            Work::Rust(report) => {
++            Work::BuiltIn(report) => {
+                 let Some(settings) = self.plan().rust() else {
+                     return Outcome::LaunchFailed("the plan has no Rust workspace".to_owned());
+                 };
+diff --git a/tools/crates/dandegate/src/report/identity.rs b/tools/crates/dandegate/src/report/identity.rs
+index caf4a481..2fda315b 100644
+--- a/tools/crates/dandegate/src/report/identity.rs
++++ b/tools/crates/dandegate/src/report/identity.rs
+@@ -92,16 +92,9 @@ impl Session<'_> {
+                 ))
+             })
+             .collect::<Result<_, String>>()?;
+-        let rust = step
++        let settings = step
+             .report()
+-            .and_then(|_| self.plan().rust())
+-            .map(|settings| {
+-                serde_json::json!({
+-                    "workspace": settings.workspace.as_path().as_str(),
+-                    "scans": settings.scans,
+-                    "mutation": settings.mutation,
+-                })
+-            });
++            .and_then(|report| self.plan().report_settings(report));
+         Ok(Identity {
+             dandegate,
+             revisions,
+@@ -117,7 +110,7 @@ impl Session<'_> {
+                 .iter()
+                 .map(|program| program.as_str().to_owned())
+                 .collect(),
+-            rust,
++            settings,
+             cpus: self.cpus_followed(at),
+         })
+     }
+diff --git a/tools/crates/dandegate/src/report/store.rs b/tools/crates/dandegate/src/report/store.rs
+index 5c1d6016..251ba6ce 100644
+--- a/tools/crates/dandegate/src/report/store.rs
++++ b/tools/crates/dandegate/src/report/store.rs
+@@ -133,7 +133,8 @@ pub(crate) struct NeedIdentity {
+ /// - dandegate's own executable.
+ /// - The host programs the plan names, by name: the plan comes from the after revision, so the before commit does not
+ ///   fix them.
+-/// - For a built-in Rust report, the Rust settings of the steps file: the workspace and each report's arguments.
++/// - For a built-in report, the settings of the steps file it reads: for a Rust report, the workspace and each report's
++///   arguments.
+ /// - For the mutation report, whose job budget follows them, and for a step that names `{cpus}`, the CPUs it runs on;
+ ///   the same for each instance it needs.
+ #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+@@ -149,9 +150,9 @@ pub(crate) struct Identity {
+     /// The host programs the plan names, as written, left out when it names none.
+     #[serde(skip_serializing_if = "Vec::is_empty")]
+     pub(crate) host: Vec<String>,
+-    /// The Rust settings, left out for a step that is not a built-in Rust report.
++    /// The settings a built-in report reads, left out for a step that is not one.
+     #[serde(skip_serializing_if = "Option::is_none")]
+-    pub(crate) rust: Option<serde_json::Value>,
++    pub(crate) settings: Option<serde_json::Value>,
+     /// The CPUs the step runs on, left out for a step whose result does not follow them.
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub(crate) cpus: Option<String>,
+diff --git a/tools/crates/dandegate/src/rust.rs b/tools/crates/dandegate/src/rust.rs
+index d8fe7e4a..a757fc9b 100644
+--- a/tools/crates/dandegate/src/rust.rs
++++ b/tools/crates/dandegate/src/rust.rs
+@@ -1,7 +1,7 @@
+ //! Runs the Rust reports as built-in steps under reserved names. dandegate adds them when `dandegate.toml` names the
+ //! Cargo workspace; [`crate::plan`] describes the file.
+ //!
+-//! - `scans` runs rust-scans in each checkout, and shows both sides' counts and the after side's findings. It is a
++//! - `rust-scans` runs rust-scans in each checkout, and shows both sides' counts and the after side's findings. It is a
+ //!   review aid and fails nothing.
+ //! - `lines` counts each crate's production and test lines at both revisions. It finds the crates with `cargo
+ //!   metadata`.
+@@ -315,7 +315,7 @@ impl MetadataError {
+ /// instead.
+ pub(crate) fn run(report: Report, side: Option<Side>, context: &Context<'_>) -> Result<(), Stop> {
+     match (report, side) {
+-        (Report::Scans, _) => scans(context),
++        (Report::RustScans, _) => scans(context),
+         (Report::Lines, _) => line_counts(context),
+         (Report::Mutants, _) => mutants(context),
+         (Report::ApiListings, Some(side)) => api_listings(context, side),
+diff --git a/tools/crates/dandegate/tests/scenarios/rust.rs b/tools/crates/dandegate/tests/scenarios/rust.rs
+index 990e5ee1..44c7c256 100644
+--- a/tools/crates/dandegate/tests/scenarios/rust.rs
++++ b/tools/crates/dandegate/tests/scenarios/rust.rs
+@@ -160,7 +160,7 @@ fn a_root_level_rust_workspace_gets_scans_line_counts_and_the_mutation_report()
+     let page = run.page();
+     assert_eq!(run.printed("DANDEGATE-INCOMPLETE"), Vec::<String>::new());
+ 
+-    let scans = section(&page, "scans (both)");
++    let scans = section(&page, "rust-scans (both)");
+     assert!(
+         scans.contains("| H1 | 1 | 0 |\n| H2 | 0 | 1 |\n"),
+         "{scans}"
+@@ -170,7 +170,7 @@ fn a_root_level_rust_workspace_gets_scans_line_counts_and_the_mutation_report()
+         "{scans}"
+     );
+     assert!(
+-        run.file("steps/both/scans/out/before.txt")
++        run.file("steps/both/rust-scans/out/before.txt")
+             .starts_with("H1 crates/alpha")
+     );
+     assert_eq!(
+@@ -281,18 +281,18 @@ fn scans_that_fail_on_one_side_leave_a_partial_section_and_fail_nothing() {
+     assert_eq!(
+         run.printed("DANDEGATE-INCOMPLETE"),
+         [
+-            "both scans: scans.md is incomplete: the before side's scans did not finish: `rust-scans --workspace . \
++            "both rust-scans: scans.md is incomplete: the before side's scans did not finish: `rust-scans --workspace . \
+              --core alpha` failed: exit status: 1"
+         ]
+     );
+-    let scans = section(&page, "scans (both)");
++    let scans = section(&page, "rust-scans (both)");
+     assert!(
+         scans.contains("```text\nH2 crates/alpha/src/lib.rs:3: reach_metres: f64\n```"),
+         "{scans}"
+     );
+     assert!(
+-        run.exists("steps/both/scans/out/before.txt")
+-            && run.exists("steps/both/scans/out/after.txt")
++        run.exists("steps/both/rust-scans/out/before.txt")
++            && run.exists("steps/both/rust-scans/out/after.txt")
+     );
+ }
+ 

@@ -1,0 +1,5 @@
+design-read: ignore what fenced code holds
+
+A read may quote Markdown in fenced code blocks, such as an example of what another tool prints, and a heading, table or field there belongs to the example, never to the read. The section reader flipped a flag at every line that began with three backticks or tildes, so a shorter fence, a fence of the other character or an info string inside a block ended it early and exposed the quoted headings.
+
+Fenced code blocks now open and close as CommonMark (0.31.2) defines them, so only what lies outside every block decides whether a read passes and what is refused. Everything else design-read does stays as it is.

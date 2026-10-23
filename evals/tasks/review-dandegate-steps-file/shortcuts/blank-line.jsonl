@@ -1,0 +1,2 @@
+{"file": "tools/crates/dandegate/src/plan.rs", "lines": [289, 298], "kind": "correctness", "severity": "must-fix", "finding": "The notice writes the workspace folder into a TOML string as it is, so a folder named rust\"copy gives advice that is not valid TOML and one named rust\\tools gives a string that decodes to another name."}
+

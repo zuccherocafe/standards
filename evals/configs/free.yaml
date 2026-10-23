@@ -31,6 +31,19 @@ tasks:
     source: dandegate-build-cache
   - path: tasks/dandegate-host-programs
     source: dandegate-host-programs
+  # Review tasks.
+  - path: tasks/review-design-read-closing-fence
+    source: review-design-read-closing-fence
+  - path: tasks/review-dandegate-steps-file
+    source: review-dandegate-steps-file
+  - path: tasks/review-design-read-area-files
+    source: review-design-read-area-files
+  - path: tasks/review-design-read-new
+    source: review-design-read-new
+  - path: tasks/review-dandegate-unicode-escapes
+    source: review-dandegate-unicode-escapes
+  - path: tasks/review-dandegate-report-names
+    source: review-dandegate-report-names
 agents:
   - name: nop
   - name: oracle

@@ -1,0 +1,60 @@
+schema_version = "1.3"
+artifacts = ["/var/tmp/findings.jsonl", "/var/tmp/agent-identity.txt"]
+
+[task]
+name = "standards/review-design-read-closing-fence"
+description = "Review the fix that makes design-read's fenced code blocks follow CommonMark; it closes a fence before any Unicode whitespace."
+authors = []
+keywords = ["rust", "review"]
+
+[metadata]
+source_repository = "https://github.com/zuccherocafe/standards"
+# The change is the production part of the landed correction of the design-read-fenced-code task, on that
+# task's starting tree. Its review and its check passed it; round 1's blind review of the reference fix found
+# the defect, which 8a787d74 fixed. The description is written for the task from that task's instruction.
+# The image's first commit holds the change's base tools/, built from this public base and environment/start.patch; its second holds the
+# change, environment/change.patch, with environment/message.txt as its description.
+source_base = "d38fefcdc494673c9fe332856245a004487bc197"
+base_tree = "7c8becc2ae89bd35e3659865499bd3c445ad8e16"
+change_tree = "31769051ac70b9b48b4f21e297ae5199cbe8a240"
+change_revision = "7bb602f7ef2b61fdfb5fe4a84578e2f6dac3f465"
+fix_revision = "8a787d74d6609cc17afe9f5db2eff97fe859b06e"
+# The image's second commit, the change the agent reviews.
+starting_commit = "96ae180af062f65635c178359bf2fdcec8bbd0d1"
+
+[environment]
+# The model provider only, from start to teardown, so no phase that follows the agent's run, such as collecting its
+# findings, reopens the network. The image holds Node and pi, so the agent's setup needs no network.
+network_mode = "allowlist"
+allowed_hosts = ["openrouter.ai"]
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 6144
+storage_mb = 10240
+
+[agent]
+timeout_sec = 3600.0
+network_mode = "allowlist"
+allowed_hosts = ["openrouter.ai"]
+
+[verifier]
+timeout_sec = 300.0
+environment_mode = "separate"
+
+# The agent's findings, copied in its own container before it stops, are all the verifier receives; a review that
+# wrote none leaves nothing to copy.
+[[verifier.collect]]
+command = "[ ! -f /app/findings.jsonl ] || cp /app/findings.jsonl /var/tmp/findings.jsonl"
+timeout_sec = 120.0
+
+# What the agent ran on: the Node, npm and pi the image holds, and pi's installed tree.
+[[verifier.collect]]
+command = '{ echo "node $(node --version 2>&1)"; echo "npm $(npm --version 2>&1)"; echo "pi $(pi --version 2>&1)"; sha256sum /opt/pi/package-lock.json; (cd /opt/pi && npm ls --all --json 2>&1); } > /var/tmp/agent-identity.txt'
+timeout_sec = 120.0
+
+[verifier.environment]
+network_mode = "no-network"
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 6144
+storage_mb = 10240

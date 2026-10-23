@@ -1,10 +1,10 @@
 # Evals
 
-These evals give a coding agent work taken from this repository's own tools, once with the standards available to it and once without, and check each result with hidden tests. This file says how to run them. [The evals design read](../docs/design-reads/evals.md) defines the tasks, the two conditions, the verifiers and the accounting, and lists what is still unsettled.
+These evals give a coding agent work taken from this repository's own tools, once with the standards available to it and once without, and score each result with no model. This file says how to run them. [The evals design read](../docs/design-reads/evals.md) defines the tasks, the two conditions, the verifiers and the accounting, and lists what is still unsettled.
 
 ## What they measure
 
-There are two kinds of task: a bug-fix task, which asks for the fix of a defect a review found, and a feature task, which gives the agent a past change's brief. Each scores 1 only when the crate's existing tests and the task's hidden tests both pass; [the design read](../docs/design-reads/evals.md#models-in-play) defines each kind, its verifier and its reference.
+There are three kinds of task: a bug-fix task, which asks for the fix of a defect a review found, a feature task, which gives the agent a past change's brief, and a review task, which gives the agent a past change to review. The first two score 1 only when the crate's existing tests and the task's hidden tests both pass; a review task is scored by where its must-fix findings fall. [The design read](../docs/design-reads/evals.md#models-in-play) defines each kind, its verifier and its reference.
 
 A comparison runs each task in two conditions that differ only in the standards guidance bundle, so its pass counts and costs show whether supplying that bundle made a difference for these tasks, with this model, at these limits.
 
@@ -110,9 +110,9 @@ Report the difference beside the run's totals. For a model pi calls in Anthropic
 
 ## Results
 
-Each trial's folder holds `result.json` (the score, the stages and any exception), `verifier/reward.json`, `artifacts/var/tmp/model.patch` (the agent's change), `artifacts/var/tmp/agent-identity.txt` (the Node, npm and pi versions the image holds, the digest of pi's lockfile and pi's installed tree), `agent/pi/sessions/*.jsonl` (pi's record of the session) and `agent/trajectory.json`. The job's `config.json` and `lock.json` record what ran.
+Each trial's folder holds `result.json` (the score, the stages and any exception), `verifier/reward.json`, `artifacts/var/tmp/model.patch` (the agent's change) or, for a review task, `artifacts/var/tmp/findings.jsonl` (the agent's findings, absent when it wrote none), `artifacts/var/tmp/agent-identity.txt` (the Node, npm and pi versions the image holds, the digest of pi's lockfile and pi's installed tree), `agent/pi/sessions/*.jsonl` (pi's record of the session) and `agent/trajectory.json`. The job's `config.json` and `lock.json` record what ran.
 
-A trial's outcome category comes from `reward.json`'s stages: the agent left no change record, the change does not apply, the hidden test target is not the crate's own, the change does not build, the existing tests fail, the hidden tests fail, time out or do not run, or it passed. A trial with an exception and no `reward.json` failed in the infrastructure, not at the task, unless the exception is the agent's own deadline.
+A trial's outcome category comes from `reward.json`'s stages: the agent left no change record, the change does not apply, the hidden test target is not the crate's own, the change does not build, the existing tests fail, the hidden tests fail, time out or do not run, or it passed. A review task's `reward.json` says instead whether the agent left a findings file (`findings_captured`) and whether every line of it was a finding in the task's format (`findings_valid`), and counts its findings, its must-fix and should-fix findings, the task's known defects, those a must-fix finding of the defect's kind fell on (`defects_matched`), and the must-fix findings that find no known defect (`unmatched_must_fix`), and gives beside `reward` a precision score, `precision`, which [the design read](../docs/design-reads/evals.md#models-in-play) says how to read; [`findings/score.sh`](findings/score.sh) defines each. A review without a readable file scores 0 on both and has no counts, which Harbor's mean takes as 0. A trial with an exception and no `reward.json` failed in the infrastructure, not at the task, unless the exception is the agent's own deadline.
 
 Harbor computes the pass rates. A job's `result.json` holds, under `stats.evals`, one entry for each agent, model and task, named `<agent>__<model>__<task>`, whose `metrics` give the mean over its trials of every field of `reward.json`: `reward`'s mean is the pass rate, and each positive stage's mean is its success share. `timed_out` is the share of trials whose verifier commands timed out. Beside them are `n_trials`, `n_errors` and, under `reward_stats`, the trials behind each value. A condition is its job, so a round's two jobs give the pass rate for every task, model and condition. Harbor counts a trial with no reward as 0 in the mean, so read a job's rates only once the result check after it has passed.
 
@@ -210,7 +210,7 @@ A group with rows that did not report a charge has its charged sum as a lower bo
 
 ## Reviewing each trial's change
 
-A trial's score says whether the change works, not how it is built. A review has an evaluator agent judge each change through Harbor's `harbor analyze`. [`review/rubric.toml`](review/rubric.toml) holds the criteria, what the evaluator reads for each and what passes, and [`review/prompt.txt`](review/prompt.txt) tells the evaluator what its packet holds.
+A trial's score says whether the change works, not how it is built. A review has an evaluator agent judge each change through Harbor's `harbor analyze`. It covers the trials of bug-fix and feature tasks, which leave a change; a review task's trial leaves findings, which its score already judges, and `blind.sh` refuses a trial with no change. [`review/rubric.toml`](review/rubric.toml) holds the criteria, what the evaluator reads for each and what passes, and [`review/prompt.txt`](review/prompt.txt) tells the evaluator what its packet holds.
 
 ### Blinding
 
@@ -256,7 +256,7 @@ The shell's Harbor carries two patches for reviews. [`harbor/analyze-task-config
 
 ### Running a review
 
-With `name` set to the review's name and `trials` to the trial folders to review, for a round every trial of both its jobs so that one review covers the round, these commands build the reviewer's image, make the packets, run the review on the host's login three analyses at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
+With `name` set to the review's name and `trials` to the trial folders to review, for a round every trial of a bug-fix or feature task in both its jobs, never a review task's, so that one review covers the round, these commands build the reviewer's image, make the packets, run the review on the host's login three analyses at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
 
 ```sh
 (
@@ -280,7 +280,7 @@ Each trial runs its agent's container, stops it, then runs the verifier's. Each 
 
 ## Adding a task
 
-Every task copies a task folder of its kind and changes its names, ids and tree ids. Add the new task directory to [`.dockerignore`](.dockerignore)'s explicit directory exceptions, and admit there any file the Dockerfile copies besides those the task folders already have. Build the image (`podman build -t evals-<task> -f tasks/<task>/environment/Dockerfile .`), run the crate's tests offline in it, and list in `environment/AGENTS.md` and `tests/test.sh` any existing test the container cannot run, with the reason. Record the commit the image makes in `task.toml`, in the metadata and the first collect hook. The task's code must be public.
+Every task copies a task folder of its kind and changes its names, ids and tree ids. Add the new task directory to [`.dockerignore`](.dockerignore)'s explicit directory exceptions, and admit there any file the Dockerfile copies besides those the task folders already have. Build the image (`podman build -t evals-<task> -f tasks/<task>/environment/Dockerfile .`), run the crate's tests offline in it, and list in `environment/AGENTS.md` (and, for a task scored by tests, `tests/test.sh`) any existing test the container cannot run, with the reason. Record the commit the image makes in `task.toml`, in the metadata and, where it names it, the first collect hook. The task's code must be public.
 
 ### A bug-fix task, from a finding
 
@@ -302,13 +302,23 @@ A change qualifies when it adds behaviour across several files, with tests, at a
 4. Put the whole landed change under `tools/`, its tests included, in `solution/solution.patch`.
 5. Write as patches in `shortcuts/` the wrong answers above that apply, and the landed change with each of its required parts left out in turn.
 
+### A review task, from a past change
+
+A change qualifies when it is small enough to review within the experiment's turns and either holds defects that a later fix confirmed, each at a place a finding can name by its lines, or has had no defect found in it since it landed. Among changes with defects, prefer one whose defect escaped its review and was found later.
+
+1. Find the change's base and tip by full commit id, and a public base on `main`. Copy `tasks/review-dandegate-steps-file`, write `git diff --binary <base> <tip> -- tools/` to `environment/change.patch` and the change's description to `environment/message.txt`, and, when the base is not public, `git diff --binary <public base> <base> -- tools/` to `environment/start.patch`. Set the public base, both tree ids and the crate in `environment/Dockerfile`, which builds the base as the image's first commit and the change as its second.
+2. Keep `instruction.md` as every review task has it, word for word.
+3. List each known defect in `tests/expected.json`: what goes wrong, its kind, and one or more locations, each a file and the first and last line of the faulty code in the file as the change's tip holds it. A clean change lists none.
+4. Put a must-fix finding on each defect in `solution/findings.jsonl`, or leave it empty for a clean change.
+5. Write wrong reviews in `shortcuts/` as findings files. For a change with defects: an empty file; the reference's findings made should-fix, given another kind, moved just outside the scorer's tolerance, and widened to the whole file; a file with one line that is not a finding; the reference with a blank line after it; and, with two defects, a finding on only one. For a clean change: a must-fix finding on every line the change adds, a file with one line that is not a finding, a file holding only a space, and one holding only a newline.
+
 ## The free checks every task passes
 
 Before a task takes part in a paid run:
 
-- Its image builds, its starting tree's tree id matches, and the crate's existing tests pass offline in it, apart from the tests `tests/test.sh` lists with their reason.
-- In both conditions, the nop agent scores 0 by failing a hidden test's assertion or, for `dandegate-unicode-lines`, by reaching the hidden tests' timeout, never by failing to build, and the reference solution scores 1.
-- Each patch in `shortcuts/` scores 0. To check one, build the image and run the verifier on the patch as Harbor's separate verifier would:
+- Its image builds, its trees' ids match, and the crate's existing tests pass offline in it, apart from the tests `environment/AGENTS.md` lists with their reason.
+- In both conditions, the nop agent scores 0 and the reference solution scores 1. For a task scored by tests, the nop fails by a hidden test's assertion or, for `dandegate-unicode-lines`, by reaching the hidden tests' timeout, never by failing to build; for a review task, it leaves no findings file.
+- Each file in `shortcuts/` scores 0. To check one, build the image and run the verifier on it as Harbor's separate verifier would, with the patch copied as `model.patch` or the findings as `findings.jsonl`:
 
   ```sh
   podman build -t evals-<task> -f tasks/<task>/environment/Dockerfile .

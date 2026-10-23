@@ -1,0 +1,59 @@
+schema_version = "1.3"
+artifacts = ["/var/tmp/findings.jsonl", "/var/tmp/agent-identity.txt"]
+
+[task]
+name = "standards/review-dandegate-steps-file"
+description = "Review the change that groups dandegate.toml by project, reports and steps; its notice writes a folder name into a TOML string unescaped."
+authors = []
+keywords = ["rust", "review"]
+
+[metadata]
+source_repository = "https://github.com/zuccherocafe/standards"
+# The change is the revision its check reviewed, which the first review had not seen in this form: the
+# check found the defect, and the landed 7907fd58 fixed it.
+# The image's first commit holds the change's base tools/, built from this public base; its second holds the
+# change, environment/change.patch, with environment/message.txt as its description.
+source_base = "ec898d345537cdcaaa1d1e1c626faba52bbffe0c"
+base_tree = "d5824d9ec8eff98f9f60ab85e36853ea4528382d"
+change_tree = "e43bcecac5062a17282e51b39eac3ba3d734abca"
+change_revision = "8fcb379a353d256d8aaf75773c36acd17f2fa3c9"
+fix_revision = "7907fd581e44703d17849e47f9c4b17584a48460"
+# The image's second commit, the change the agent reviews.
+starting_commit = "b5382a1eea321011a3f6454fb16528793efb85fb"
+
+[environment]
+# The model provider only, from start to teardown, so no phase that follows the agent's run, such as collecting its
+# findings, reopens the network. The image holds Node and pi, so the agent's setup needs no network.
+network_mode = "allowlist"
+allowed_hosts = ["openrouter.ai"]
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 6144
+storage_mb = 10240
+
+[agent]
+timeout_sec = 3600.0
+network_mode = "allowlist"
+allowed_hosts = ["openrouter.ai"]
+
+[verifier]
+timeout_sec = 300.0
+environment_mode = "separate"
+
+# The agent's findings, copied in its own container before it stops, are all the verifier receives; a review that
+# wrote none leaves nothing to copy.
+[[verifier.collect]]
+command = "[ ! -f /app/findings.jsonl ] || cp /app/findings.jsonl /var/tmp/findings.jsonl"
+timeout_sec = 120.0
+
+# What the agent ran on: the Node, npm and pi the image holds, and pi's installed tree.
+[[verifier.collect]]
+command = '{ echo "node $(node --version 2>&1)"; echo "npm $(npm --version 2>&1)"; echo "pi $(pi --version 2>&1)"; sha256sum /opt/pi/package-lock.json; (cd /opt/pi && npm ls --all --json 2>&1); } > /var/tmp/agent-identity.txt'
+timeout_sec = 120.0
+
+[verifier.environment]
+network_mode = "no-network"
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 6144
+storage_mb = 10240

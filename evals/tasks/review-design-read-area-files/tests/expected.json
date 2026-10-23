@@ -1,0 +1,26 @@
+{
+  "defects": [
+    {
+      "name": "the header check looks only for the three fields and ignores any other, so a read that keeps a Previous field passes",
+      "kind": "correctness",
+      "locations": [
+        {
+          "file": "tools/crates/design-read/src/read.rs",
+          "start": 107,
+          "end": 133
+        }
+      ]
+    },
+    {
+      "name": "None found. passes beside a table left without rows, since the check asks whether the table has rows rather than whether there is a table",
+      "kind": "correctness",
+      "locations": [
+        {
+          "file": "tools/crates/design-read/src/read.rs",
+          "start": 64,
+          "end": 82
+        }
+      ]
+    }
+  ]
+}

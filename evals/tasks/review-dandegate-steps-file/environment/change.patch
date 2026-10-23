@@ -1,0 +1,2268 @@
+diff --git a/tools/crates/dandegate/src/main.rs b/tools/crates/dandegate/src/main.rs
+index 74a30dec..ad935bb2 100644
+--- a/tools/crates/dandegate/src/main.rs
++++ b/tools/crates/dandegate/src/main.rs
+@@ -11,7 +11,7 @@
+ //!
+ //! dandegate knows revisions, steps, measures, images, sections, kept results and the page. It knows nothing about a
+ //! project's domain. A project's own scripts, its adapters in the after revision's `dandegate/` folder, do that work.
+-//! For a Rust workspace, dandegate adds the Rust reports as built-in steps ([`rust`]).
++//! For the Rust workspace `[project.rust]` names, dandegate adds the Rust reports as built-in steps ([`rust`]).
+ //!
+ //! dandegate runs steps on threads, not on an async runtime. It runs up to four steps at once, and runs exclusive steps
+ //! last, one at a time. It runs every git operation with the `git` command and every step under `nix develop`, below a
+@@ -43,7 +43,7 @@ use camino::{Utf8Path, Utf8PathBuf};
+ use clap::Parser;
+ 
+ use crate::compare::measure::{LineError, Measures, SavedError};
+-use crate::plan::{Plan, PlanError};
++use crate::plan::{Plan, PlanError, Tree};
+ use crate::report::Request;
+ use crate::report::step::{host, supervise};
+ use crate::revision::PerSide;
+@@ -93,9 +93,9 @@ compares the images, measures and sections the steps write, and writes <out>/ind
+ inside <out>. dandegate keeps each step's complete success in .cache/dandegate/ and reuses it while its identity \
+ holds.
+ 
+-It prints DANDEGATE-INCOMPLETE, DANDEGATE-MEASURE-CODE, DANDEGATE-WORSE, DANDEGATE-REUSED and DANDEGATE-STEP-FAILED \
+-lines, then a DANDEGATE line naming the page. It exits with 0 whenever it writes the page, complete or not, with 1 \
+-when it cannot write one, and with 2 for a malformed argument.";
++It prints DANDEGATE-INCOMPLETE, DANDEGATE-NOTICE, DANDEGATE-MEASURE-CODE, DANDEGATE-WORSE, DANDEGATE-REUSED and \
++DANDEGATE-STEP-FAILED lines, then a DANDEGATE line naming the page. It exits with 0 whenever it writes the page, \
++complete or not, with 1 when it cannot write one, and with 2 for a malformed argument.";
+ 
+ /// Why no page can be written.
+ #[derive(Debug, thiserror::Error)]
+@@ -244,13 +244,19 @@ fn accept(
+             })
+         })?
+         .unwrap_or_default();
+-    let workspaces = rust::workspaces(&repository, revisions.after.commit()).map_err(|cause| {
++    let unresolved = |cause| {
+         DandegateError::Resolve(ResolveError::Unresolved {
+             requested: arguments.after.clone(),
+             cause,
+         })
+-    })?;
+-    let plan = Plan::read(&text, file, &arguments.with, &arguments.inputs, &workspaces)
++    };
++    let files = repository
++        .files(revisions.after.commit())
++        .map_err(unresolved)?;
++    let workspaces =
++        rust::workspaces(&repository, revisions.after.commit(), &files).map_err(unresolved)?;
++    let tree = Tree::new(files.into_iter().map(Utf8PathBuf::from), workspaces);
++    let plan = Plan::read(&text, file, &arguments.with, &arguments.inputs, &tree)
+         .map_err(DandegateError::Plan)?;
+     fs::create_dir_all(&out)
+         .map_err(|source| DandegateError::Out(OutError::Make(out.clone(), source)))?;
+diff --git a/tools/crates/dandegate/src/page.rs b/tools/crates/dandegate/src/page.rs
+index c74c7857..dd59dcb3 100644
+--- a/tools/crates/dandegate/src/page.rs
++++ b/tools/crates/dandegate/src/page.rs
+@@ -1,8 +1,8 @@
+ //! Writes the report's page, `index.html`. The page is plain HTML with its style inline. It loads nothing from outside,
+ //! reads in light and dark themes, and links only to files inside the output folder.
+ //!
+-//! The page's sections, in order, are what makes the report incomplete, the host programs not found, the
+-//! measuring-code warning, the measures that got worse, every step's outcome, what dandegate reused or kept, the steps'
++//! The page's sections, in order, are what makes the report incomplete, the host programs not found, the reader's
++//! notices about the steps file, the measuring-code warning, the measures that got worse, every step's outcome, what dandegate reused or kept, the steps'
+ //! sections, every measure, and the images.
+ 
+ use std::fmt::Write as _;
+@@ -49,6 +49,8 @@ pub(crate) struct Page<'a> {
+     pub(crate) incomplete: &'a [String],
+     /// One warning for each host program not found, or why none can be given.
+     pub(crate) host: &'a [String],
++    /// What the reader noticed about the steps file that changes no step.
++    pub(crate) notices: &'a [String],
+     pub(crate) measure_code: Option<&'a [String]>,
+     pub(crate) measure_code_error: Option<&'a str>,
+     pub(crate) affected: &'a [&'a MeasureRow],
+@@ -74,6 +76,7 @@ td, th { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vert
+ pre { overflow-x: auto; border: 1px solid var(--line); padding: 8px; }
+ code, pre { font: 13px/1.4 ui-monospace, monospace; }
+ .incomplete, .warning { border: 2px solid var(--warn); background: var(--warn-background); padding: 6px 12px; }
++.notice { border: 1px solid var(--line); padding: 6px 12px; }
+ .failed td { color: var(--warn); }
+ .muted { color: var(--muted); }
+ figure { margin: 16px 0; } figcaption { margin-bottom: 4px; }
+@@ -163,6 +166,13 @@ pub(crate) fn render(page: &Page<'_>) -> String {
+             escape(warning)
+         );
+     }
++    for notice in page.notices {
++        let _ = writeln!(
++            html,
++            "<div class=\"notice\"><p>{}</p></div>",
++            escape(notice)
++        );
++    }
+     measure_code(&mut html, page);
+     worse(&mut html, page.worse);
+     steps(&mut html, page.steps);
+diff --git a/tools/crates/dandegate/src/plan.rs b/tools/crates/dandegate/src/plan.rs
+index c10f5239..23ace12e 100644
+--- a/tools/crates/dandegate/src/plan.rs
++++ b/tools/crates/dandegate/src/plan.rs
+@@ -1,5 +1,28 @@
+ //! Reads `dandegate.toml` from the after revision into a checked plan, once, and applies the command line's `--with`
+-//! and `--input`. Every refusal names the file and line, or the option, and the field.
++//! and `--input`. Every refusal names the file and line, or the option, and the field. This is the file's format
++//! reference.
++//!
++//! The file has three groups of tables:
++//!
++//! - `[project]` says what the project is: `host`, the programs its steps take from the caller's machine, and one
++//!   table for each language it holds. `[project.rust]` names the Cargo `workspace`; `[project.godot]` names the Godot
++//!   `project` folder and its `tests` folders. A language with no table is not reported on.
++//! - `[reports]` tunes the built-in reports: `[reports.measures]` names the measuring code (`code`, `exclude`,
++//!   `code-measures`), and `[reports.rust]` gives the Rust reports their arguments (`scans`, `mutation`).
++//! - `[steps]` holds what the project adds: `[steps.inputs]` and each `[[steps.step]]`, with its
++//!   `[steps.step.identity]`.
++//!
++//! The path fields are `[project.rust]`'s `workspace`, `[project.godot]`'s `project` and `tests`,
++//! `[reports.measures]`' `code` and `exclude`, and each step output's `folder`, `expected`, `from` and `file`. In each,
++//! a folder is written with a trailing `/` and a file without one. A repository path is relative and plain, and is
++//! checked against the after revision's tree: a language table's folders must exist there, and `[reports.measures]`'
++//! `code` and `exclude` may name a path the after revision lacks, since a change can remove measuring code, but a path
++//! it holds must be written as what it is. Each is a literal name, never a git pattern. An output path is a plain path
++//! under `{out}/`. Nothing else is a path field: command words, input defaults, `host` and the Rust reports' arguments
++//! are taken as written.
++//!
++//! When the after revision holds a Cargo workspace but the file has no `[project.rust]`, the plan carries a
++//! [`Notice`] naming the table to add, which the page shows and dandegate prints.
+ //!
+ //! A plan guarantees these facts to the code that reads it:
+ //!
+@@ -14,15 +37,18 @@
+ //! A per-revision step can need per-revision steps, on its own side. An after step can need per-revision steps, on the
+ //! after side, or after steps. A once step can need any step, on every side that step runs.
+ //!
+-//! When the after revision has a Cargo workspace, the plan adds the Rust reports as built-in steps under reserved names
+-//! ([`Report`]). `[rust]` gives them their arguments.
++//! When `[project.rust]` names a folder holding a Cargo workspace, the plan adds the Rust reports as built-in steps
++//! under reserved names ([`Report`]). `[reports.rust]` without `[project.rust]` is refused, since it would tune
++//! nothing; an empty one is the same as none.
+ //!
+ //! This module holds the types that the rest of dandegate reads. [`read`] builds them from the file's TOML shapes in
+-//! [`raw`]. [`template`] parses each command word's placeholders, and [`error`] holds every refusal.
++//! [`raw`]. [`template`] parses each command word's placeholders, [`repo`] holds the repository's paths and tree,
++//! and [`error`] holds every refusal.
+ 
+ mod error;
+ mod raw;
+ mod read;
++mod repo;
+ mod template;
+ 
+ use std::collections::{BTreeMap, BTreeSet};
+@@ -33,6 +59,7 @@ use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+ use indexmap::IndexMap;
+ 
+ pub(crate) use crate::plan::error::PlanError;
++pub(crate) use crate::plan::repo::{RepoDir, RepoPath, Tree};
+ pub(crate) use crate::plan::template::{
+     Arg, Expansion, PairArg, PairValues, Template, TreeArg, TreeValues,
+ };
+@@ -231,16 +258,54 @@ pub(crate) enum Output {
+ /// The measuring code the page warns about when it differs between the two commits.
+ #[derive(Clone, Debug, Default, PartialEq, Eq)]
+ pub(crate) struct MeasureRules {
+-    pub(crate) code: Vec<String>,
+-    pub(crate) exclude: Vec<String>,
++    pub(crate) code: Vec<RepoPath>,
++    pub(crate) exclude: Vec<RepoPath>,
+     pub(crate) code_measures: Vec<String>,
+ }
+ 
++/// The Godot project `[project.godot]` names.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(crate) struct GodotProject {
++    project: RepoDir,
++    tests: Vec<RepoDir>,
++}
++
++/// What the reader noticed about the steps file that changes no step, which the page shows and dandegate prints.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(crate) enum Notice {
++    /// The after revision holds these Cargo workspaces, `.` for the root, but no `[project.rust]` names one, so the
++    /// Rust reports are off.
++    RustOff(Vec<Utf8PathBuf>),
++}
++
++impl fmt::Display for Notice {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        match self {
++            Self::RustOff(workspaces) => {
++                let written: Vec<String> = workspaces
++                    .iter()
++                    .map(|folder| format!("{folder}/"))
++                    .collect();
++                let (noun, example) = match written.as_slice() {
++                    [one] => ("a Cargo workspace", one.clone()),
++                    _ => ("Cargo workspaces", "<folder>/".to_owned()),
++                };
++                write!(
++                    formatter,
++                    "the Rust reports are off: the after revision has {noun} in {}, but dandegate.toml has no \
++                     [project.rust] table; add one with workspace = \"{example}\" to turn them on",
++                    written.join(", ")
++                )
++            }
++        }
++    }
++}
++
+ /// The Rust reports' settings.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub(crate) struct RustSettings {
+-    /// The workspace folder under the repository, `.` at its root.
+-    pub(crate) workspace: Utf8PathBuf,
++    /// The workspace folder `[project.rust]` names.
++    pub(crate) workspace: RepoDir,
+     /// rust-scans' arguments besides `--workspace`.
+     pub(crate) scans: Vec<String>,
+     /// cargo-mutants' arguments, after `--`.
+@@ -530,10 +595,16 @@ impl Step {
+ pub(crate) struct Plan {
+     /// Unique, in the file's order.
+     host: Vec<HostProgram>,
++    #[expect(
++        dead_code,
++        reason = "no report reads the Godot project yet; the reader checks it"
++    )]
++    godot: Option<GodotProject>,
+     inputs: IndexMap<InputName, Input>,
+     steps: IndexMap<StepName, Step>,
+     measures: MeasureRules,
+     rust: Option<RustSettings>,
++    notices: Vec<Notice>,
+ }
+ 
+ impl Plan {
+@@ -557,6 +628,10 @@ impl Plan {
+     pub(crate) fn rust(&self) -> Option<&RustSettings> {
+         self.rust.as_ref()
+     }
++
++    pub(crate) fn notices(&self) -> &[Notice] {
++        &self.notices
++    }
+ }
+ #[cfg(test)]
+ mod tests;
+diff --git a/tools/crates/dandegate/src/plan/error.rs b/tools/crates/dandegate/src/plan/error.rs
+index 460da4ee..6a95292f 100644
+--- a/tools/crates/dandegate/src/plan/error.rs
++++ b/tools/crates/dandegate/src/plan/error.rs
+@@ -4,6 +4,7 @@ use std::fmt;
+ 
+ use camino::Utf8PathBuf;
+ 
++use crate::plan::repo::{PathProblem, RepoDir};
+ use crate::plan::template::TemplateError;
+ use crate::plan::{BadName, StepName};
+ 
+@@ -100,14 +101,18 @@ pub(crate) enum Problem {
+     UnknownInput { name: String, declared: String },
+     #[error("{0:?} is set twice")]
+     InputTwice(String),
++    #[error("{field}: {text:?} {problem}")]
++    Path {
++        field: &'static str,
++        text: String,
++        problem: PathProblem,
++    },
+     #[error(
+-        "[rust]: the after revision has no Cargo.toml with a [workspace] table; name it with workspace = \"<folder>\""
++        "[project.rust]: workspace: \"{0}\" holds no Cargo.toml with a [workspace] table in the after revision"
+     )]
+-    NoWorkspace,
++    NotWorkspace(RepoDir),
+     #[error(
+-        "[rust]: the after revision has several Cargo workspaces ({0}); name one with workspace = \"<folder>\""
++        "[reports.rust]: tunes the Rust reports, which run only when [project.rust] names the workspace; add [project.rust] or remove [reports.rust]"
+     )]
+-    SeveralWorkspaces(String),
+-    #[error("[rust]: workspace: {0:?} is not a folder inside the repository")]
+-    WorkspacePath(String),
++    RustReportsAlone,
+ }
+diff --git a/tools/crates/dandegate/src/plan/raw.rs b/tools/crates/dandegate/src/plan/raw.rs
+index 8b1db277..8675efba 100644
+--- a/tools/crates/dandegate/src/plan/raw.rs
++++ b/tools/crates/dandegate/src/plan/raw.rs
+@@ -9,43 +9,82 @@ use toml::Spanned;
+ #[serde(deny_unknown_fields)]
+ pub(super) struct RawPlan {
+     #[serde(default)]
+-    pub(super) host: Vec<Spanned<String>>,
++    pub(super) project: RawProject,
+     #[serde(default)]
+-    pub(super) inputs: BTreeMap<Spanned<String>, Spanned<RawInput>>,
+-    pub(super) measures: Option<Spanned<RawMeasures>>,
+-    pub(super) rust: Option<Spanned<RawRust>>,
++    pub(super) reports: RawReports,
+     #[serde(default)]
+-    pub(super) step: Vec<Spanned<RawStep>>,
++    pub(super) steps: RawSteps,
++}
++
++/// `[project]`: what the project is, one table for each language it holds.
++#[derive(Debug, Default, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub(super) struct RawProject {
++    #[serde(default)]
++    pub(super) host: Vec<Spanned<String>>,
++    pub(super) rust: Option<Spanned<RawRustProject>>,
++    pub(super) godot: Option<Spanned<RawGodotProject>>,
+ }
+ 
+ #[derive(Debug, Deserialize)]
+ #[serde(deny_unknown_fields)]
+-pub(super) struct RawInput {
+-    pub(super) default: String,
+-    pub(super) help: String,
++pub(super) struct RawRustProject {
++    pub(super) workspace: Spanned<String>,
+ }
+ 
++#[derive(Debug, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub(super) struct RawGodotProject {
++    pub(super) project: Spanned<String>,
++    #[serde(default)]
++    pub(super) tests: Vec<Spanned<String>>,
++}
++
++/// `[reports]`: how the built-in reports are tuned.
+ #[derive(Debug, Default, Deserialize)]
+ #[serde(deny_unknown_fields)]
++pub(super) struct RawReports {
++    pub(super) measures: Option<Spanned<RawMeasures>>,
++    pub(super) rust: Option<Spanned<RawRustReports>>,
++}
++
++#[derive(Debug, Default, Deserialize)]
++#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+ pub(super) struct RawMeasures {
+     #[serde(default)]
+-    pub(super) code: Vec<String>,
++    pub(super) code: Vec<Spanned<String>>,
+     #[serde(default)]
+-    pub(super) exclude: Vec<String>,
++    pub(super) exclude: Vec<Spanned<String>>,
+     #[serde(default)]
+     pub(super) code_measures: Vec<String>,
+ }
+ 
+ #[derive(Debug, Deserialize)]
+ #[serde(deny_unknown_fields)]
+-pub(super) struct RawRust {
++pub(super) struct RawRustReports {
+     #[serde(default)]
+     pub(super) scans: Vec<String>,
+-    pub(super) workspace: Option<Spanned<String>>,
+     #[serde(default)]
+     pub(super) mutation: Vec<String>,
+ }
+ 
++/// `[steps]`: what the project adds.
++#[derive(Debug, Default, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub(super) struct RawSteps {
++    #[serde(default)]
++    pub(super) inputs: BTreeMap<Spanned<String>, Spanned<RawInput>>,
++    #[serde(default)]
++    pub(super) step: Vec<Spanned<RawStep>>,
++}
++
++#[derive(Debug, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub(super) struct RawInput {
++    pub(super) default: String,
++    pub(super) help: String,
++}
++
+ #[derive(Clone, Copy, Debug, Deserialize)]
+ #[serde(rename_all = "kebab-case")]
+ pub(super) enum RawRuns {
+diff --git a/tools/crates/dandegate/src/plan/read.rs b/tools/crates/dandegate/src/plan/read.rs
+index 2760fd54..2f7dae97 100644
+--- a/tools/crates/dandegate/src/plan/read.rs
++++ b/tools/crates/dandegate/src/plan/read.rs
+@@ -4,17 +4,20 @@
+ use std::collections::{BTreeMap, BTreeSet};
+ use std::time::Duration;
+ 
+-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
++use camino::{Utf8Path, Utf8PathBuf};
+ use indexmap::IndexMap;
+ use toml::Spanned;
+ 
+ use crate::plan::error::{Place, PlanError, Problem};
+-use crate::plan::raw::{RawOutput, RawOutputKind, RawPlan, RawRuns, RawRust, RawStep};
++use crate::plan::raw::{
++    RawGodotProject, RawOutput, RawOutputKind, RawPlan, RawRuns, RawRustReports, RawStep,
++};
++use crate::plan::repo::{PathProblem, RepoDir, RepoPath, Tree};
+ use crate::plan::template::{Arg, Template};
+ use crate::plan::{
+-    DEFAULT_TIMEOUT, EnvName, EnvPattern, HostProgram, IDENTITY_ENV, Input, InputName, Kind,
+-    MUTANTS_TIMEOUT, MeasureRules, OutPath, Output, Plan, Recipe, Report, Runs, RustSettings, Step,
+-    StepName, Work,
++    DEFAULT_TIMEOUT, EnvName, EnvPattern, GodotProject, HostProgram, IDENTITY_ENV, Input,
++    InputName, Kind, MUTANTS_TIMEOUT, MeasureRules, Notice, OutPath, Output, Plan, Recipe, Report,
++    Runs, RustSettings, Step, StepName, Work,
+ };
+ 
+ /// The text's line holding byte `offset`, counted from 1.
+@@ -41,6 +44,62 @@ impl Reader<'_> {
+         }
+     }
+ 
++    /// A path field's value refused, with the field as `[table]: key`.
++    fn path(&self, text: &Spanned<String>, field: &'static str, problem: PathProblem) -> PlanError {
++        self.at(
++            text,
++            Problem::Path {
++                field,
++                text: text.get_ref().clone(),
++                problem,
++            },
++        )
++    }
++
++    /// A folder field's value, which must name a folder the after revision holds.
++    fn folder(
++        &self,
++        text: &Spanned<String>,
++        field: &'static str,
++        tree: &Tree,
++    ) -> Result<RepoDir, PlanError> {
++        let folder =
++            RepoDir::parse(text.get_ref()).map_err(|problem| self.path(text, field, problem))?;
++        if tree.holds_folder(folder.as_path()) {
++            Ok(folder)
++        } else {
++            Err(self.path(text, field, PathProblem::NoFolder))
++        }
++    }
++
++    /// A field listing folders and files, any of which the change may remove.
++    fn paths(
++        &self,
++        texts: &[Spanned<String>],
++        field: &'static str,
++        tree: &Tree,
++    ) -> Result<Vec<RepoPath>, PlanError> {
++        texts
++            .iter()
++            .map(|text| {
++                RepoPath::parse(text.get_ref())
++                    .and_then(|path| tree.check(&path).map(|()| path))
++                    .map_err(|problem| self.path(text, field, problem))
++            })
++            .collect()
++    }
++
++    fn godot(&self, raw: &RawGodotProject, tree: &Tree) -> Result<GodotProject, PlanError> {
++        Ok(GodotProject {
++            project: self.folder(&raw.project, "[project.godot]: project", tree)?,
++            tests: raw
++                .tests
++                .iter()
++                .map(|text| self.folder(text, "[project.godot]: tests", tree))
++                .collect::<Result<_, _>>()?,
++        })
++    }
++
+     fn template<A: Arg>(
+         &self,
+         step: &StepName,
+@@ -129,32 +188,18 @@ impl Reader<'_> {
+             )
+         };
+         let fields = raw.get_ref();
+-        let path =
+-            |field: &'static str, value: &Option<Spanned<String>>| -> Result<OutPath, PlanError> {
+-                let text = value.as_ref().ok_or_else(|| {
+-                    refuse(format!(
+-                        "an output of kind {} needs {field}",
+-                        fields.kind.get_ref().as_str()
+-                    ))
+-                })?;
+-                let inside = text
+-                    .get_ref()
+-                    .strip_prefix("{out}/")
+-                    .filter(|rest| !rest.contains(['{', '}']))
+-                    .and_then(OutPath::new);
+-                inside.ok_or_else(|| {
+-                    self.at(
+-                        text,
+-                        Problem::Output {
+-                            step: step.clone(),
+-                            why: format!(
+-                                "{field}: {:?} is not a plain path under {{out}}/",
+-                                text.get_ref()
+-                            ),
+-                        },
+-                    )
+-                })
+-            };
++        let path = |field: &'static str,
++                    folder: bool,
++                    value: &Option<Spanned<String>>|
++         -> Result<OutPath, PlanError> {
++            let text = value.as_ref().ok_or_else(|| {
++                refuse(format!(
++                    "an output of kind {} needs {field}",
++                    fields.kind.get_ref().as_str()
++                ))
++            })?;
++            self.out_path(step, field, folder, text)
++        };
+         let unused = |names: &[(&str, &Option<Spanned<String>>)]| -> Result<(), PlanError> {
+             match names.iter().find(|(_, value)| value.is_some()) {
+                 Some((field, _)) => Err(refuse(format!(
+@@ -168,8 +213,8 @@ impl Reader<'_> {
+             RawOutputKind::Images => {
+                 unused(&[("from", &fields.from), ("file", &fields.file)])?;
+                 Output::Images {
+-                    folder: path("folder", &fields.folder)?,
+-                    expected: path("expected", &fields.expected)?,
++                    folder: path("folder", true, &fields.folder)?,
++                    expected: path("expected", false, &fields.expected)?,
+                 }
+             }
+             RawOutputKind::Measures => {
+@@ -179,7 +224,7 @@ impl Reader<'_> {
+                     ("file", &fields.file),
+                 ])?;
+                 Output::Measures {
+-                    from: path("from", &fields.from)?,
++                    from: path("from", false, &fields.from)?,
+                 }
+             }
+             RawOutputKind::Section => {
+@@ -189,7 +234,7 @@ impl Reader<'_> {
+                     ("from", &fields.from),
+                 ])?;
+                 Output::Section {
+-                    file: path("file", &fields.file)?,
++                    file: path("file", false, &fields.file)?,
+                 }
+             }
+         };
+@@ -215,6 +260,38 @@ impl Reader<'_> {
+         }
+     }
+ 
++    /// An output's path under `{out}/`: a folder written with a trailing `/`, a file without.
++    fn out_path(
++        &self,
++        name: &StepName,
++        field: &str,
++        folder: bool,
++        text: &Spanned<String>,
++    ) -> Result<OutPath, PlanError> {
++        let written = text.get_ref();
++        let wrong = |why: String| {
++            self.at(
++                text,
++                Problem::Output {
++                    step: name.clone(),
++                    why: format!("{field}: {written:?} {why}"),
++                },
++            )
++        };
++        let not_plain = || wrong("is not a plain path under {out}/".to_owned());
++        let inside = written
++            .strip_prefix("{out}/")
++            .filter(|rest| !rest.contains(['{', '}']))
++            .ok_or_else(not_plain)?;
++        let inside = match (folder, inside.strip_suffix('/')) {
++            (true, Some(within)) => within,
++            (false, None) => inside,
++            (true, None) => return Err(wrong(PathProblem::FolderWithoutSlash.to_string())),
++            (false, Some(_)) => return Err(wrong(PathProblem::FileWithSlash.to_string())),
++        };
++        OutPath::new(inside).ok_or_else(not_plain)
++    }
++
+     fn step(
+         &self,
+         raw: &Spanned<RawStep>,
+@@ -316,7 +393,7 @@ pub(super) fn timeout(text: &str) -> Option<Duration> {
+ 
+ impl Plan {
+     /// The steps file `text`, read from `file`, with `with`'s optional steps enabled and `set`'s `name=value` inputs
+-    /// applied. `workspaces` are the folders of the after revision holding a Cargo.toml with a `[workspace]` table.
++    /// applied. `tree` is the after revision's, which every repository path is checked against.
+     ///
+     /// # Errors
+     /// [`PlanError`] for the first problem found: the file's syntax, a field's value, a need, a selection or an
+@@ -326,7 +403,7 @@ impl Plan {
+         file: &Utf8Path,
+         with: &[String],
+         set: &[String],
+-        workspaces: &[Utf8PathBuf],
++        tree: &Tree,
+     ) -> Result<Self, PlanError> {
+         let text = std::str::from_utf8(text).map_err(|_| PlanError {
+             place: Place::File(file.to_owned()),
+@@ -343,9 +420,14 @@ impl Plan {
+             ),
+             problem: Problem::Toml(error.message().to_owned()),
+         })?;
++        let RawPlan {
++            project,
++            reports,
++            steps: raw_steps,
++        } = raw;
+ 
+         let mut host: Vec<HostProgram> = Vec::new();
+-        for written in &raw.host {
++        for written in &project.host {
+             let program = HostProgram::new(written.get_ref()).ok_or_else(|| {
+                 reader.at(written, Problem::HostProgram(written.get_ref().clone()))
+             })?;
+@@ -354,9 +436,14 @@ impl Plan {
+             }
+             host.push(program);
+         }
++        let godot = project
++            .godot
++            .as_ref()
++            .map(|godot| reader.godot(godot.get_ref(), tree))
++            .transpose()?;
+ 
+         let mut inputs = IndexMap::new();
+-        for (name, input) in &raw.inputs {
++        for (name, input) in &raw_steps.inputs {
+             let checked = InputName::new(name.get_ref())
+                 .map_err(|error| reader.at(name, Problem::InputName(error)))?;
+             let input = input.get_ref();
+@@ -368,7 +455,7 @@ impl Plan {
+         apply_inputs(&mut inputs, set)?;
+ 
+         let mut steps = IndexMap::new();
+-        for raw_step in &raw.step {
++        for raw_step in &raw_steps.step {
+             let (name, step) = reader.step(raw_step, &inputs)?;
+             if steps.contains_key(&name) {
+                 return Err(reader.at(
+@@ -378,29 +465,49 @@ impl Plan {
+             }
+             steps.insert(name, step);
+         }
+-        let rust = match rust_settings(&reader, raw.rust.as_ref(), workspaces)? {
+-            None => None,
+-            Some(settings) => {
+-                for report in Report::ALL {
+-                    steps.insert(report.step(), built_in(report, &settings));
++        let rust = rust_settings(
++            &reader,
++            project.rust.as_ref().map(|rust| &rust.get_ref().workspace),
++            reports.rust.as_ref(),
++            tree,
++        )?;
++        if let Some(settings) = &rust {
++            for report in Report::ALL {
++                steps.insert(report.step(), built_in(report, settings));
++            }
++        }
++        check_needs(&reader, &raw_steps.step, &steps)?;
++
++        let measures = match &reports.measures {
++            None => MeasureRules::default(),
++            Some(measures) => {
++                let measures = measures.get_ref();
++                MeasureRules {
++                    code: reader.paths(&measures.code, "[reports.measures]: code", tree)?,
++                    exclude: reader.paths(
++                        &measures.exclude,
++                        "[reports.measures]: exclude",
++                        tree,
++                    )?,
++                    code_measures: measures.code_measures.clone(),
+                 }
+-                Some(settings)
+             }
+         };
+-        check_needs(&reader, &raw.step, &steps)?;
+         select(&mut steps, with)?;
+-
+-        let measures = raw.measures.map_or_default(Spanned::into_inner);
++        let workspaces: Vec<Utf8PathBuf> = tree.workspaces().map(Utf8Path::to_owned).collect();
++        let notices = if rust.is_none() && !workspaces.is_empty() {
++            vec![Notice::RustOff(workspaces)]
++        } else {
++            Vec::new()
++        };
+         Ok(Self {
+             host,
++            godot,
+             inputs,
+             steps,
+-            measures: MeasureRules {
+-                code: measures.code,
+-                exclude: measures.exclude,
+-                code_measures: measures.code_measures,
+-            },
++            measures,
+             rust,
++            notices,
+         })
+     }
+ }
+@@ -444,48 +551,30 @@ fn apply_inputs(inputs: &mut IndexMap<InputName, Input>, set: &[String]) -> Resu
+     Ok(())
+ }
+ 
+-/// The Rust reports' settings, when the after revision has a workspace or `[rust]` names one.
++/// The Rust reports' settings, when `[project.rust]` names the workspace. `[reports.rust]` tunes them, so it is
++/// refused without `[project.rust]`.
+ fn rust_settings(
+     reader: &Reader<'_>,
+-    raw: Option<&Spanned<RawRust>>,
+-    workspaces: &[Utf8PathBuf],
++    workspace: Option<&Spanned<String>>,
++    reports: Option<&Spanned<RawRustReports>>,
++    tree: &Tree,
+ ) -> Result<Option<RustSettings>, PlanError> {
+-    let named = raw.and_then(|rust| rust.get_ref().workspace.as_ref());
+-    let workspace = match (named, workspaces) {
+-        (Some(folder), _) => {
+-            let path = Utf8Path::new(folder.get_ref());
+-            let inside = path
+-                .components()
+-                .all(|part| matches!(part, Utf8Component::Normal(_) | Utf8Component::CurDir));
+-            if !inside || folder.get_ref().is_empty() {
+-                return Err(reader.at(folder, Problem::WorkspacePath(folder.get_ref().clone())));
+-            }
+-            path.to_owned()
+-        }
+-        (None, [one]) => one.clone(),
+-        (None, []) => {
+-            return match raw {
+-                Some(rust) => Err(reader.at(rust, Problem::NoWorkspace)),
+-                None => Ok(None),
+-            };
+-        }
+-        (None, several) => {
+-            let listed: Vec<&str> = several.iter().map(|path| path.as_str()).collect();
+-            let place = raw.map_or_else(
+-                || PlanError {
+-                    place: Place::File(reader.file.to_owned()),
+-                    problem: Problem::SeveralWorkspaces(listed.join(", ")),
+-                },
+-                |rust| reader.at(rust, Problem::SeveralWorkspaces(listed.join(", "))),
+-            );
+-            return Err(place);
+-        }
++    let Some(written) = workspace else {
++        return match reports {
++            Some(reports) => Err(reader.at(reports, Problem::RustReportsAlone)),
++            None => Ok(None),
++        };
+     };
+-    let settings = raw.map(Spanned::get_ref);
++    let field = "[project.rust]: workspace";
++    let workspace = reader.folder(written, field, tree)?;
++    if !tree.holds_workspace(&workspace) {
++        return Err(reader.at(written, Problem::NotWorkspace(workspace)));
++    }
++    let reports = reports.map(Spanned::get_ref);
+     Ok(Some(RustSettings {
+         workspace,
+-        scans: settings.map_or_default(|rust| rust.scans.clone()),
+-        mutation: settings.map_or_default(|rust| rust.mutation.clone()),
++        scans: reports.map_or_default(|rust| rust.scans.clone()),
++        mutation: reports.map_or_default(|rust| rust.mutation.clone()),
+     }))
+ }
+ 
+@@ -536,7 +625,7 @@ fn built_in(report: Report, settings: &RustSettings) -> Step {
+                         "-c",
+                         crate::rust::TOOLCHAIN_COLLECTOR,
+                         "collect",
+-                        settings.workspace.as_str(),
++                        settings.workspace.as_path().as_str(),
+                     ]
+                     .into_iter()
+                     .map(Template::text)
+diff --git a/tools/crates/dandegate/src/plan/repo.rs b/tools/crates/dandegate/src/plan/repo.rs
+new file mode 100644
+index 00000000..f55580ee
+--- /dev/null
++++ b/tools/crates/dandegate/src/plan/repo.rs
+@@ -0,0 +1,182 @@
++//! Paths inside the repository as the steps file writes them: a folder with a trailing `/`, a file without one, each
++//! relative and plain. The after revision's tree, which the reader checks them against.
++
++use std::collections::BTreeSet;
++use std::fmt;
++use std::ops::Bound;
++
++use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
++
++/// Why a written path is not a repository path of its kind.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
++pub(crate) enum PathProblem {
++    #[error("is not a plain relative path inside the repository")]
++    Outside,
++    #[error("names a folder, so it ends in /")]
++    FolderWithoutSlash,
++    #[error("names a file, so it does not end in /")]
++    FileWithSlash,
++    #[error("names a folder in the after revision; write it with a trailing /")]
++    TreeFolder,
++    #[error("names a file in the after revision; write it without the trailing /")]
++    TreeFile,
++    #[error("names no folder in the after revision")]
++    NoFolder,
++}
++
++/// `text`'s ordinary parts, when it has at least one and nothing else: no root, `.`, `..` or empty part.
++fn plain(text: &str) -> Option<Utf8PathBuf> {
++    let path = Utf8Path::new(text);
++    let ordinary = path
++        .components()
++        .all(|part| matches!(part, Utf8Component::Normal(_)));
++    // Components hide a doubled or leading `./` separator, so the rejoined parts must spell the text exactly.
++    let rejoined: Utf8PathBuf = path.components().collect();
++    (ordinary && !text.is_empty() && rejoined.as_str() == text).then_some(rejoined)
++}
++
++/// A folder of the repository, written with a trailing `/`; `./` is the root.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(crate) struct RepoDir(Utf8PathBuf);
++
++impl RepoDir {
++    pub(super) fn parse(text: &str) -> Result<Self, PathProblem> {
++        if text == "./" {
++            return Ok(Self(Utf8PathBuf::from(".")));
++        }
++        if let Some(inside) = text.strip_suffix('/') {
++            plain(inside).map(Self).ok_or(PathProblem::Outside)
++        } else {
++            plain(text).ok_or(PathProblem::Outside)?;
++            Err(PathProblem::FolderWithoutSlash)
++        }
++    }
++
++    /// The folder without its trailing `/`, `.` for the root, as commands and git take it.
++    pub(crate) fn as_path(&self) -> &Utf8Path {
++        &self.0
++    }
++}
++
++impl fmt::Display for RepoDir {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        write!(formatter, "{}/", self.0)
++    }
++}
++
++/// A file of the repository, written without a trailing `/`.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(crate) struct RepoFile(Utf8PathBuf);
++
++impl RepoFile {
++    pub(super) fn parse(text: &str) -> Result<Self, PathProblem> {
++        match text.strip_suffix('/') {
++            Some(inside) => {
++                plain(inside).ok_or(PathProblem::Outside)?;
++                Err(PathProblem::FileWithSlash)
++            }
++            None => plain(text).map(Self).ok_or(PathProblem::Outside),
++        }
++    }
++
++    pub(crate) fn as_path(&self) -> &Utf8Path {
++        &self.0
++    }
++}
++
++impl fmt::Display for RepoFile {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        fmt::Display::fmt(&self.0, formatter)
++    }
++}
++
++/// A folder or a file of the repository, told apart by the trailing `/`.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub(crate) enum RepoPath {
++    Dir(RepoDir),
++    File(RepoFile),
++}
++
++impl RepoPath {
++    pub(super) fn parse(text: &str) -> Result<Self, PathProblem> {
++        if text.ends_with('/') {
++            RepoDir::parse(text).map(Self::Dir)
++        } else {
++            RepoFile::parse(text).map(Self::File)
++        }
++    }
++
++    pub(crate) fn as_path(&self) -> &Utf8Path {
++        match self {
++            Self::Dir(folder) => folder.as_path(),
++            Self::File(file) => file.as_path(),
++        }
++    }
++}
++
++impl fmt::Display for RepoPath {
++    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++        match self {
++            Self::Dir(folder) => folder.fmt(formatter),
++            Self::File(file) => file.fmt(formatter),
++        }
++    }
++}
++
++/// The after revision's files, and the folders among them holding a `Cargo.toml` with a `[workspace]` table.
++#[derive(Debug, Default)]
++pub(crate) struct Tree {
++    files: BTreeSet<Utf8PathBuf>,
++    workspaces: BTreeSet<Utf8PathBuf>,
++}
++
++impl Tree {
++    /// `files` are paths relative to the repository; `workspaces` are folders, `.` for the root.
++    pub(crate) fn new(
++        files: impl IntoIterator<Item = Utf8PathBuf>,
++        workspaces: impl IntoIterator<Item = Utf8PathBuf>,
++    ) -> Self {
++        Self {
++            files: files.into_iter().collect(),
++            workspaces: workspaces.into_iter().collect(),
++        }
++    }
++
++    pub(super) fn holds_file(&self, path: &Utf8Path) -> bool {
++        self.files.contains(path)
++    }
++
++    /// Whether any file lies below `folder`; the root holds every file.
++    pub(super) fn holds_folder(&self, folder: &Utf8Path) -> bool {
++        if folder == "." {
++            return !self.files.is_empty();
++        }
++        self.files
++            .range::<Utf8Path, _>((Bound::Included(folder), Bound::Unbounded))
++            .take_while(|file| file.starts_with(folder))
++            .any(|file| file != folder)
++    }
++
++    /// The folders holding a Cargo workspace, `.` for the root.
++    pub(super) fn workspaces(&self) -> impl Iterator<Item = &Utf8Path> {
++        self.workspaces.iter().map(Utf8PathBuf::as_path)
++    }
++
++    pub(super) fn holds_workspace(&self, folder: &RepoDir) -> bool {
++        self.workspaces.contains(folder.as_path())
++    }
++
++    /// `written` checked against the tree: a folder written as a file, or a file as a folder, is refused. An absent
++    /// path passes, since the field may name what the change removes.
++    pub(super) fn check(&self, written: &RepoPath) -> Result<(), PathProblem> {
++        match written {
++            RepoPath::File(file) if self.holds_folder(file.as_path()) => {
++                Err(PathProblem::TreeFolder)
++            }
++            RepoPath::Dir(folder) if self.holds_file(folder.as_path()) => {
++                Err(PathProblem::TreeFile)
++            }
++            RepoPath::Dir(_) | RepoPath::File(_) => Ok(()),
++        }
++    }
++}
+diff --git a/tools/crates/dandegate/src/plan/template.rs b/tools/crates/dandegate/src/plan/template.rs
+index a871c5f4..0af503e2 100644
+--- a/tools/crates/dandegate/src/plan/template.rs
++++ b/tools/crates/dandegate/src/plan/template.rs
+@@ -138,7 +138,7 @@ pub(crate) enum TemplateError {
+     Unopened,
+     #[error("{{{name}}} is not a placeholder this kind of step has; it has {names}")]
+     Unknown { name: String, names: &'static str },
+-    #[error("{{input.{name}}} names no input [inputs] declares")]
++    #[error("{{input.{name}}} names no input [steps.inputs] declares")]
+     Undeclared { name: String },
+ }
+ 
+diff --git a/tools/crates/dandegate/src/plan/tests.rs b/tools/crates/dandegate/src/plan/tests.rs
+index 809624bb..7e1f583e 100644
+--- a/tools/crates/dandegate/src/plan/tests.rs
++++ b/tools/crates/dandegate/src/plan/tests.rs
+@@ -1,13 +1,27 @@
+ use super::read::timeout;
++use super::repo::{PathProblem, RepoFile};
+ use super::*;
+ 
+ fn read(text: &str) -> Result<Plan, PlanError> {
++    within(&Tree::default(), text)
++}
++
++/// `text` read against an after revision holding `tree`.
++fn within(tree: &Tree, text: &str) -> Result<Plan, PlanError> {
+     Plan::read(
+         text.as_bytes(),
+         Utf8Path::new("dandegate.toml"),
+         &[],
+         &[],
+-        &[],
++        tree,
++    )
++}
++
++/// A tree of `files`, with a Cargo workspace in each of `workspaces`.
++fn tree(files: &[&str], workspaces: &[&str]) -> Tree {
++    Tree::new(
++        files.iter().map(Utf8PathBuf::from),
++        workspaces.iter().map(Utf8PathBuf::from),
+     )
+ }
+ 
+@@ -16,7 +30,7 @@ fn refusal(text: &str) -> String {
+ }
+ 
+ const MINIMAL: &str =
+-    "[[step]]\nname = \"visual\"\nrun = [\"sh\", \"{adapters}/visual.sh\", \"{tree}\"]\n";
++    "[[steps.step]]\nname = \"visual\"\nrun = [\"sh\", \"{adapters}/visual.sh\", \"{tree}\"]\n";
+ 
+ #[test]
+ fn a_step_that_says_only_its_name_and_command_takes_every_default() {
+@@ -52,7 +66,7 @@ fn a_timeout_is_a_whole_positive_number_of_seconds_minutes_or_hours() {
+ #[test]
+ fn a_name_is_lowercase_letters_digits_and_hyphens_unique_and_not_reserved() {
+     assert_eq!(
+-        refusal("[[step]]\nname = \"Visual\"\nrun = [\"x\"]\n"),
++        refusal("[[steps.step]]\nname = \"Visual\"\nrun = [\"x\"]\n"),
+         "dandegate.toml:2: step name: \"Visual\" is not lowercase letters, digits and hyphens"
+     );
+     assert_eq!(
+@@ -61,7 +75,9 @@ fn a_name_is_lowercase_letters_digits_and_hyphens_unique_and_not_reserved() {
+     );
+     for reserved in ["scans", "lines", "mutants", "api", "api-listings"] {
+         assert_eq!(
+-            refusal(&format!("[[step]]\nname = \"{reserved}\"\nrun = [\"x\"]\n")),
++            refusal(&format!(
++                "[[steps.step]]\nname = \"{reserved}\"\nrun = [\"x\"]\n"
++            )),
+             format!("dandegate.toml:2: step \"{reserved}\" is a name dandegate's Rust reports use")
+         );
+     }
+@@ -78,11 +94,11 @@ fn an_unknown_key_or_value_is_refused_with_its_line() {
+             .starts_with("dandegate.toml:4: unknown variant `sometimes`")
+     );
+     assert_eq!(
+-        refusal(&format!("{MINIMAL}[step.identity]\ncollect = []\n")),
++        refusal(&format!("{MINIMAL}[steps.step.identity]\ncollect = []\n")),
+         "dandegate.toml:5: step \"visual\": identity.collect: names no command"
+     );
+     assert_eq!(
+-        refusal("[[step]]\nname = \"empty\"\nrun = []\n"),
++        refusal("[[steps.step]]\nname = \"empty\"\nrun = []\n"),
+         "dandegate.toml:3: step \"empty\": run: names no command"
+     );
+ }
+@@ -91,7 +107,7 @@ fn an_unknown_key_or_value_is_refused_with_its_line() {
+ fn an_output_is_a_plain_path_under_out_of_a_kind_its_step_produces() {
+     let output = |runs: &str, output: &str| {
+         refusal(&format!(
+-            "[[step]]\nname = \"s\"\nruns = \"{runs}\"\nrun = [\"x\"]\noutput = [{output}]\n"
++            "[[steps.step]]\nname = \"s\"\nruns = \"{runs}\"\nrun = [\"x\"]\noutput = [{output}]\n"
+         ))
+     };
+     assert_eq!(
+@@ -111,7 +127,7 @@ fn an_output_is_a_plain_path_under_out_of_a_kind_its_step_produces() {
+     assert_eq!(
+         output(
+             "per-revision",
+-            "{ kind = \"images\", folder = \"{out}/images\" }"
++            "{ kind = \"images\", folder = \"{out}/images/\" }"
+         ),
+         "dandegate.toml:5: step \"s\": output: an output of kind images needs expected"
+     );
+@@ -122,10 +138,36 @@ fn an_output_is_a_plain_path_under_out_of_a_kind_its_step_produces() {
+         ),
+         "dandegate.toml:5: step \"s\": output: an output of kind section has no from"
+     );
++    assert_eq!(
++        output(
++            "per-revision",
++            "{ kind = \"images\", folder = \"{out}/images\", expected = \"{out}/e\" }"
++        ),
++        "dandegate.toml:5: step \"s\": output: folder: \"{out}/images\" names a folder, so it ends in /"
++    );
++    assert_eq!(
++        output(
++            "per-revision",
++            "{ kind = \"section\", file = \"{out}/a.md/\" }"
++        ),
++        "dandegate.toml:5: step \"s\": output: file: \"{out}/a.md/\" names a file, so it does not end in /"
++    );
++    let images = read(
++        "[[steps.step]]\nname = \"s\"\nrun = [\"x\"]\n\
++         output = [{ kind = \"images\", folder = \"{out}/a/b/\", expected = \"{out}/e\" }]\n",
++    )
++    .expect("a plan");
++    assert_eq!(
++        images.steps()[&StepName::new("s").expect("a name")].outputs(),
++        [Output::Images {
++            folder: OutPath(Utf8PathBuf::from("a/b")),
++            expected: OutPath(Utf8PathBuf::from("e")),
++        }]
++    );
+     assert!(
+         output(
+             "after",
+-            "{ kind = \"images\", folder = \"{out}/i\", expected = \"{out}/e\" }"
++            "{ kind = \"images\", folder = \"{out}/i/\", expected = \"{out}/e\" }"
+         )
+         .starts_with(
+             "dandegate.toml:5: step \"s\": output: an after step has no output of kind images"
+@@ -136,7 +178,7 @@ fn an_output_is_a_plain_path_under_out_of_a_kind_its_step_produces() {
+             "dandegate.toml:5: step \"s\": output: a once step has no output of kind measures"
+         )
+     );
+-    assert!(read("[[step]]\nname = \"s\"\nruns = \"after\"\nrun = [\"x\"]\noutput = [{ kind = \"measures\", from = \"{out}/m\" }]\n").is_ok());
++    assert!(read("[[steps.step]]\nname = \"s\"\nruns = \"after\"\nrun = [\"x\"]\noutput = [{ kind = \"measures\", from = \"{out}/m\" }]\n").is_ok());
+ }
+ 
+ #[test]
+@@ -155,16 +197,17 @@ fn an_environment_name_is_a_variable_a_step_may_set() {
+         .is_ok()
+     );
+     assert!(
+-        refusal(&format!("{MINIMAL}[step.identity]\nenv = [\"GODOT*X\"]\n")).contains(
+-            "identity.env: \"GODOT*X\" is not a variable's name or a prefix ending in `*`"
+-        )
++        refusal(&format!(
++            "{MINIMAL}[steps.step.identity]\nenv = [\"GODOT*X\"]\n"
++        ))
++        .contains("identity.env: \"GODOT*X\" is not a variable's name or a prefix ending in `*`")
+     );
+ }
+ 
+ #[test]
+ fn host_programs_are_bare_file_names_each_named_once_in_the_files_order() {
+     let plan = read(&format!(
+-        "host = [\"gamescope\", \"Xvfb\", \"vk.info\"]\n{MINIMAL}"
++        "[project]\nhost = [\"gamescope\", \"Xvfb\", \"vk.info\"]\n{MINIMAL}"
+     ))
+     .expect("a plan");
+     let named: Vec<&str> = plan.host().iter().map(HostProgram::as_str).collect();
+@@ -181,16 +224,16 @@ fn host_programs_are_bare_file_names_each_named_once_in_the_files_order() {
+     ];
+     for (written, shown) in refused {
+         assert_eq!(
+-            refusal(&format!("\nhost = [{written}]\n{MINIMAL}")),
++            refusal(&format!("[project]\nhost = [{written}]\n{MINIMAL}")),
+             format!("dandegate.toml:2: host: {shown} is not a program's file name"),
+             "{written}"
+         );
+     }
+     assert_eq!(
+         refusal(&format!(
+-            "host = [\"gamescope\",\n  \"gamescope\"]\n{MINIMAL}"
++            "[project]\nhost = [\"gamescope\",\n  \"gamescope\"]\n{MINIMAL}"
+         )),
+-        "dandegate.toml:2: host: \"gamescope\" is named twice"
++        "dandegate.toml:3: host: \"gamescope\" is named twice"
+     );
+ }
+ 
+@@ -205,15 +248,15 @@ fn a_pattern_names_a_variable_or_a_prefix() {
+ 
+ #[test]
+ fn with_enables_a_step_and_everything_it_needs() {
+-    let text = "[[step]]\nname = \"a\"\noptional = true\nrun = [\"x\"]\n\n\
+-                [[step]]\nname = \"b\"\noptional = true\nneeds = [\"a\"]\nrun = [\"x\"]\n\n\
+-                [[step]]\nname = \"c\"\noptional = true\nrun = [\"x\"]\n";
++    let text = "[[steps.step]]\nname = \"a\"\noptional = true\nrun = [\"x\"]\n\n\
++                [[steps.step]]\nname = \"b\"\noptional = true\nneeds = [\"a\"]\nrun = [\"x\"]\n\n\
++                [[steps.step]]\nname = \"c\"\noptional = true\nrun = [\"x\"]\n";
+     let plan = Plan::read(
+         text.as_bytes(),
+         Utf8Path::new("dandegate.toml"),
+         &["b".to_owned()],
+         &[],
+-        &[],
++        &Tree::default(),
+     )
+     .expect("a plan");
+     let enabled: Vec<&str> = plan
+@@ -227,7 +270,8 @@ fn with_enables_a_step_and_everything_it_needs() {
+ 
+ #[test]
+ fn an_input_takes_its_default_unless_set_once() {
+-    let text = format!("[inputs]\nrenders = {{ default = \"0\", help = \"frames\" }}\n{MINIMAL}");
++    let text =
++        format!("[steps.inputs]\nrenders = {{ default = \"0\", help = \"frames\" }}\n{MINIMAL}");
+     let set = |values: &[&str]| {
+         let values: Vec<String> = values.iter().map(|value| (*value).to_owned()).collect();
+         Plan::read(
+@@ -235,7 +279,7 @@ fn an_input_takes_its_default_unless_set_once() {
+             Utf8Path::new("dandegate.toml"),
+             &[],
+             &values,
+-            &[],
++            &Tree::default(),
+         )
+     };
+     let renders = InputName::new("renders").expect("a name");
+@@ -253,20 +297,17 @@ fn an_input_takes_its_default_unless_set_once() {
+ }
+ 
+ #[test]
+-fn the_rust_reports_follow_the_one_workspace_found_or_named() {
+-    let found = |workspaces: &[&str], text: &str| {
+-        let workspaces: Vec<Utf8PathBuf> = workspaces.iter().map(Utf8PathBuf::from).collect();
+-        Plan::read(
+-            text.as_bytes(),
+-            Utf8Path::new("dandegate.toml"),
+-            &[],
+-            &[],
+-            &workspaces,
+-        )
+-    };
+-    let plan = found(&["."], "").expect("a plan");
++fn the_rust_reports_run_on_the_workspace_project_rust_names() {
++    let files = ["Cargo.toml", "crates/a/src/lib.rs", "rust/Cargo.toml"];
++    let workspaces = tree(&files, &[".", "rust"]);
++    let plan = within(
++        &workspaces,
++        "[project.rust]\nworkspace = \"./\"\n[reports.rust]\nscans = [\"--core\", \"a\"]\n",
++    )
++    .expect("a plan");
+     let settings = plan.rust().expect("Rust reports");
+-    assert_eq!(settings.workspace, Utf8PathBuf::from("."));
++    assert_eq!(settings.workspace.as_path(), ".");
++    assert_eq!(settings.scans, ["--core", "a"]);
+     assert_eq!(settings.mutation, Vec::<String>::new());
+     let names: Vec<&str> = plan.steps().keys().map(StepName::as_str).collect();
+     assert_eq!(names, ["scans", "lines", "mutants", "api-listings", "api"]);
+@@ -274,31 +315,229 @@ fn the_rust_reports_follow_the_one_workspace_found_or_named() {
+     assert!(!api.enabled() && api.kind() == Kind::Once);
+     assert!(plan.steps()[&Report::ApiListings.step()].reuse());
+ 
++    let folder = within(&workspaces, "[project.rust]\nworkspace = \"rust/\"\n").expect("a plan");
++    assert_eq!(folder.rust().expect("Rust").workspace.as_path(), "rust");
++    // An empty [reports.rust] is the same as none.
++    let empty = within(
++        &workspaces,
++        "[project.rust]\nworkspace = \"rust/\"\n[reports.rust]\n",
++    )
++    .expect("a plan");
++    assert_eq!(empty.rust(), folder.rust());
++}
++
++#[test]
++fn a_project_with_no_rust_table_gets_no_rust_reports_and_a_notice_naming_the_table() {
++    let notices =
++        |plan: &Plan| -> Vec<String> { plan.notices().iter().map(ToString::to_string).collect() };
++    let root = within(&tree(&["Cargo.toml", "src/lib.rs"], &["."]), "").expect("a plan");
++    assert!(root.rust().is_none() && root.steps().is_empty());
+     assert_eq!(
+-        found(&["rust", "tools"], "")
+-            .expect_err("a refusal")
+-            .to_string(),
+-        "dandegate.toml: [rust]: the after revision has several Cargo workspaces (rust, tools); name one with \
+-         workspace = \"<folder>\""
++        notices(&root),
++        [
++            "the Rust reports are off: the after revision has a Cargo workspace in ./, but dandegate.toml has no \
++             [project.rust] table; add one with workspace = \"./\" to turn them on"
++        ]
++    );
++    let two = tree(&["rust/Cargo.toml", "tools/Cargo.toml"], &["rust", "tools"]);
++    assert_eq!(
++        notices(&within(&two, "").expect("a plan")),
++        [
++            "the Rust reports are off: the after revision has Cargo workspaces in rust/, tools/, but dandegate.toml \
++             has no [project.rust] table; add one with workspace = \"<folder>/\" to turn them on"
++        ]
++    );
++    let named = within(&two, "[project.rust]\nworkspace = \"rust/\"\n").expect("a plan");
++    assert!(named.rust().is_some() && named.notices().is_empty());
++    assert_eq!(read("").expect("a plan").notices(), []);
++}
++
++#[test]
++fn the_rust_workspace_is_a_folder_holding_a_cargo_workspace() {
++    let files = tree(
++        &["Cargo.toml", "crates/a/Cargo.toml", "crates/a/src/lib.rs"],
++        &["."],
++    );
++    let refused = |text: &str| within(&files, text).expect_err("a refusal").to_string();
++    assert_eq!(
++        refused("[project.rust]\nworkspace = \"crates/a/\"\n"),
++        "dandegate.toml:2: [project.rust]: workspace: \"crates/a/\" holds no Cargo.toml with a [workspace] table in \
++         the after revision"
++    );
++    assert_eq!(
++        refused("[project.rust]\nworkspace = \"crates\"\n"),
++        "dandegate.toml:2: [project.rust]: workspace: \"crates\" names a folder, so it ends in /"
++    );
++    assert_eq!(
++        refused("[project.rust]\nworkspace = \"rust/\"\n"),
++        "dandegate.toml:2: [project.rust]: workspace: \"rust/\" names no folder in the after revision"
++    );
++    for outside in [
++        "../elsewhere/",
++        "/rust/",
++        "./crates/",
++        "crates//a/",
++        "crates/../crates/",
++        "",
++    ] {
++        assert_eq!(
++            refused(&format!("[project.rust]\nworkspace = \"{outside}\"\n")),
++            format!(
++                "dandegate.toml:2: [project.rust]: workspace: \"{outside}\" is not a plain relative path inside the \
++                 repository"
++            ),
++            "{outside}"
++        );
++    }
++    assert!(refused("[project.rust]\n").starts_with("dandegate.toml:1: missing field `workspace`"));
++}
++
++#[test]
++fn reports_rust_without_project_rust_is_refused_even_when_empty() {
++    let files = tree(&["Cargo.toml"], &["."]);
++    for text in [
++        "[reports.rust]\nscans = [\"--core\", \"a\"]\n",
++        "\n[reports.rust]\n",
++    ] {
++        let refused = within(&files, text).expect_err("a refusal").to_string();
++        assert!(
++            refused.ends_with(
++                "[reports.rust]: tunes the Rust reports, which run only when [project.rust] names the workspace; \
++                 add [project.rust] or remove [reports.rust]"
++            ),
++            "{refused}"
++        );
++        let line = text
++            .lines()
++            .position(|line| line == "[reports.rust]")
++            .expect("its header")
++            + 1;
++        assert!(
++            refused.starts_with(&format!("dandegate.toml:{line}: ")),
++            "{refused}"
++        );
++    }
++}
++
++#[test]
++fn the_godot_project_and_its_tests_are_folders_the_after_revision_holds() {
++    let files = tree(&["godot/project.godot", "godot/tests/a.gd"], &[]);
++    assert!(
++        within(
++            &files,
++            "[project.godot]\nproject = \"godot/\"\ntests = [\"godot/tests/\"]\n"
++        )
++        .is_ok()
++    );
++    let refused = |text: &str| within(&files, text).expect_err("a refusal").to_string();
++    assert_eq!(
++        refused(
++            "[project.godot]\nproject = \"godot/\"\ntests = [\"godot/tests/\", \"godot/gone/\"]\n"
++        ),
++        "dandegate.toml:3: [project.godot]: tests: \"godot/gone/\" names no folder in the after revision"
++    );
++    assert_eq!(
++        refused("[project.godot]\nproject = \"godot/project.godot/\"\n"),
++        "dandegate.toml:2: [project.godot]: project: \"godot/project.godot/\" names no folder in the after revision"
++    );
++    assert!(refused("[project.godot]\ntests = []\n").contains("missing field `project`"));
++}
++
++#[test]
++fn measuring_code_is_written_as_what_it_is_and_may_name_what_the_change_removed() {
++    let files = tree(&["probes/a.sh", "tools/clips.sh"], &[]);
++    let rules = within(
++        &files,
++        "[reports.measures]\ncode = [\"probes/\", \"tools/clips.sh\", \"removed/\", \"removed.sh\"]\n\
++         exclude = [\"probes/a.sh\"]\ncode-measures = [\"clips.\"]\n",
++    )
++    .expect("a plan")
++    .measures()
++    .clone();
++    let written: Vec<String> = rules.code.iter().map(ToString::to_string).collect();
++    assert_eq!(
++        written,
++        ["probes/", "tools/clips.sh", "removed/", "removed.sh"]
++    );
++    assert_eq!(rules.exclude[0].as_path(), "probes/a.sh");
++    assert_eq!(rules.code_measures, ["clips."]);
++
++    let refused = |text: &str| within(&files, text).expect_err("a refusal").to_string();
++    assert_eq!(
++        refused("[reports.measures]\ncode = [\"probes\"]\n"),
++        "dandegate.toml:2: [reports.measures]: code: \"probes\" names a folder in the after revision; write it with \
++         a trailing /"
+     );
+     assert_eq!(
+-        found(&["rust", "tools"], "[rust]\nworkspace = \"rust\"\n")
+-            .expect("a plan")
+-            .rust()
+-            .expect("Rust")
+-            .workspace,
+-        "rust"
++        refused("[reports.measures]\nexclude = [\"tools/clips.sh/\"]\n"),
++        "dandegate.toml:2: [reports.measures]: exclude: \"tools/clips.sh/\" names a file in the after revision; \
++         write it without the trailing /"
+     );
+     assert!(
+-        found(&[], "[rust]\nscans = []\n")
+-            .expect_err("a refusal")
+-            .to_string()
+-            .contains("no Cargo.toml with a [workspace]")
++        refused("[reports.measures]\ncode = [\"../probes/\"]\n")
++            .ends_with("\"../probes/\" is not a plain relative path inside the repository")
+     );
+     assert!(
+-        found(&[], "[rust]\nworkspace = \"../elsewhere\"\n")
+-            .expect_err("a refusal")
+-            .to_string()
+-            .contains("is not a folder inside the repository")
++        refused("[reports.measures]\ncode_measures = []\n")
++            .contains("unknown field `code_measures`")
++    );
++}
++
++#[test]
++fn a_repository_path_is_plain_and_relative_with_a_slash_only_on_a_folder() {
++    assert_eq!(
++        RepoDir::parse("./").map(|folder| folder.to_string()),
++        Ok("./".to_owned())
++    );
++    assert_eq!(
++        RepoDir::parse("a/b/").map(|folder| folder.as_path().to_owned()),
++        Ok("a/b".into())
++    );
++    assert_eq!(RepoDir::parse("a/b"), Err(PathProblem::FolderWithoutSlash));
++    assert_eq!(
++        RepoFile::parse("a/b").map(|file| file.to_string()),
++        Ok("a/b".to_owned())
++    );
++    assert_eq!(RepoFile::parse("a/b/"), Err(PathProblem::FileWithSlash));
++    for outside in ["", "/", "/a", "../a", "a/./b", "./a", "a//b", "a/.."] {
++        assert_eq!(
++            RepoFile::parse(outside),
++            Err(PathProblem::Outside),
++            "{outside}"
++        );
++        assert_eq!(
++            RepoDir::parse(&format!("{outside}/")),
++            Err(PathProblem::Outside),
++            "{outside}/"
++        );
++    }
++}
++
++#[test]
++fn a_folder_is_one_some_file_lies_below() {
++    let files = tree(&["a/b/c.txt", "ab.txt", "a-b/d.txt"], &[]);
++    assert!(files.holds_folder(Utf8Path::new("a")) && files.holds_folder(Utf8Path::new("a/b")));
++    assert!(files.holds_folder(Utf8Path::new(".")));
++    assert!(
++        !files.holds_folder(Utf8Path::new("ab.txt")) && !files.holds_folder(Utf8Path::new("a/b/c"))
+     );
++    assert!(!Tree::default().holds_folder(Utf8Path::new(".")));
++}
++
++#[test]
++fn the_groups_are_project_reports_and_steps() {
++    for (old, key) in [
++        ("host = [\"x\"]\n", "host"),
++        ("[inputs]\n", "inputs"),
++        ("[measures]\n", "measures"),
++        ("[rust]\n", "rust"),
++        ("[[step]]\nname = \"x\"\nrun = [\"x\"]\n", "step"),
++        ("[step]\nidentity = {}\n", "step"),
++    ] {
++        let refused = refusal(old);
++        assert!(
++            refused.contains(&format!("unknown field `{key}`")),
++            "{refused}"
++        );
++    }
+ }
+diff --git a/tools/crates/dandegate/src/report/schedule.rs b/tools/crates/dandegate/src/report/schedule.rs
+index 7c3d657a..88a6fd88 100644
+--- a/tools/crates/dandegate/src/report/schedule.rs
++++ b/tools/crates/dandegate/src/report/schedule.rs
+@@ -357,6 +357,7 @@ mod tests {
+     use camino::Utf8Path;
+ 
+     use super::*;
++    use crate::plan::Tree;
+ 
+     fn graph(text: &str) -> Graph {
+         let plan = Plan::read(
+@@ -364,7 +365,7 @@ mod tests {
+             Utf8Path::new("dandegate.toml"),
+             &[],
+             &[],
+-            &[],
++            &Tree::default(),
+         )
+         .expect("a plan");
+         Graph::new(&plan)
+@@ -373,8 +374,8 @@ mod tests {
+     #[test]
+     fn a_panic_in_one_instance_goes_on_once_the_others_have_finished() {
+         let graph = graph(
+-            "[[step]]\nname = \"bad\"\nruns = \"once\"\nrun = [\"x\"]\n\n\
+-             [[step]]\nname = \"good\"\nruns = \"once\"\nrun = [\"x\"]\n",
++            "[[steps.step]]\nname = \"bad\"\nruns = \"once\"\nrun = [\"x\"]\n\n\
++             [[steps.step]]\nname = \"good\"\nruns = \"once\"\nrun = [\"x\"]\n",
+         );
+         let bad = graph.ids().next();
+         let finished = AtomicBool::new(false);
+diff --git a/tools/crates/dandegate/src/report/summary.rs b/tools/crates/dandegate/src/report/summary.rs
+index 5a452576..0d52bde2 100644
+--- a/tools/crates/dandegate/src/report/summary.rs
++++ b/tools/crates/dandegate/src/report/summary.rs
+@@ -74,10 +74,17 @@ impl Session<'_> {
+                 reuse: notes.get(&at).map(|notes| notes.join("; ")),
+             })
+             .collect();
++        let notices: Vec<String> = self
++            .plan()
++            .notices()
++            .iter()
++            .map(ToString::to_string)
++            .collect();
+         let page = Page {
+             revisions: &self.request.revisions,
+             incomplete: &incomplete,
+             host: &self.host_warnings,
++            notices: &notices,
+             measure_code: code.as_ref().ok().map(Vec::as_slice),
+             measure_code_error: code.as_ref().err().map(String::as_str),
+             affected: &affected,
+@@ -92,6 +99,7 @@ impl Session<'_> {
+         let mut lines = self.printed(
+             outcomes,
+             &incomplete,
++            &notices,
+             code.as_deref().unwrap_or_default(),
+             &got_worse,
+         );
+@@ -195,6 +203,7 @@ impl Session<'_> {
+         &self,
+         outcomes: &PerInstance<Outcome>,
+         incomplete: &[String],
++        notices: &[String],
+         code: &[String],
+         got_worse: &[&MeasureRow],
+     ) -> Vec<String> {
+@@ -202,6 +211,11 @@ impl Session<'_> {
+             .iter()
+             .map(|why| format!("DANDEGATE-INCOMPLETE: {why}"))
+             .collect();
++        lines.extend(
++            notices
++                .iter()
++                .map(|notice| format!("DANDEGATE-NOTICE: {notice}")),
++        );
+         lines.extend(
+             code.iter()
+                 .map(|file| format!("DANDEGATE-MEASURE-CODE: {file}")),
+@@ -266,7 +280,8 @@ impl Session<'_> {
+         if rules.code.is_empty() {
+             return Ok(Vec::new());
+         }
+-        let paths: Vec<&str> = rules.code.iter().map(String::as_str).collect();
++        let written: Vec<String> = rules.code.iter().map(ToString::to_string).collect();
++        let paths: Vec<&str> = written.iter().map(String::as_str).collect();
+         let changed = self
+             .request
+             .repository
+@@ -282,7 +297,7 @@ impl Session<'_> {
+                 !rules
+                     .exclude
+                     .iter()
+-                    .any(|excluded| Utf8Path::new(file).starts_with(excluded.trim_end_matches('/')))
++                    .any(|excluded| Utf8Path::new(file).starts_with(excluded.as_path()))
+             })
+             .collect())
+     }
+diff --git a/tools/crates/dandegate/src/revision/git.rs b/tools/crates/dandegate/src/revision/git.rs
+index 1be4e54d..3566d518 100644
+--- a/tools/crates/dandegate/src/revision/git.rs
++++ b/tools/crates/dandegate/src/revision/git.rs
+@@ -140,7 +140,9 @@ impl Repository {
+             .collect())
+     }
+ 
+-    /// The files that differ between two commits under any of `paths`, every path when none is given.
++    /// The files that differ between two commits under any of `paths`, every path when none is given. Each path is
++    /// literal, a file or a folder with everything below it, never a pattern: git's wildcards, brackets and pathspec
++    /// magic match only themselves.
+     ///
+     /// # Errors
+     /// [`GitError`] when either commit cannot be read.
+@@ -151,6 +153,7 @@ impl Repository {
+         paths: &[&str],
+     ) -> Result<Vec<String>, GitError> {
+         let mut arguments = vec![
++            "--literal-pathspecs",
+             "diff",
+             "--name-only",
+             "-z",
+diff --git a/tools/crates/dandegate/src/rust.rs b/tools/crates/dandegate/src/rust.rs
+index 143e9ec6..54fb1a2c 100644
+--- a/tools/crates/dandegate/src/rust.rs
++++ b/tools/crates/dandegate/src/rust.rs
+@@ -1,6 +1,5 @@
+-//! Runs the Rust reports as built-in steps under reserved names. dandegate adds them when the after revision has a
+-//! Cargo workspace, which is the one `Cargo.toml` in the repository with a `[workspace]` table, unless `[rust]` names
+-//! another folder.
++//! Runs the Rust reports as built-in steps under reserved names. dandegate adds them when `dandegate.toml` names the
++//! Cargo workspace; [`crate::plan`] describes the file.
+ //!
+ //! - `scans` runs rust-scans in each checkout, and shows both sides' counts and the after side's findings. It is a
+ //!   review aid and fails nothing.
+@@ -103,27 +102,29 @@ for pair in "rustc=$rustc" "rustdoc=$rustdoc" cargo=cargo cargo-public-api=cargo
+ done
+ "#;
+ 
+-/// Every folder of `commit`'s tree holding a `Cargo.toml` with a `[workspace]` table, `.` for the root.
++/// Every folder of `commit`'s tree holding a `Cargo.toml` with a `[workspace]` table, `.` for the root. `files` are
++/// the tree's files.
+ ///
+ /// # Errors
+-/// [`GitError`] when the tree cannot be read.
++/// [`GitError`] when a manifest cannot be read.
+ pub(crate) fn workspaces(
+     repository: &Repository,
+     commit: &CommitId,
++    files: &[String],
+ ) -> Result<Vec<Utf8PathBuf>, GitError> {
+     let mut found = Vec::new();
+-    for path in repository.files(commit)? {
++    for path in files {
+         if path != "Cargo.toml" && !path.ends_with("/Cargo.toml") {
+             continue;
+         }
+-        let Some(bytes) = repository.file_at(commit, &path)? else {
++        let Some(bytes) = repository.file_at(commit, path)? else {
+             continue;
+         };
+         let manifest = String::from_utf8(bytes)
+             .ok()
+             .and_then(|text| toml::from_str::<toml::Table>(&text).ok());
+         if manifest.is_some_and(|table| table.get("workspace").is_some_and(toml::Value::is_table)) {
+-            let folder = Utf8Path::new(&path)
++            let folder = Utf8Path::new(path)
+                 .parent()
+                 .map_or_default(Utf8Path::as_str);
+             found.push(Utf8PathBuf::from(if folder.is_empty() {
+@@ -148,7 +149,7 @@ pub(crate) fn rust_changed(
+     let changed = repository.changed(
+         revisions.before.commit(),
+         revisions.after.commit(),
+-        &[settings.workspace.as_str()],
++        &[settings.workspace.as_path().as_str()],
+     )?;
+     Ok(changed
+         .iter()
+@@ -304,7 +305,7 @@ impl Context<'_> {
+     }
+ 
+     fn workspace(&self) -> &Utf8Path {
+-        &self.settings.workspace
++        self.settings.workspace.as_path()
+     }
+ 
+     fn write(&self, name: &str, text: &str, problems: &[String]) -> Result<(), Stop> {
+diff --git a/tools/crates/dandegate/tests/scenarios/comparisons.rs b/tools/crates/dandegate/tests/scenarios/comparisons.rs
+index 30def4a9..eb62073f 100644
+--- a/tools/crates/dandegate/tests/scenarios/comparisons.rs
++++ b/tools/crates/dandegate/tests/scenarios/comparisons.rs
+@@ -193,8 +193,8 @@ fn measures_are_compared_by_name_with_checked_arithmetic_and_their_own_direction
+ #[test]
+ fn changed_measuring_code_is_warned_of_beside_the_measures_it_takes() {
+     let fixture = Fixture::new("measure-code");
+-    let rules = "[measures]\ncode = [\"probes/\", \"tools/clips.sh\"]\nexclude = [\"probes/selftest.sh\"]\n\
+-                 code_measures = [\"clips.\"]\n";
++    let rules = "[reports.measures]\ncode = [\"probes/\", \"tools/clips.sh\"]\nexclude = [\"probes/selftest.sh\"]\n\
++                 code-measures = [\"clips.\"]\n";
+     fixture.write("dandegate.toml", &format!("{rules}{PROJECT}"));
+     for file in [
+         "probes/measures.sh",
+@@ -244,3 +244,31 @@ fn changed_measuring_code_is_warned_of_beside_the_measures_it_takes() {
+     let warning = page.find("id=\"measure-code\"").expect("the warning");
+     assert!(warning < page.find("id=\"worse\"").expect("the worse section"));
+ }
++
++#[test]
++fn measuring_code_is_matched_by_its_literal_name_never_as_a_pattern() {
++    let fixture = Fixture::new("literal");
++    let rules = "[reports.measures]\ncode = [\"probes/check[1].sh\"]\n";
++    fixture.write("dandegate.toml", &format!("{rules}{PROJECT}"));
++    fixture.write("fixture/visual/clips.log", "");
++    for file in ["probes/check[1].sh", "probes/check1.sh"] {
++        fixture.write(file, "1\n");
++    }
++    let before = fixture.commit("before");
++    // As a git pattern, check[1].sh would match its sibling check1.sh.
++    fixture.write("probes/check1.sh", "2\n");
++    let sibling = fixture.commit("sibling");
++    fixture.write("probes/check[1].sh", "2\n");
++    fixture.commit("named");
++
++    let quiet = fixture.run("quiet", &["--before", &before, "--after", &sibling]);
++    assert_eq!(
++        quiet.printed("DANDEGATE-MEASURE-CODE"),
++        Vec::<String>::new()
++    );
++    let warned = fixture.run("warned", &["--before", &sibling]);
++    assert_eq!(
++        warned.printed("DANDEGATE-MEASURE-CODE"),
++        ["probes/check[1].sh"]
++    );
++}
+diff --git a/tools/crates/dandegate/tests/scenarios/durable.rs b/tools/crates/dandegate/tests/scenarios/durable.rs
+index da81e922..d6d0b352 100644
+--- a/tools/crates/dandegate/tests/scenarios/durable.rs
++++ b/tools/crates/dandegate/tests/scenarios/durable.rs
+@@ -78,7 +78,7 @@ fn fresh_and_reused_pages_stand_alone_once_the_cache_and_scratch_are_gone() {
+ fn a_missing_or_malformed_section_status_makes_the_page_incomplete() {
+     let fixture = Fixture::new("status");
+     let plan = r#"
+-[[step]]
++[[steps.step]]
+ name = "notes"
+ runs = "once"
+ run = ["sh", "{adapters}/step.sh", "notes", "{after}", "{after-commit}", "{out}"]
+@@ -116,7 +116,7 @@ output = [{ kind = "section", file = "{out}/notes.md" }]
+ fn saved_measures_round_trip_their_directions() {
+     let fixture = Fixture::new("round-trip");
+     let plan = r#"
+-[[step]]
++[[steps.step]]
+ name = "clips"
+ runs = "after"
+ run = ["sh", "{adapters}/step.sh", "clips", "{tree}", "{commit}", "{out}"]
+@@ -184,7 +184,7 @@ output = [{ kind = "measures", from = "{out}/clips.log" }]
+ fn an_earlier_reports_measures_are_read_in_each_shape_it_saved() {
+     let fixture = Fixture::new("earlier");
+     let plan = r#"
+-[[step]]
++[[steps.step]]
+ name = "clips"
+ runs = "after"
+ run = ["sh", "{adapters}/step.sh", "clips", "{tree}", "{commit}", "{out}"]
+diff --git a/tools/crates/dandegate/tests/scenarios/host.rs b/tools/crates/dandegate/tests/scenarios/host.rs
+index 6c106054..75c25878 100644
+--- a/tools/crates/dandegate/tests/scenarios/host.rs
++++ b/tools/crates/dandegate/tests/scenarios/host.rs
+@@ -32,21 +32,22 @@ fn a_step_finds_its_named_host_programs_after_its_shells_tools_and_nothing_else_
+     fixture.caller_tool("unnamed", &WRITES.replace("$2", "host"));
+     fixture.write(
+         "dandegate.toml",
+-        r#"host = ["both", "named"]
++        r#"[project]
++host = ["both", "named"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "both"
+ runs = "once"
+ run = ["both", "{out}/written.txt"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "named"
+ runs = "once"
+ reuse = true
+ run = ["named", "{out}/written.txt"]
+ identity = { collect = ["named"] }
+ 
+-[[step]]
++[[steps.step]]
+ name = "unnamed"
+ runs = "once"
+ run = ["unnamed", "{out}/written.txt"]
+@@ -82,19 +83,20 @@ fn a_host_program_not_found_is_one_warning_and_fails_only_the_step_that_runs_it(
+     fixture.caller_tool("named", NAMED);
+     fixture.write(
+         "dandegate.toml",
+-        r#"host = ["absent", "named"]
++        r#"[project]
++host = ["absent", "named"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "absent"
+ runs = "once"
+ run = ["absent"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "named"
+ runs = "once"
+ run = ["named", "{out}/written.txt"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "plain"
+ runs = "once"
+ run = ["sh", "-c", "echo plain > \"$0\"", "{out}/written.txt"]
+@@ -130,7 +132,7 @@ fn a_built_in_command_finds_the_host_programs() {
+     fixture.caller_tool("listed", "#!/bin/sh\necho 'pub fn toy::host()'\n");
+     fixture.write(
+         "dandegate.toml",
+-        "host = [\"listed\"]\n[rust]\nscans = [\"--core\", \"alpha\"]\n",
++        "[project]\nhost = [\"listed\"]\n[project.rust]\nworkspace = \"./\"\n[reports.rust]\nscans = [\"--core\", \"alpha\"]\n",
+     );
+     let only = fixture.commit("only");
+ 
+@@ -154,7 +156,7 @@ fn a_host_program_out_of_time_is_stopped_with_its_children() {
+     fixture.caller_tool("hold", HOLD);
+     fixture.write(
+         "dandegate.toml",
+-        "host = [\"hold\"]\n[[step]]\nname = \"hold\"\nruns = \"once\"\ntimeout = \"1s\"\nrun = [\"hold\"]\n",
++        "[project]\nhost = [\"hold\"]\n[[steps.step]]\nname = \"hold\"\nruns = \"once\"\ntimeout = \"1s\"\nrun = [\"hold\"]\n",
+     );
+     let only = fixture.commit("only");
+ 
+@@ -173,7 +175,7 @@ fn stopping_dandegate_stops_a_host_program_and_everything_it_started() {
+     fixture.caller_tool("hold", HOLD);
+     fixture.write(
+         "dandegate.toml",
+-        "host = [\"hold\"]\n[[step]]\nname = \"hold\"\nruns = \"once\"\nrun = [\"hold\"]\n",
++        "[project]\nhost = [\"hold\"]\n[[steps.step]]\nname = \"hold\"\nruns = \"once\"\nrun = [\"hold\"]\n",
+     );
+     let only = fixture.commit("only");
+     // The step's supervisor becomes this process's child when dandegate ends, so this test can wait for it.
+@@ -200,9 +202,11 @@ fn stopping_dandegate_stops_a_host_program_and_everything_it_started() {
+ fn a_kept_result_misses_when_the_after_revision_changes_only_its_host_programs() {
+     let fixture = Fixture::new("host-reuse");
+     fixture.caller_tool("named", NAMED);
+-    let step =
+-        "[[step]]\nname = \"named\"\nreuse = true\nrun = [\"named\", \"{out}/written.txt\"]\n";
+-    fixture.write("dandegate.toml", &format!("host = [\"named\"]\n{step}"));
++    let step = "[[steps.step]]\nname = \"named\"\nreuse = true\nrun = [\"named\", \"{out}/written.txt\"]\n";
++    fixture.write(
++        "dandegate.toml",
++        &format!("[project]\nhost = [\"named\"]\n{step}"),
++    );
+     let before = fixture.commit("before");
+     fixture.write("README", "the after revision\n");
+     let declared = fixture.commit("declared");
+diff --git a/tools/crates/dandegate/tests/scenarios/invocation.rs b/tools/crates/dandegate/tests/scenarios/invocation.rs
+index 7ef7fcb6..1428491f 100644
+--- a/tools/crates/dandegate/tests/scenarios/invocation.rs
++++ b/tools/crates/dandegate/tests/scenarios/invocation.rs
+@@ -7,15 +7,15 @@ use crate::support::{Fixture, files_under, png};
+ 
+ /// A per-revision step with images and measures, and a once step with a section, each running the generic step.
+ pub(crate) const PROJECT: &str = r#"
+-[[step]]
++[[steps.step]]
+ name = "visual"
+ run = ["sh", "{adapters}/step.sh", "visual", "{tree}", "{commit}", "{out}"]
+ output = [
+-    { kind = "images", folder = "{out}/images", expected = "{out}/expected.txt" },
++    { kind = "images", folder = "{out}/images/", expected = "{out}/expected.txt" },
+     { kind = "measures", from = "{out}/clips.log" },
+ ]
+ 
+-[[step]]
++[[steps.step]]
+ name = "notes"
+ runs = "once"
+ run = ["sh", "{adapters}/step.sh", "notes", "{after}", "{after-commit}", "{out}"]
+@@ -107,12 +107,12 @@ fn a_step_runs_the_tools_of_its_revisions_shell_and_never_the_callers() {
+     fixture.write(
+         "dandegate.toml",
+         r#"
+-[[step]]
++[[steps.step]]
+ name = "pinned"
+ runs = "once"
+ run = ["pinned", "{out}/written.txt"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "unpinned"
+ runs = "once"
+ run = ["unpinned", "{out}/written.txt"]
+@@ -138,15 +138,15 @@ fn every_refusal_comes_before_any_step_runs() {
+     fixture.write(
+         "dandegate.toml",
+         &format!(
+-            "[inputs]\nrenders = {{ default = \"0\", help = \"frames to render\" }}\n{PROJECT}"
++            "[steps.inputs]\nrenders = {{ default = \"0\", help = \"frames to render\" }}\n{PROJECT}"
+         ),
+     );
+     let valid = fixture.commit("valid");
+-    fixture.write("dandegate.toml", "[[step]\nname = \"visual\"\n");
++    fixture.write("dandegate.toml", "[[steps.step]\nname = \"visual\"\n");
+     let syntax = fixture.commit("syntax");
+     fixture.write(
+         "dandegate.toml",
+-        "\n[[step]]\nname = \"visual\"\nrun = [\"sh\", \"{before}\"]\n",
++        "\n[[steps.step]]\nname = \"visual\"\nrun = [\"sh\", \"{before}\"]\n",
+     );
+     let placeholder = fixture.commit("placeholder");
+     fs::create_dir(fixture.outside("existing")).expect("a folder");
+@@ -235,12 +235,12 @@ fn revisions_are_frozen_when_the_report_starts_while_a_branch_moves() {
+     let fixture = Fixture::new("frozen");
+     // The mover moves main to a new commit while the report runs. The late step starts only after it.
+     let plan = r#"
+-[[step]]
++[[steps.step]]
+ name = "mover"
+ runs = "once"
+ run = ["sh", "-c", "git -C \"$DANDEGATE_REPOSITORY\" commit --quiet --allow-empty --message moved"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "late"
+ runs = "once"
+ needs = ["mover"]
+@@ -271,17 +271,17 @@ run = ["sh", "{adapters}/step.sh", "late", "{after}", "{after-commit}", "{out}"]
+ fn every_step_gets_the_repository_its_inputs_verbatim_and_the_measures_file_only_when_given() {
+     let fixture = Fixture::new("step-environment");
+     let plan = r#"
+-[inputs]
++[steps.inputs]
+ source-checkout = { default = ".", help = "where untracked sources are read" }
+ 
+-[[step]]
++[[steps.step]]
+ name = "environment"
+ runs = "once"
+ reuse = true
+ run = ["sh", "{adapters}/environment.sh", "{input.source-checkout}"]
+ env = { STEP_MODE = "{input.source-checkout}-mode" }
+ 
+-[step.identity]
++[steps.step.identity]
+ env = ["DANDEGATE_*"]
+ "#;
+     fixture.write("dandegate.toml", plan);
+diff --git a/tools/crates/dandegate/tests/scenarios/receipts.rs b/tools/crates/dandegate/tests/scenarios/receipts.rs
+index b1c6a784..4ab7d1e8 100644
+--- a/tools/crates/dandegate/tests/scenarios/receipts.rs
++++ b/tools/crates/dandegate/tests/scenarios/receipts.rs
+@@ -8,7 +8,7 @@ use crate::selection::started;
+ use crate::support::{Fixture, png};
+ 
+ const VISUAL: &str = r#"
+-[[step]]
++[[steps.step]]
+ name = "visual"
+ reuse = true
+ run = ["sh", "{adapters}/step.sh", "visual", "{tree}", "{commit}", "{out}"]
+@@ -113,41 +113,41 @@ fn a_missing_changed_extra_malformed_or_old_format_entry_is_a_miss() {
+ fn only_complete_successes_are_kept() {
+     let fixture = Fixture::new("complete");
+     let plan = r#"
+-[[step]]
++[[steps.step]]
+ name = "good"
+ reuse = true
+ run = ["sh", "{adapters}/step.sh", "good", "{tree}", "{commit}", "{out}"]
+ output = [{ kind = "measures", from = "{out}/clips.log" }]
+ 
+-[[step]]
++[[steps.step]]
+ name = "failing"
+ reuse = true
+ run = ["sh", "{adapters}/step.sh", "failing", "{tree}", "{commit}", "{out}"]
+ output = [{ kind = "measures", from = "{out}/clips.log" }]
+ 
+-[[step]]
++[[steps.step]]
+ name = "partial"
+ reuse = true
+ run = ["sh", "{adapters}/step.sh", "partial", "{tree}", "{commit}", "{out}"]
+ output = [{ kind = "section", file = "{out}/report.md" }]
+ 
+-[[step]]
++[[steps.step]]
+ name = "malformed"
+ reuse = true
+ run = ["sh", "{adapters}/step.sh", "malformed", "{tree}", "{commit}", "{out}"]
+ output = [{ kind = "measures", from = "{out}/clips.log" }]
+ 
+-[[step]]
++[[steps.step]]
+ name = "unrendered"
+ reuse = true
+ run = ["sh", "{adapters}/step.sh", "unrendered", "{tree}", "{commit}", "{out}"]
+-output = [{ kind = "images", folder = "{out}/images", expected = "{out}/expected.txt" }]
++output = [{ kind = "images", folder = "{out}/images/", expected = "{out}/expected.txt" }]
+ 
+-[[step]]
++[[steps.step]]
+ name = "corrupt"
+ reuse = true
+ run = ["sh", "{adapters}/step.sh", "corrupt", "{tree}", "{commit}", "{out}"]
+-output = [{ kind = "images", folder = "{out}/images", expected = "{out}/expected.txt" }]
++output = [{ kind = "images", folder = "{out}/images/", expected = "{out}/expected.txt" }]
+ "#;
+     fixture.write("dandegate.toml", plan);
+     fixture.write("fixture/good/clips.log", "MEASURE: good 1 m\n");
+diff --git a/tools/crates/dandegate/tests/scenarios/reuse.rs b/tools/crates/dandegate/tests/scenarios/reuse.rs
+index 91720c35..fcb0672f 100644
+--- a/tools/crates/dandegate/tests/scenarios/reuse.rs
++++ b/tools/crates/dandegate/tests/scenarios/reuse.rs
+@@ -10,7 +10,7 @@ use crate::support::{Fixture, LIB, STEP};
+ /// A reusable per-revision step with measures, running the generic step through `visual.sh`, which sources
+ /// `helper.sh`.
+ const VISUAL: &str = r#"
+-[[step]]
++[[steps.step]]
+ name = "visual"
+ reuse = true
+ run = ["sh", "{adapters}/visual.sh", "{tree}", "{commit}", "{out}"]
+@@ -114,7 +114,7 @@ fn a_changed_input_value_misses_the_kept_result() {
+     let plan = VISUAL.replace("\"{out}\"]", "\"{out}\", \"{input.renders}\"]");
+     project(
+         &fixture,
+-        &format!("[inputs]\nrenders = {{ default = \"0\", help = \"frames\" }}\n{plan}"),
++        &format!("[steps.inputs]\nrenders = {{ default = \"0\", help = \"frames\" }}\n{plan}"),
+     );
+     let only = fixture.commit("only");
+ 
+@@ -189,7 +189,9 @@ fn changed_external_file_content_at_the_same_path_misses() {
+     let plan = VISUAL.replace("\"{out}\"]", "\"{out}\", \"{input.baseline}\"]");
+     project(
+         &fixture,
+-        &format!("[inputs]\nbaseline = {{ default = \"\", help = \"a baseline file\" }}\n{plan}"),
++        &format!(
++            "[steps.inputs]\nbaseline = {{ default = \"\", help = \"a baseline file\" }}\n{plan}"
++        ),
+     );
+     let only = fixture.commit("only");
+     let baseline = fixture.outside("baseline.json");
+@@ -223,7 +225,7 @@ fn changed_external_file_content_at_the_same_path_misses() {
+ fn a_changed_identity_environment_or_collected_line_misses() {
+     let fixture = Fixture::new("environment");
+     let plan = format!(
+-        "{VISUAL}env = {{ VISUAL_LEVEL = \"fixed\" }}\n[step.identity]\nenv = [\"VISUAL_*\"]\ncollect = [\"sh\", \"-c\", \"cat \\\"$DANDEGATE_REPOSITORY/../toolchain\\\"\"]\n"
++        "{VISUAL}env = {{ VISUAL_LEVEL = \"fixed\" }}\n[steps.step.identity]\nenv = [\"VISUAL_*\"]\ncollect = [\"sh\", \"-c\", \"cat \\\"$DANDEGATE_REPOSITORY/../toolchain\\\"\"]\n"
+     );
+     project(&fixture, &plan);
+     let only = fixture.commit("only");
+@@ -299,7 +301,7 @@ fn a_failed_collector_runs_the_step_fresh_and_keeps_nothing() {
+     .into_iter()
+     .enumerate()
+     {
+-        project(&fixture, &format!("{VISUAL}\n[step.identity]\ncollect = {collector}\n"));
++        project(&fixture, &format!("{VISUAL}\n[steps.step.identity]\ncollect = {collector}\n"));
+         let only = fixture.commit("collector");
+         for attempt in ["first", "second"] {
+             fixture.clear_events();
+@@ -348,15 +350,15 @@ fn a_changed_prepare_recipe_variable_or_collector_misses_a_kept_visual() {
+     let fixture = Fixture::new("prepare");
+     // An unrelated step first, so the prepare step is not the first the plan declares.
+     let prepare = r#"
+-[[step]]
++[[steps.step]]
+ name = "unrelated"
+ run = ["sh", "{adapters}/step.sh", "unrelated", "{tree}", "{commit}", "{out}"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "prepare"
+ run = ["sh", "{adapters}/step.sh", "prepare", "{tree}", "{commit}", "{out}"]
+ 
+-[step.identity]
++[steps.step.identity]
+ env = ["BUILD_MODE"]
+ "#;
+     let plan = format!("{prepare}{VISUAL}needs = [\"prepare\"]\n");
+diff --git a/tools/crates/dandegate/tests/scenarios/rust.rs b/tools/crates/dandegate/tests/scenarios/rust.rs
+index 3a7161e5..4c06f423 100644
+--- a/tools/crates/dandegate/tests/scenarios/rust.rs
++++ b/tools/crates/dandegate/tests/scenarios/rust.rs
+@@ -89,7 +89,7 @@ pub(crate) fn workspace(fixture: &Fixture) {
+     fixture.write("crates/alpha/benches/speed.rs", "fn main() {}\n");
+     fixture.write(
+         "dandegate.toml",
+-        "[rust]\nscans = [\"--core\", \"alpha\"]\n",
++        "[project.rust]\nworkspace = \"./\"\n[reports.rust]\nscans = [\"--core\", \"alpha\"]\n",
+     );
+     fixture.write(
+         "fixture/scans.txt",
+@@ -214,8 +214,8 @@ fn a_root_level_rust_workspace_gets_scans_line_counts_and_the_mutation_report()
+ fn the_mutation_report_is_not_run_when_no_rust_differs() {
+     let fixture = Fixture::new("no-rust");
+     workspace(&fixture);
+-    // A Rust workspace needs no steps file to get its reports.
+-    fixture.remove("dandegate.toml");
++    // Naming the workspace is all a steps file needs for the Rust reports.
++    fixture.write("dandegate.toml", "[project.rust]\nworkspace = \"./\"\n");
+     let before = fixture.commit("before");
+     fixture.write("README", "words only\n");
+     fixture.commit("after");
+@@ -234,6 +234,34 @@ fn the_mutation_report_is_not_run_when_no_rust_differs() {
+     );
+ }
+ 
++#[test]
++fn a_workspace_with_no_rust_table_gets_a_notice_and_no_rust_reports() {
++    let fixture = Fixture::new("no-table");
++    workspace(&fixture);
++    fixture.remove("dandegate.toml");
++    let only = fixture.commit("only");
++
++    let run = fixture.run("out", &["--before", &only]);
++    let page = run.page();
++    let notice = "the Rust reports are off: the after revision has a Cargo workspace in ./, but dandegate.toml has no \
++                  [project.rust] table; add one with workspace = \"./\" to turn them on";
++    assert_eq!(run.printed("DANDEGATE-NOTICE"), [notice]);
++    assert!(
++        page.contains(&format!(
++            "<div class=\"notice\"><p>{}</p></div>",
++            notice.replace('"', "&quot;")
++        )),
++        "{page}"
++    );
++    assert_eq!(run.printed("DANDEGATE-INCOMPLETE"), Vec::<String>::new());
++    assert!(
++        !fixture
++            .events()
++            .iter()
++            .any(|event| event.starts_with("scans"))
++    );
++}
++
+ #[test]
+ fn scans_that_fail_on_one_side_leave_a_partial_section_and_fail_nothing() {
+     let fixture = Fixture::new("scans");
+@@ -486,7 +514,7 @@ fn a_toolchain_that_cannot_be_identified_runs_the_listings_fresh_and_keeps_nothi
+ }
+ 
+ #[test]
+-fn a_workspace_in_a_folder_is_found_and_reported_there() {
++fn a_workspace_in_a_folder_is_reported_there() {
+     let fixture = Fixture::new("folder");
+     fixture.tool("rust-scans", SCANS);
+     fixture.tool("rust-mutants", MUTANTS);
+@@ -500,6 +528,7 @@ fn a_workspace_in_a_folder_is_found_and_reported_there() {
+     );
+     fixture.write("rust/crates/alpha/src/lib.rs", "pub fn f() {}\n");
+     fixture.write("fixture/scans.txt", "H1: 0\n");
++    fixture.write("dandegate.toml", "[project.rust]\nworkspace = \"rust/\"\n");
+     let before = fixture.commit("before");
+     fixture.write(
+         "rust/crates/alpha/src/lib.rs",
+diff --git a/tools/crates/dandegate/tests/scenarios/scheduling.rs b/tools/crates/dandegate/tests/scenarios/scheduling.rs
+index 04bf14a1..69bcb211 100644
+--- a/tools/crates/dandegate/tests/scenarios/scheduling.rs
++++ b/tools/crates/dandegate/tests/scenarios/scheduling.rs
+@@ -72,20 +72,20 @@ fn independent_steps_run_four_at_once_and_exclusive_steps_last_and_alone() {
+         // A scheduler that never runs four at once would hold these until their time runs out.
+         let _ = write!(
+             plan,
+-            "[[step]]\nname = \"wide{index}\"\nruns = \"once\"\ntimeout = \"60s\"\n\
++            "[[steps.step]]\nname = \"wide{index}\"\nruns = \"once\"\ntimeout = \"60s\"\n\
+              run = [\"sh\", \"{{adapters}}/wide.sh\", \"wide{index}\"]\n\n"
+         );
+     }
+     for index in 1..=2 {
+         let _ = write!(
+             plan,
+-            "[[step]]\nname = \"alone{index}\"\nruns = \"once\"\nexclusive = true\n\
++            "[[steps.step]]\nname = \"alone{index}\"\nruns = \"once\"\nexclusive = true\n\
+              run = [\"sh\", \"{{adapters}}/alone.sh\", \"alone{index}\"]\n\n"
+         );
+     }
+     // An ordinary step declared after the exclusive ones, ready only once every wide step has finished.
+     plan.push_str(
+-        "[[step]]\nname = \"late\"\nruns = \"once\"\n\
++        "[[steps.step]]\nname = \"late\"\nruns = \"once\"\n\
+          needs = [\"wide1\", \"wide2\", \"wide3\", \"wide4\", \"wide5\", \"wide6\"]\n\
+          run = [\"sh\", \"{adapters}/alone.sh\", \"late\"]\n",
+     );
+@@ -203,20 +203,20 @@ fn a_step_out_of_time_is_stopped_with_its_children_while_the_rest_finishes() {
+     fixture.write(
+         "dandegate.toml",
+         &r#"
+-[[step]]
++[[steps.step]]
+ name = "slow"
+ runs = "once"
+ timeout = "1s"
+ run = ["sh", "{adapters}/slow.sh"]
+ 
+ # Long enough for the helper to start both shards, which the step waits for before it waits for the helper.
+-[[step]]
++[[steps.step]]
+ name = "helper"
+ runs = "once"
+ timeout = "5s"
+ run = ["sh", "{adapters}/helper.sh", "HELPER", "{after}", "{out}"]
+ 
+-[[step]]
++[[steps.step]]
+ name = "quick"
+ runs = "once"
+ run = ["sh", "{adapters}/step.sh", "quick", "{after}", "{after-commit}", "{out}"]
+@@ -256,7 +256,7 @@ fn what_a_finished_step_leaves_running_is_stopped_with_it() {
+     fixture.write("dandegate/leaves.sh", LEAVES);
+     fixture.write(
+         "dandegate.toml",
+-        "[[step]]\nname = \"leaves\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/leaves.sh\"]\n",
++        "[[steps.step]]\nname = \"leaves\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/leaves.sh\"]\n",
+     );
+     let only = fixture.commit("only");
+ 
+@@ -271,7 +271,7 @@ fn a_step_ended_by_a_signal_its_supervisor_ignores_exits_as_a_shell_reports_it()
+     let fixture = Fixture::new("signalled");
+     fixture.write(
+         "dandegate.toml",
+-        "[[step]]\nname = \"piped\"\nruns = \"once\"\nrun = [\"sh\", \"-c\", \"kill -PIPE $$\"]\n",
++        "[[steps.step]]\nname = \"piped\"\nruns = \"once\"\nrun = [\"sh\", \"-c\", \"kill -PIPE $$\"]\n",
+     );
+     let only = fixture.commit("only");
+ 
+@@ -300,7 +300,7 @@ fn two_reports_on_one_repository_each_in_its_own_pid_namespace_keep_their_own_ch
+     fixture.write(
+         "dandegate.toml",
+         r#"
+-[[step]]
++[[steps.step]]
+ name = "held"
+ runs = "once"
+ run = ["sh", "{adapters}/held.sh", "{after}", "{out}"]
+@@ -350,7 +350,7 @@ fn stopping_dandegate_stops_every_step_it_started() {
+     fixture.write("dandegate/holds.sh", HOLDS);
+     fixture.write(
+         "dandegate.toml",
+-        "[[step]]\nname = \"holds\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/holds.sh\"]\n",
++        "[[steps.step]]\nname = \"holds\"\nruns = \"once\"\nrun = [\"sh\", \"{adapters}/holds.sh\"]\n",
+     );
+     let only = fixture.commit("only");
+     // The step's supervisor becomes this process's child when dandegate ends, so this test can wait for it.
+diff --git a/tools/crates/dandegate/tests/scenarios/selection.rs b/tools/crates/dandegate/tests/scenarios/selection.rs
+index 8b7722d4..2c8acbbb 100644
+--- a/tools/crates/dandegate/tests/scenarios/selection.rs
++++ b/tools/crates/dandegate/tests/scenarios/selection.rs
+@@ -10,7 +10,7 @@ pub(crate) fn step(name: &str, runs: &str, extra: &str) -> String {
+         ("{tree}", "{commit}")
+     };
+     format!(
+-        "[[step]]\nname = \"{name}\"\nruns = \"{runs}\"\nrun = [\"sh\", \"{{adapters}}/step.sh\", \"{name}\", \"{tree}\", \
++        "[[steps.step]]\nname = \"{name}\"\nruns = \"{runs}\"\nrun = [\"sh\", \"{{adapters}}/step.sh\", \"{name}\", \"{tree}\", \
+          \"{commit}\", \"{{out}}\"]\n{extra}\n"
+     )
+ }

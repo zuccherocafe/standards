@@ -1,0 +1,15 @@
+{
+  "defects": [
+    {
+      "name": "the notice puts a workspace folder's name into a TOML string as written, so a name holding a quote or a backslash gives advice that is not valid TOML or names another folder",
+      "kind": "correctness",
+      "locations": [
+        {
+          "file": "tools/crates/dandegate/src/plan.rs",
+          "start": 289,
+          "end": 298
+        }
+      ]
+    }
+  ]
+}

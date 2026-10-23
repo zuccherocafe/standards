@@ -1,0 +1,9 @@
+design-read: check a design read's shape and what it carries forward
+
+A design read records where an area's models disagree before a phase starts. Each read has the same shape, so a command can check it, and each names the read before it, so a disagreement cannot drop out of the series unnoticed.
+
+`design-read check <file>` reads the four header fields, the "After the last phase" section and the disagreements table, and leaves every other section as prose. It refuses a missing, repeated or empty field, a revision that is not a full commit id, a previous read that cannot be read, a table with the wrong columns, an empty cell, a repeated or unqualified ID, and an unknown status. Against the previous read's table, an ID is new exactly when that read lacks it, and every ID it left new, open or parked appears again. Each refusal names the file, line and field and exits 1; a malformed command line or an unreadable read exits 2.
+
+The tool does not validate the previous read or follow its own Previous link, and it reads no code a read names: whether the sites are right and whether the read looked at enough stay with its writer and reviewer.
+
+templates/DESIGN-READ.md is the shape to copy. The flake exports the tool and puts it on its shell, and the project flake template puts it on project shells. The skill that says when a read is due and who runs the check is a separate change.
