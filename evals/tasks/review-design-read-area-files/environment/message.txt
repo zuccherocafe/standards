@@ -1,7 +1,0 @@
-design-read: check a living area file's shape
-
-A project now keeps one design read per area under docs/design-reads/, corrected in place as changes land, so there is no previous read to compare with. Drop the chain: the Previous field, the after-phase note, the carry-forward check, row IDs, statuses and the status summary, with the fixtures and scenarios that existed only for them.
-
-An area file's header is exactly Area, Last full read (a full commit id, 40 lowercase hexadecimal digits) and Inspected, each given once and non-empty. Its Disagreements section holds one table with exactly the five columns Concept, Owner, Sites, Consequence and Done when, in that order, its delimiter row, and rows whose every cell is non-empty; or, in place of the table, the sentence None found. Briefs and prose cite a row by its Concept, so a Concept repeated in one file, compared after trimming and ignoring case, is refused.
-
-check takes any number of files and, given none, checks every *.md directly in docs/design-reads/ except the README, refusing a folder it cannot list as a usage fault. Each file prints its own result; the run exits 1 when any is refused and 2 for any usage fault.

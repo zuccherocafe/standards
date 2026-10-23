@@ -1,5 +1,0 @@
-dandegate: read a Unicode escape with underscores as a character
-
-The lines report reads a character literal's `\u{…}` escape as hex digits only, so `'\u{7_d}'`, which Rust accepts, was read as a lifetime's quote and the brace inside it counted as code, ending a test item early.
-The Rust reference's grammar is `\u{ ( HEX_DIGIT _* )1..6 }`: a digit first, then any mix of digits and underscores, so trailing and repeated underscores are allowed and a leading one is not, as rustc confirms.
-The escape now takes a hex digit first and then digits and underscores. The one-to-six digit count is still not checked, since an overlong escape is not valid Rust and no compiled crate holds one.

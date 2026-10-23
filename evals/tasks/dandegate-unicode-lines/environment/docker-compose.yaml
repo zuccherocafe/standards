@@ -1,6 +1,0 @@
-# The image builds from evals/, so it takes the agent's installation from evals/pi/, which every task shares.
-services:
-  main:
-    build:
-      context: ../../..
-      dockerfile: tasks/dandegate-unicode-lines/environment/Dockerfile

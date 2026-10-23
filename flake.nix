@@ -7,15 +7,6 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    pyproject-nix = {
-      url = "github:pyproject-nix/pyproject.nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    uv2nix = {
-      url = "github:pyproject-nix/uv2nix";
-      inputs.pyproject-nix.follows = "pyproject-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
@@ -23,8 +14,6 @@
       self,
       nixpkgs,
       rust-overlay,
-      pyproject-nix,
-      uv2nix,
     }:
     let
       system = "x86_64-linux";
@@ -82,48 +71,6 @@
       pinAge = workspaceTool "pin-age";
 
       designRead = workspaceTool "design-read";
-
-      # Harbor runs the evals. evals/uv.lock pins it and everything it imports, each as a wheel for this system, so
-      # nothing builds from source and nothing installs at run time. Only Harbor's own commands reach the shell.
-      evals = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./evals; };
-      evalsPython =
-        (pkgs.callPackage pyproject-nix.build.packages { python = pkgs.python314; }).overrideScope
-          (
-            pkgs.lib.composeExtensions (evals.mkPyprojectOverlay { sourcePreference = "wheel"; }) (
-              final: prev: {
-                harbor = prev.harbor.overrideAttrs {
-                  # Harbor's only executable scripts run inside containers, which have /bin/sh and no Nix store.
-                  dontPatchShebangs = true;
-                  # Each patch's first line says why. A wheel installs unpatched, so the installed modules are patched
-                  # and their bytecode compiled again, since Python would load the wheel's without checking it against
-                  # the source. A Harbor whose modules no longer take a patch exactly fails the build.
-                  postInstall = ''
-                    site="$out/${final.python.sitePackages}"
-                    patch --directory "$site" --strip 1 --forward --fuzz 0 < ${./evals/harbor/pi-installed.patch}
-                    patch --directory "$site" --strip 1 --forward --fuzz 0 < ${./evals/harbor/analyze-task-config.patch}
-                    patch --directory "$site" --strip 1 --forward --fuzz 0 < ${./evals/harbor/egress-sidecar.patch}
-                    ${final.python.interpreter} -m compileall -q -f "$site/harbor/agents/installed/pi.py" \
-                      "$site/harbor/analyze/analyzer.py" "$site/harbor/cli/analyze.py"
-                  '';
-                };
-              }
-            )
-          );
-      harborApplication = (pkgs.callPackages pyproject-nix.build.util { }).mkApplication {
-        venv = evalsPython.mkVirtualEnv "evals" evals.deps.default;
-        package = evalsPython.harbor;
-      };
-      # Harbor's own container calls resolve short image names through evals/registries.conf alone, in place of the
-      # host's registries settings, which the rest of the shell and the host keep. Podman's compose otherwise starts
-      # each command's output with a banner, which Harbor's agents read as the first line of a version.
-      harbor =
-        pkgs.runCommand "harbor-${evalsPython.harbor.version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; }
-          ''
-            for program in ${harborApplication}/bin/*; do
-              makeWrapper "$program" "$out/bin/''${program##*/}" --set CONTAINERS_REGISTRIES_CONF ${./evals/registries.conf} \
-                --set PODMAN_COMPOSE_WARNING_LOGS false
-            done
-          '';
 
       crate =
         {
@@ -238,7 +185,7 @@
         pin-age = pinAge;
         design-read = designRead;
         nix-lint = nixLint;
-        inherit dandegate harbor;
+        inherit dandegate;
       };
 
       checks.${system}.nix-lint = pkgs.runCommand "nix-lint" { } ''
@@ -261,13 +208,8 @@
           pinAge
           designRead
           nixLint
-          harbor
-          # Reads Harbor's and pi's records for the evals' accounting.
-          pkgs.jq
           pkgs.jujutsu
         ];
-        # Harbor otherwise reports each command and job to its developers.
-        env.HARBOR_TELEMETRY = "off";
       };
     };
 }

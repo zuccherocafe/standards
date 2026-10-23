@@ -1,7 +1,0 @@
-# The image builds from evals/, so it takes the agent's installation from evals/pi/ and the scorer from
-# evals/findings/, which every task shares.
-services:
-  main:
-    build:
-      context: ../../..
-      dockerfile: tasks/review-dandegate-report-names/environment/Dockerfile
