@@ -92,7 +92,8 @@ fn raw_string_end(text: &str, start: usize) -> Option<usize> {
 }
 
 /// Where a character literal `'x'`, `'\n'`, `'\x41'` or `'\u{1F600}'` (or `b'…'`) starting at `start` ends. None
-/// for a lifetime's quote.
+/// for a lifetime's quote. This recognises literal boundaries, not validity. It does not check the Unicode digit limit
+/// or scalar value.
 fn character_end(text: &str, start: usize) -> Option<usize> {
     let rest = text[start..].strip_prefix('b').unwrap_or(&text[start..]);
     let inside = rest.strip_prefix('\'')?;
@@ -103,14 +104,14 @@ fn character_end(text: &str, start: usize) -> Option<usize> {
                 .filter(|digits| digits.bytes().all(|byte| byte.is_ascii_hexdigit()))?;
             &hex[digits.len()..]
         } else if let Some(unicode) = escaped.strip_prefix("u{") {
-            let digits = unicode.len()
-                - unicode
-                    .trim_start_matches(|character: char| character.is_ascii_hexdigit())
-                    .len();
-            if digits == 0 {
+            if !unicode.starts_with(|character: char| character.is_ascii_hexdigit()) {
                 return None;
             }
-            unicode[digits..].strip_prefix('}')?
+            unicode
+                .trim_start_matches(|character: char| {
+                    character.is_ascii_hexdigit() || character == '_'
+                })
+                .strip_prefix('}')?
         } else {
             let character = escaped.chars().next()?;
             &escaped[character.len_utf8()..]
@@ -411,6 +412,27 @@ mod tests {
             (" é x<'a> {}\n", false),
         ]);
         assert_eq!(code_only(&text), left);
+    }
+
+    #[test]
+    fn a_unicode_escape_with_underscores_after_its_first_digit_is_a_character_literal() {
+        for escape in [
+            "'\\u{7_d}'",
+            "'\\u{7d_}'",
+            "'\\u{7__d}'",
+            "'\\u{7_d__}'",
+            "'\\u{1_0_F_6_0_0}'",
+        ] {
+            let (text, left) = spans(&[("x ", false), (escape, true), (" {}", false)]);
+            assert_eq!(code_only(&text), left, "{escape}");
+        }
+    }
+
+    #[test]
+    fn a_unicode_escape_starting_with_an_underscore_is_not_a_character_literal() {
+        for escape in ["'\\u{_7d}'", "'\\u{__}'", "'\\u{}'"] {
+            assert_eq!(character_end(escape, 0), None, "{escape}");
+        }
     }
 
     #[test]
