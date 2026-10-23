@@ -1,4 +1,5 @@
 # The free checks: the nop agent and the reference solution on every task, one trial at a time. Neither calls a model.
+# Layer configs/treatment.yaml after this file for the treatment.
 jobs_dir: ../.cache/evals/jobs
 n_attempts: 1
 n_concurrent_trials: 1
@@ -6,10 +7,16 @@ retry:
   max_retries: 0
 environment:
   type: podman
+# Each task is its own source, so Harbor reports the mean of every reward.json field for each task and agent.
+metrics:
+  - type: mean
 tasks:
   - path: tasks/dandegate-literal-paths
+    source: dandegate-literal-paths
   - path: tasks/design-read-fenced-code
+    source: design-read-fenced-code
   - path: tasks/dandegate-unicode-lines
+    source: dandegate-unicode-lines
 agents:
   - name: nop
   - name: oracle

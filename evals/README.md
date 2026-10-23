@@ -12,13 +12,15 @@ They cannot show whether the standards improve code in general, or which rule he
 
 The development shell builds Harbor from [`pyproject.toml`](pyproject.toml) and `uv.lock` and provides jq. Before any run, `harbor --version` must print `0.24.0` and `jq --version` must print `jq-1.8.2`. The shell turns Harbor's usage telemetry off.
 
-The shell's Harbor is patched, and every task image holds Node and pi, so a trial's setup installs nothing and needs no network; [the design read](../docs/design-reads/evals.md#models-in-play) explains the packaging, the registries file and the installation. To move pi, change its version in [`pi/package.json`](pi/package.json) and `configs/pi.yaml` in one commit, and write [`pi/package-lock.json`](pi/package-lock.json) again in `pi/` with `npm install --package-lock-only --ignore-scripts` under the Node that [`pi/install.sh`](pi/install.sh) names.
+The shell's Harbor is patched, and every task image holds Node and pi, so a trial's setup installs nothing and needs no network; [the design read](../docs/design-reads/evals.md#models-in-play) explains the packaging, the registries file and the installation. To move pi, change its version in [`pi/package.json`](pi/package.json) and in the agents of the experiment that will run it in one commit, and write [`pi/package-lock.json`](pi/package-lock.json) again in `pi/` with `npm install --package-lock-only --ignore-scripts` under the Node that [`pi/install.sh`](pi/install.sh) names.
 
 Harbor writes `~/.cache/harbor/notifications.json` on its first run. This departs from [Development state stays in the repository](../rules/general.md#toolchain): Harbor builds the path from the home folder with no setting to move it, and the file only records which of Harbor's own notices it has shown, with no project data, so patching Harbor to move it would cost more than the file.
 
 ## Running
 
 Run every command below from this folder; each job's records go under `.cache/evals/jobs/` at the repository root.
+
+An experiment is one committed job configuration in [`experiments/`](experiments/), such as [`experiments/pilot.yaml`](experiments/pilot.yaml), that names every model as an agent entry, the attempts and how many trials run at once. A round runs it once per condition, as one job each: the control runs the file alone, and the treatment layers [`configs/treatment.yaml`](configs/treatment.yaml) after it, so the two jobs differ only in the treatment's mounts; [the design read](../docs/design-reads/evals.md#models-in-play) says why the conditions are two jobs rather than two agent entries in one. Each task names itself as its `source`, so Harbor's job result gives the pass rate for each task and model, as Results says.
 
 Prepare the treatment's bundle once for the revision [`configs/treatment.yaml`](configs/treatment.yaml) names:
 
@@ -50,14 +52,14 @@ The free checks, which call no model, run the nop agent and the reference soluti
 )
 ```
 
-A paid run uses [`configs/pi.yaml`](configs/pi.yaml): pi 1.4.0 through OpenRouter, reasoning `high`, at most 80 model turns, one trial at a time and no automatic trial retry. pi's own settings, [`configs/pi-settings.json`](configs/pi-settings.json), turn its compaction and cache warming off, so a trial that fills the model's context ends there, and keep its own retry of a failed request: one initial attempt plus up to three retries, with exponential backoff. Before a paid run starts:
+A paid run uses an experiment: in the pilot, pi 1.4.0 through OpenRouter with two models, reasoning `high`, at most 80 model turns, five attempts at every task, three trials at a time and no automatic trial retry. pi's own settings, [`configs/pi-settings.json`](configs/pi-settings.json), turn its compaction and cache warming off, so a trial that fills the model's context ends there, and keep its own retry of a failed request: one initial attempt plus up to three retries, with exponential backoff. Before a paid run starts:
 
 1. Check how its tokens and costs will be reported. The maintainer has approved, for the smoke run and the pilot, the reduced reporting that the recipe under Results gives, reconciled with the key's spend after the run as the last step below says. A later run has its reporting approved with its estimate. For a model pi calls in Anthropic's Messages format, that reporting is the reconciliation alone, as Results says.
 2. Estimate each condition's cost separately: for each task, the input the agent re-sends every turn (the system prompt, the instruction and everything it has read so far) summed over the expected turns, and the expected output and reasoning, at cold-cache prices from a dated price list. Write the expected cost and the ceiling as separate numbers. OpenRouter can price a model by the time of day, so take the prices from its live model list (`GET https://openrouter.ai/api/v1/models`) with each model's `pricing.overrides`, which give other prices for some UTC days between `utc_start` and `utc_end`, and keep that list with the estimate. On 2026-10-23 every price of `deepseek/deepseek-v4.1-flash-1017` doubled on weekdays from 01:00 to 04:00 and from 06:00 to 10:00 UTC, so an estimate for a run that may reach those hours uses the doubled prices.
 3. Have the maintainer approve the estimate, the number of trials, and the spending ceiling, and set that ceiling on a key used for nothing else, at the provider.
-4. Check the model in `configs/pi.yaml`, a dated OpenRouter ID after `openrouter/`. Harbor's `-m` leaves a configured agent's model as it is, so a comparison with another model changes that line in a commit of its own, and both conditions run from it.
+4. Check each agent's model in the experiment, a dated OpenRouter ID after `openrouter/`. Harbor's `-m` leaves a configured agent's model as it is, so a round with other models, attempts or concurrency is a new experiment in a commit of its own, and both conditions run from it.
 
-With `api=https://openrouter.ai/api/v1`, these commands record what the key has been charged so far, from OpenRouter's key endpoint, whose `usage` is the key's total charge in US dollars, and then run both jobs. They stop before any job when that reading cannot be taken or saved, and after a job in which any trial errored, was cancelled or did not finish:
+With `round` set to the experiment's name and `api=https://openrouter.ai/api/v1`, these commands record what the key has been charged so far, from OpenRouter's key endpoint, whose `usage` is the key's total charge in US dollars, and then run both jobs. They stop before any job when that reading cannot be taken or saved, and after a job in which any trial errored, was cancelled or did not finish:
 
 ```sh
 export OPENROUTER_API_KEY=...   # the dedicated key
@@ -75,15 +77,15 @@ export OPENROUTER_API_KEY=...   # the dedicated key
   }
   mkdir -p ../.cache/evals/jobs
   curl -fsS -H "Authorization: Bearer $OPENROUTER_API_KEY" "$api/key" | jq -e '.data.usage | numbers' \
-    > ../.cache/evals/jobs/<name>-key-usage-before
-  harbor run -c configs/pi.yaml -k <attempts> --job-name <name>-control
-  finished <name>-control
-  harbor run -c configs/pi.yaml -c configs/treatment.yaml -k <attempts> --job-name <name>-treatment
-  finished <name>-treatment
+    > "../.cache/evals/jobs/$round-key-usage-before"
+  harbor run -c "experiments/$round.yaml" --job-name "$round-control" -y
+  finished "$round-control"
+  harbor run -c "experiments/$round.yaml" -c configs/treatment.yaml --job-name "$round-treatment" -y
+  finished "$round-treatment"
 )
 ```
 
-Stop dispatching further jobs after any authentication, setup, verifier or accounting failure, and explain it before running again. For a comparison of several attempts, alternate the conditions in an order written down before the first job, and keep every outcome.
+Stop dispatching further jobs after any authentication, setup, verifier or accounting failure, and explain it before running again. Write down which condition runs first before the first job starts, and keep every outcome.
 
 After the run, once every trial has its rows (see Results), reconcile the rows with the key's spend. These commands stop, naming the trial, when a trial has no `charges.jsonl`, and otherwise print what the key was charged during the run, the sum of the recorded charges, and the difference:
 
@@ -91,9 +93,9 @@ After the run, once every trial has its rows (see Results), reconcile the rows w
 (
   set -euo pipefail
   stop() { echo "reconciliation: $*" >&2; exit 1; }
-  trials=(../.cache/evals/jobs/<name>-control/*/ ../.cache/evals/jobs/<name>-treatment/*/)
+  trials=("../.cache/evals/jobs/$round-control"/*/ "../.cache/evals/jobs/$round-treatment"/*/)
   for trial in "${trials[@]}"; do [ -e "$trial/charges.jsonl" ] || stop "$trial has no charges.jsonl"; done
-  before=$(cat ../.cache/evals/jobs/<name>-key-usage-before)
+  before=$(cat "../.cache/evals/jobs/$round-key-usage-before")
   after=$(curl -fsS -H "Authorization: Bearer $OPENROUTER_API_KEY" "$api/key" | jq -e '.data.usage | numbers')
   for trial in "${trials[@]}"; do cat "$trial/charges.jsonl"; done \
     | jq -s --argjson before "$before" --argjson after "$after" \
@@ -109,6 +111,10 @@ Report the difference beside the run's totals. For a model pi calls in Anthropic
 Each trial's folder holds `result.json` (the score, the stages and any exception), `verifier/reward.json`, `artifacts/var/tmp/model.patch` (the agent's change), `artifacts/var/tmp/agent-identity.txt` (the Node, npm and pi versions the image holds, the digest of pi's lockfile and pi's installed tree), `agent/pi/sessions/*.jsonl` (pi's record of the session) and `agent/trajectory.json`. The job's `config.json` and `lock.json` record what ran.
 
 A trial's outcome category comes from `reward.json`'s stages: the agent left no change record, the change does not apply, the hidden test target is not the crate's own, the change does not build, the existing tests fail, the hidden tests fail, time out or do not run, or it passed. A trial with an exception and no `reward.json` failed in the infrastructure, not at the task, unless the exception is the agent's own deadline.
+
+Harbor computes the pass rates. A job's `result.json` holds, under `stats.evals`, one entry for each agent, model and task, named `<agent>__<model>__<task>`, whose `metrics` give the mean over its trials of every field of `reward.json`: `reward`'s mean is the pass rate, and each positive stage's mean is its success share. `timed_out` is the share of trials whose verifier commands timed out. Beside them are `n_trials`, `n_errors` and, under `reward_stats`, the trials behind each value. A condition is its job, so a round's two jobs give the pass rate for every task, model and condition. Harbor counts a trial with no reward as 0 in the mean, so read a job's rates only once the result check after it has passed.
+
+`harbor view ../.cache/evals/jobs` serves Harbor's viewer of every job in that folder on 127.0.0.1, at the first free port from 8080 to 8089: each job's results, and each trial's trajectory, verifier output and records. Use it to browse a round; the figures a report gives come from the records themselves.
 
 For each request pi recorded, the tokens and the charge come from OpenRouter's generation record, looked up by the response id pi stored, while the key still works; the design read defines each field. With `trial` set to a trial's folder and `api=https://openrouter.ai/api/v1`, these commands stop, naming the file and printing no totals, when the session files are missing, unreadable or not JSON, or when a row cannot be written. Otherwise they keep every record in `$trial/generations/`, write one row per recorded request to `$trial/charges.jsonl`, with the queried id and each field as OpenRouter gave it, `null` where it gave null and `"absent"` where it gave nothing, and print the trial's totals with how many rows did not report each field:
 
@@ -223,7 +229,7 @@ The shell's Harbor carries two patches for reviews. [`harbor/analyze-task-config
 
 ### Running a review
 
-With `name` set to the review's name and `trials` to the trial folders to review, these commands build the reviewer's image, make the packets, run the review on the host's login three analyses at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
+With `name` set to the review's name and `trials` to the trial folders to review, for a round every trial of both its jobs so that one review covers the round, these commands build the reviewer's image, make the packets, run the review on the host's login three analyses at a time, scan what it wrote, and print each trial's verdicts with the evaluator's agreement with itself. `review.sh` exits 1 when any analysis failed, after recording each failed attempt as an error, and when the scan finds the login or cannot read something:
 
 ```sh
 (
@@ -236,7 +242,7 @@ With `name` set to the review's name and `trials` to the trial folders to review
 
 ## Container backends
 
-The tasks run on Harbor's `podman` backend, which [`configs/free.yaml`](configs/free.yaml) and `configs/pi.yaml` select. It needs, on the host:
+The tasks run on Harbor's `podman` backend, which [`configs/free.yaml`](configs/free.yaml) and every experiment select. It needs, on the host:
 
 - Podman with a Compose frontend behind `podman compose`, which needs the Podman API socket (`systemctl --user enable --now podman.socket`).
 - nftables with `nft_fib` inside a rootless container, for the tasks' allowlist and the verifier's closed network.
@@ -261,7 +267,7 @@ A finding qualifies when its code is public, its defect shows on valid input a p
 Before a task takes part in a paid run:
 
 - Its image builds, its starting tree's tree id matches, and the crate's existing tests pass offline in it, apart from the tests `tests/test.sh` lists with their reason.
-- In both conditions, the nop agent scores 0 by failing a hidden test's assertion, not by failing to build, and the reference solution scores 1.
+- In both conditions, the nop agent scores 0 by failing a hidden test's assertion or, for `dandegate-unicode-lines`, by reaching the hidden tests' timeout, never by failing to build, and the reference solution scores 1.
 - Each patch in `shortcuts/` scores 0. To check one, build the image and run the verifier on the patch as Harbor's separate verifier would:
 
   ```sh
@@ -271,5 +277,5 @@ Before a task takes part in a paid run:
     -v "$PWD/../.cache/evals/change:/var/tmp:ro" evals-<task> bash /tests/test.sh
   ```
 
-- `harbor run -c configs/pi.yaml --dry-run` refuses for the missing key and nothing else, and passes with a placeholder in `OPENROUTER_API_KEY`, in both conditions.
+- `harbor run -c experiments/<round>.yaml --dry-run` refuses for the missing key and nothing else, and passes with a placeholder in `OPENROUTER_API_KEY`, in both conditions.
 - pi starts from the image's installation, with Harbor's agent installing nothing, in the task's container in both conditions with the task's `AGENTS.md` in its system prompt and compaction off, and in the treatment also the treatment's `AGENTS.md` and the standards' skills, with every relative link in the bundle resolving except those into `tools/`. Nothing in this folder runs that check yet: it needs a stand-in model endpoint that records what pi would send.
