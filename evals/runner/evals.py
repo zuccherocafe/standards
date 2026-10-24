@@ -1083,28 +1083,28 @@ def save_report_files(
     json_path = dest_dir / "summary.json"
     md_path.write_text(render_markdown_report(summaries, inventory, meta), encoding="utf-8")
 
+    attempts: dict[tuple[str, str], list[dict[str, object]]] = {}
     for summary in summaries:
         cond_label = format_condition_label(summary.condition)
+        attempts.setdefault((cond_label, summary.task), []).append(
+            {
+                "reward": summary.reward,
+                "functional": summary.functional_score,
+                "adherence": summary.adherence_score,
+                "turns": summary.turns,
+                "cost_usd": summary.cost_usd,
+                "standards_files_read": list(summary.standards_files_read),
+                "skills_read": list(summary.skills_read),
+                "rules": summary.rule_outcomes,
+                "review": _review_json(summary.review),
+            }
+        )
+    tracks = {summary.task: str(summary.track) for summary in summaries}
+    for (cond_label, task), records in attempts.items():
         cond_dir = dest_dir / cond_label
         cond_dir.mkdir(parents=True, exist_ok=True)
-        task_record = {
-            "task": summary.task,
-            "track": str(summary.track),
-            "condition": cond_label,
-            "reward": summary.reward,
-            "functional": summary.functional_score,
-            "adherence": summary.adherence_score,
-            "turns": summary.turns,
-            "cost_usd": summary.cost_usd,
-            "standards_files_read": list(summary.standards_files_read),
-            "skills_read": list(summary.skills_read),
-            "rules": summary.rule_outcomes,
-            "review": _review_json(summary.review),
-        }
-        (cond_dir / f"{summary.task}.json").write_text(
-            json.dumps(task_record, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        task_record = {"task": task, "track": tracks[task], "condition": cond_label, "attempts": records}
+        (cond_dir / f"{task}.json").write_text(json.dumps(task_record, indent=2) + "\n", encoding="utf-8")
 
     payload = {
         "metadata": {
@@ -1141,6 +1141,16 @@ def save_report_files(
     return md_path, json_path
 
 
+def save_results(
+    run_folder: Path, summaries: list[TrialSummary], inventory: StandardsInventory, meta: RunMetadata
+) -> Path:
+    """Replace the saved results in `run_folder` with this run's, so no file from an earlier run is left beside them."""
+    if run_folder.exists():
+        shutil.rmtree(run_folder)
+    saved_md, _ = save_report_files(run_folder, summaries, inventory, meta)
+    return saved_md
+
+
 def _review_json(review: ReviewOutcome | None) -> dict[str, object] | None:
     if review is None:
         return None
@@ -1152,10 +1162,24 @@ def _review_json(review: ReviewOutcome | None) -> dict[str, object] | None:
     }
 
 
+def results_name(text: str) -> str:
+    """Parse `--save`: one folder name under `evals/results/`, or empty for the run's date."""
+    name = text.strip()
+    if name in {".", ".."} or "/" in name or "\\" in name:
+        raise argparse.ArgumentTypeError(f"--save takes one folder name, not {text!r}")
+    return name
+
+
 def resolve_results_run_dir(results_root: Path, meta: RunMetadata, custom_name: str | None) -> Path:
-    """Resolve `evals/results/<name>/` (or `evals/results/<date>/` when unnamed) for a saved benchmark run."""
+    """Resolve `evals/results/<name>/` (or `evals/results/<date>/` when unnamed) for a saved benchmark run.
+
+    The folder is replaced when a run is saved, so it must lie directly inside a results root that is no link.
+    """
     folder_name = custom_name.strip() if custom_name and custom_name.strip() else meta.date_utc[:10]
-    return results_root / folder_name
+    run_dir = results_root / folder_name
+    if results_root.is_symlink() or run_dir.resolve().parent != results_root.resolve():
+        raise ValueError(f"--save: {folder_name!r} is not a folder directly inside {results_root}")
+    return run_dir
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1189,6 +1213,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_p.add_argument(
         "--save",
+        type=results_name,
         help="Also save the Markdown and JSON benchmark report to evals/results/<name>.{md,json}.",
     )
 
@@ -1198,6 +1223,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     rep_p.add_argument(
         "--save",
+        type=results_name,
         help="Save the Markdown and JSON benchmark report to evals/results/<name>.{md,json}.",
     )
     return parser
@@ -1294,7 +1320,7 @@ def main(argv: list[str] | None = None) -> int:
                         meta,
                         str(args.save) or None,
                     )
-                    saved_md, _ = save_report_files(run_folder, summaries, inventory, meta)
+                    saved_md = save_results(run_folder, summaries, inventory, meta)
                     print(f"Saved permanent report to {saved_md}")
             return 0
 
@@ -1326,7 +1352,7 @@ def main(argv: list[str] | None = None) -> int:
                         meta,
                         str(args.save) or None,
                     )
-                    saved_md, _ = save_report_files(run_folder, summaries, inventory, meta)
+                    saved_md = save_results(run_folder, summaries, inventory, meta)
                     print(f"Saved permanent report to {saved_md}")
             return 0
 

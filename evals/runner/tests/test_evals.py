@@ -6,6 +6,7 @@ test removes.
 
 from __future__ import annotations
 
+import argparse
 import json
 import tempfile
 import unittest
@@ -33,7 +34,10 @@ from evals import (
     pool_review_outcomes,
     render_markdown_report,
     render_report,
+    resolve_results_run_dir,
     resolve_run_metadata,
+    results_name,
+    save_results,
     stage_condition_dataset,
 )
 
@@ -262,6 +266,63 @@ class TestEvals(unittest.TestCase):
             md_report = render_markdown_report(summaries, inventory, meta)
             self.assertIn("Agent-skills commit: `aeac41d4d005999432bb7312f7ff06383a91d59d`", md_report)
             self.assertIn("100.0%", md_report)
+
+    def test_saved_results_keep_every_attempt_and_replace_an_earlier_run(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        inventory = discover_standards(repo_root)
+
+        def attempt(reward: float) -> TrialSummary:
+            return TrialSummary(
+                task="sample-write",
+                track=Track.WRITE,
+                condition=Condition.NONE,
+                reward=reward,
+                functional_score=reward,
+                adherence_score=0.0,
+                turns=10,
+                cost_usd=0.01,
+                standards_files_read=(),
+                skills_read=(),
+                rule_outcomes={},
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_folder = Path(tmp) / "run"
+            (run_folder / "none").mkdir(parents=True)
+            (run_folder / "none" / "earlier-task.json").write_text("{}", encoding="utf-8")
+            meta = resolve_run_metadata(repo_root, title="test-run")
+            save_results(run_folder, [attempt(0.0), attempt(0.5), attempt(1.0)], inventory, meta)
+            saved = json.loads((run_folder / "none" / "sample-write.json").read_text(encoding="utf-8"))
+            self.assertEqual([record["reward"] for record in saved["attempts"]], [0.0, 0.5, 1.0])
+            self.assertFalse((run_folder / "none" / "earlier-task.json").exists())
+            payload = json.loads((run_folder / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual([trial["reward"] for trial in payload["trials"]], [0.0, 0.5, 1.0])
+            markdown = (run_folder / "README.md").read_text(encoding="utf-8")
+            self.assertIn("| `none` | 0.50 | 0.00 | 0.50 | - | 10.0 | $0.03 |", markdown)
+            self.assertIn("| `sample-write` | write | 0.50 | - | - | - |", markdown)
+
+    def test_a_saved_run_name_cannot_reach_outside_the_results_folder(self) -> None:
+        for text in ("..", ".", "/tmp/jobs", "../../.cache/evals/jobs", "a/b"):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                results_name(text)
+        self.assertEqual(results_name(" gpt-6.1-sol "), "gpt-6.1-sol")
+        repo_root = Path(__file__).resolve().parents[3]
+        meta = resolve_run_metadata(repo_root, title="test-run")
+        with tempfile.TemporaryDirectory() as tmp:
+            results_root = Path(tmp) / "results"
+            results_root.mkdir()
+            jobs = Path(tmp) / "jobs"
+            jobs.mkdir()
+            (jobs / "sentinel").write_text("kept", encoding="utf-8")
+            (results_root / "jobs-link").symlink_to(jobs)
+            with self.assertRaises(ValueError):
+                resolve_results_run_dir(results_root, meta, "jobs-link")
+            self.assertEqual(resolve_results_run_dir(results_root, meta, "run"), results_root / "run")
+            linked_root = Path(tmp) / "linked-results"
+            linked_root.symlink_to(results_root)
+            with self.assertRaises(ValueError):
+                resolve_results_run_dir(linked_root, meta, "run")
+            self.assertTrue((jobs / "sentinel").exists())
 
     def test_review_report_splits_recall_by_group(self) -> None:
         def trial(condition: Condition, found: tuple[bool, bool, bool], false_positives: int) -> TrialSummary:
