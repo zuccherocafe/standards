@@ -18,4 +18,4 @@ A project's `AGENTS.md` links to these standards and lists any departure from th
 
 ## Licence
 
-Everything here is under the [MIT licence](LICENSE). The skills copied from pstack keep their own MIT notice ([`skills/README.md`](skills/README.md)).
+Everything here is under the [MIT licence](LICENSE).

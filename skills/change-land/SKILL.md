@@ -45,7 +45,7 @@ Compare the change's base with the current `main`.
 
 ## Write the report
 
-Write a short report that follows the technical-writing and unslop skills. Include these items:
+Write a short report that follows [Writing](../../rules/general.md#writing). Include these items:
 
 - The new `main` revision.
 - The narrow check's items with their results, and each decline with whether it stands.

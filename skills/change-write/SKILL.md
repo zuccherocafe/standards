@@ -49,7 +49,7 @@ Write the evidence the brief's "Evidence" section picks into the folder it names
 
 ## Review your own change
 
-Before reporting, read the whole change as its reviewer will: the full diff from the base and the tree of every folder it adds or changes. Answer `review.md`'s questions and check the language standard's rules for each file, including [module layout](../../rules/languages/rust/design.md#modules), test placement, and naming. Fix everything you find in the change's own lines, with the checks passing again. In the report, list what you found and fixed this way.
+Before reporting, read the whole change as its reviewer will: the full diff from the base and the tree of every folder it adds or changes. Answer `review.md`'s questions and check the language standard's rules for each file, including [module layout](../../rules/languages/rust/design.md#modules), [Scenarios first](../../rules/languages/rust/tests.md#scenarios-first) (`tests/scenarios.rs`), [A test can fail when the code is wrong](../../rules/general.md#checks), test placement, and naming. Fix everything you find in the change's own lines, with the checks passing again. In the report, list what you found and fixed this way.
 
 ## Fix a review's findings
 
@@ -63,7 +63,7 @@ When asked to resume work on review findings, work only on those findings. Fix e
 
 ## Write the report
 
-End with a short report following the technical-writing and unslop skills, with the answer first. Include the following information:
+End with a short report following [Writing](../../rules/general.md#writing), with the answer first. Include the following information:
 
 - The commits, each with one line on what it changes.
 - The full checks' result and time at the tip, and the evidence paths.

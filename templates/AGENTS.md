@@ -22,7 +22,6 @@ The [standards skills](https://github.com/zuccherocafe/standards/tree/main/skill
 - To write a change from a brief: [change-write](https://github.com/zuccherocafe/standards/blob/main/skills/change-write/SKILL.md).
 - To review a change: [change-review](https://github.com/zuccherocafe/standards/blob/main/skills/change-review/SKILL.md).
 - To check fixes and land a change: [change-land](https://github.com/zuccherocafe/standards/blob/main/skills/change-land/SKILL.md).
-- To write or edit prose, a commit message, or a report: [technical-writing](https://github.com/zuccherocafe/standards/blob/main/skills/technical-writing/SKILL.md) and [unslop](https://github.com/zuccherocafe/standards/blob/main/skills/unslop/SKILL.md).
 
 The skills' quick and full checks refer to commands in this file's Checks section. This file's house rules apply to every role, including resource limits and prohibitions on running or modifying specified things.
 

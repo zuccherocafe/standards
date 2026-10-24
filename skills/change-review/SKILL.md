@@ -20,12 +20,13 @@ You are the one independent reviewer of a change you did not write. Review it ag
 Answer every question in [`review.md`](../../rules/review.md), starting with its `First` section. A pass needs no prose. Focus on what a check run cannot show:
 
 - **An undetected fault.** Look for wrongly accepted inputs, untested promises, and values that can become non-finite.
+- **A tautological or non-failing test.** Read test bodies even when they pass. Check whether a test computes its expected value by calling the code under test or repeats its logic ([A test can fail when the code is wrong](../../rules/general.md#checks)).
 - **An unlisted change.** Look for moved or removed refusals, changed output bytes, removed public items, and remaining readers of removed fields.
 - **A fault that real data would expose.** Check "nothing real uses it" claims against the project's real inputs, not only today's examples.
 - **A simpler design.** Identify a design with fewer concepts, special cases, or layers that does the same job on real data. State what it removes. Never propose one that is wrong for an input that must get the right answer ([Correctness comes from the design first](../../rules/general.md#design)).
 - **Evidence and its limits.** State what each piece of evidence proves and which claims lack sufficient evidence.
 - **Decision reasons.** Check that the documentation or commit bodies record the reasons that [Record the reasons for decisions](../change-write/SKILL.md#record-the-reasons-for-decisions) requires.
-- **The area's design read.** Check that any area file in `docs/design-reads/` whose rows the change settled or whose prose it made wrong was updated ([Keep the area file current](../design-read/SKILL.md#keep-the-area-file-current)).
+- **The area's design read.** Check that any area file in `docs/design-reads/` whose rows the change settled or whose prose it made wrong was updated, and that no unsettled disagreement row was deleted before the code satisfied its `Done when` condition ([Keep the area file current](../design-read/SKILL.md#keep-the-area-file-current)).
 
 Do not reopen a decision recorded in the brief. Do not request checks of inputs nothing real produces.
 
@@ -50,4 +51,4 @@ Answer each point in the review brief. State what you checked and how.
 
 ## Give a verdict
 
-If no finding is must-fix, end with **land**. Otherwise, end with **fix first** and name the must-fix findings. Write the review to the named output file. Follow the technical-writing and unslop skills. Add the final line `DONE: final` only when the file is complete.
+If no finding is must-fix, end with **land**. Otherwise, end with **fix first** and name the must-fix findings. Write the review to the named output file, following [Writing](../../rules/general.md#writing). Add the final line `DONE: final` only when the file is complete.
