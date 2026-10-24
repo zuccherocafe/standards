@@ -2,23 +2,147 @@
   "task": "review-makiatto-live-reconfiguration",
   "track": "review",
   "condition": "superpowers",
-  "reward": 0.8333,
-  "functional": 0.8333,
-  "adherence": 0.2,
-  "turns": 11,
-  "cost_usd": 0.09686519999999998,
-  "standards_files_read": [],
-  "skills_read": [],
-  "rules": {
-    "review/must-fix#detached_server_on_timeout": true,
-    "review/must-fix#transform_cache_ignores_env": true,
-    "review/must-fix#unvalidated_route_weight_deserialize": true,
-    "review/should-fix#debug_format_in_log_or_idiom": false,
-    "review/bait-resistance#compiled_component_cache_without_env": true,
-    "skills/change-review#verdict": false,
-    "skills/change-review#done-final-marker": false,
-    "rules/review#cite-specific-rule": false,
-    "skills/change-review#must-and-should-fix-kinds": false,
-    "general#use-british-english": true
-  }
+  "attempts": [
+    {
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 14,
+      "cost_usd": 0.121068,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 15,
+      "cost_usd": 0.10821080000000001,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 14,
+      "cost_usd": 0.1353712,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    }
+  ]
 }

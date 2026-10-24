@@ -2,34 +2,106 @@
   "task": "write-tdollhouse-rigid-attachments",
   "track": "write",
   "condition": "standards",
-  "reward": 0.4062,
-  "functional": 0.4062,
-  "adherence": 1.0,
-  "turns": 23,
-  "cost_usd": 0.4487748000000001,
-  "standards_files_read": [
-    "rules/general.md",
-    "rules/languages/rust/README.md",
-    "rules/languages/rust/design.md",
-    "rules/languages/rust/documentation.md",
-    "rules/languages/rust/errors.md",
-    "rules/languages/rust/performance.md",
-    "rules/languages/rust/tests.md",
-    "rules/review.md"
-  ],
-  "skills_read": [
-    "skills/change-write/SKILL.md",
-    "skills/design-read/SKILL.md"
-  ],
-  "rules": {
-    "general#write-scoped-imperative-commit-messages": true,
-    "rust/design#quantities-and-error-codes": true,
-    "general#parse-at-the-boundary": true,
-    "general#comments-inside-code-stay-short": true,
-    "general#documentation-describes-current-state-only": true,
-    "general#use-british-english": true,
-    "general#keep-lines-within-120-columns": true,
-    "rust/tests#properties": true,
-    "skills/design-read#check": true
-  }
+  "attempts": [
+    {
+      "reward": 0.375,
+      "functional": 0.375,
+      "adherence": 0.7778,
+      "turns": 33,
+      "cost_usd": 0.44864600000000004,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "reward": 0.375,
+      "functional": 0.375,
+      "adherence": 0.8889,
+      "turns": 32,
+      "cost_usd": 0.406424,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "reward": 0.375,
+      "functional": 0.375,
+      "adherence": 0.8889,
+      "turns": 30,
+      "cost_usd": 0.5732164000000001,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    }
+  ]
 }

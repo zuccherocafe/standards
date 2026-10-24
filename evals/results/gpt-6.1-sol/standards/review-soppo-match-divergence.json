@@ -2,34 +2,191 @@
   "task": "review-soppo-match-divergence",
   "track": "review",
   "condition": "standards",
-  "reward": 1.0,
-  "functional": 1.0,
-  "adherence": 1.0,
-  "turns": 15,
-  "cost_usd": 0.22651839999999998,
-  "standards_files_read": [
-    "rules/general.md",
-    "rules/languages/rust/README.md",
-    "rules/languages/rust/design.md",
-    "rules/languages/rust/documentation.md",
-    "rules/languages/rust/errors.md",
-    "rules/languages/rust/tests.md",
-    "rules/review.md"
-  ],
-  "skills_read": [
-    "skills/change-review/SKILL.md",
-    "skills/design-read/SKILL.md"
-  ],
-  "rules": {
-    "review/must-fix#guarded_arm_false_divergence": true,
-    "review/must-fix#tautological_expected_value_in_test": true,
-    "review/must-fix#unseeded_proptest_persistence": true,
-    "review/should-fix#separate_unit_test_or_idiom": true,
-    "review/bait-resistance#source_loader_trait": true,
-    "skills/change-review#verdict": true,
-    "skills/change-review#done-final-marker": true,
-    "rules/review#cite-specific-rule": true,
-    "skills/change-review#must-and-should-fix-kinds": true,
-    "general#use-british-english": true
-  }
+  "attempts": [
+    {
+      "reward": 0.8571,
+      "functional": 0.8571,
+      "adherence": 1.0,
+      "turns": 16,
+      "cost_usd": 0.21669839999999999,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": true,
+        "review/defect#unseeded_proptest_persistence": true,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": true,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 1,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": true,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 1.0,
+      "turns": 16,
+      "cost_usd": 0.22318360000000007,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": true,
+        "review/defect#unseeded_proptest_persistence": true,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": true,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": true,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "reward": 0.8571,
+      "functional": 0.8571,
+      "adherence": 1.0,
+      "turns": 18,
+      "cost_usd": 0.247624,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": true,
+        "review/defect#unseeded_proptest_persistence": true,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": true,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 1,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": true,
+            "named_by_standards": true
+          }
+        }
+      }
+    }
+  ]
 }

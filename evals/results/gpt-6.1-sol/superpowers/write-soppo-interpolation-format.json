@@ -2,25 +2,78 @@
   "task": "write-soppo-interpolation-format",
   "track": "write",
   "condition": "superpowers",
-  "reward": 0.45,
-  "functional": 0.45,
-  "adherence": 0.5833,
-  "turns": 28,
-  "cost_usd": 0.3419916,
-  "standards_files_read": [],
-  "skills_read": [],
-  "rules": {
-    "general#write-scoped-imperative-commit-messages": false,
-    "rust/design#quantities-and-error-codes": true,
-    "general#parse-at-the-boundary": true,
-    "general#comments-inside-code-stay-short": true,
-    "general#documentation-describes-current-state-only": true,
-    "general#use-british-english": true,
-    "general#keep-lines-within-120-columns": true,
-    "rust/tests#properties": true,
-    "skills/design-read#check": false,
-    "rust/design#invariants": false,
-    "rust/tests#scenarios-first": false,
-    "skills/design-read#settled-interpolation": false
-  }
+  "attempts": [
+    {
+      "reward": 0.45,
+      "functional": 0.45,
+      "adherence": 0.6667,
+      "turns": 27,
+      "cost_usd": 0.3017448,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    },
+    {
+      "reward": 0.45,
+      "functional": 0.45,
+      "adherence": 0.5,
+      "turns": 33,
+      "cost_usd": 0.36376319999999995,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    },
+    {
+      "reward": 0.45,
+      "functional": 0.45,
+      "adherence": 0.4167,
+      "turns": 33,
+      "cost_usd": 0.42122479999999995,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    }
+  ]
 }

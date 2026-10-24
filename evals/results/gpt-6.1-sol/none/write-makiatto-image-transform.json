@@ -2,23 +2,72 @@
   "task": "write-makiatto-image-transform",
   "track": "write",
   "condition": "none",
-  "reward": 0.4333,
-  "functional": 0.4333,
-  "adherence": 0.6,
-  "turns": 23,
-  "cost_usd": 0.2700344,
-  "standards_files_read": [],
-  "skills_read": [],
-  "rules": {
-    "general#write-scoped-imperative-commit-messages": false,
-    "rust/design#quantities-and-error-codes": true,
-    "general#parse-at-the-boundary": true,
-    "general#comments-inside-code-stay-short": true,
-    "general#documentation-describes-current-state-only": true,
-    "general#use-british-english": false,
-    "general#keep-lines-within-120-columns": false,
-    "rust/tests#properties": true,
-    "skills/design-read#check": false,
-    "rust/documentation#clippy": true
-  }
+  "attempts": [
+    {
+      "reward": 0.4333,
+      "functional": 0.4333,
+      "adherence": 0.9,
+      "turns": 26,
+      "cost_usd": 0.21102200000000002,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "reward": 0.4333,
+      "functional": 0.4333,
+      "adherence": 0.8,
+      "turns": 23,
+      "cost_usd": 0.23511000000000007,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": false,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "reward": 0.4667,
+      "functional": 0.4667,
+      "adherence": 0.7,
+      "turns": 27,
+      "cost_usd": 0.22181920000000008,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": false,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    }
+  ]
 }

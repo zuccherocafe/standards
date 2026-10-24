@@ -18,8 +18,8 @@ A project's `AGENTS.md` links to these standards and lists any departure from th
 
 ## Tools
 
-- [dandegate](tools/crates/dandegate/) builds a change report. See [Report differences without failing checks](rules/general.md#checks).
 - [concord](tools/crates/concord/) checks the shape of concord notes. See the [concord skill](skills/concord/SKILL.md).
+- [dandegate](tools/crates/dandegate/) builds a change report. See [Report differences without failing checks](rules/general.md#checks).
 
 ## Licence
 

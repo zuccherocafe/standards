@@ -1,8 +1,8 @@
 {
   "metadata": {
     "title": "gpt-6.1-sol",
-    "date_utc": "2026-10-24T06:42:01Z",
-    "standards_commit": "e450fe1522a54d0276332cc2e28b4c44050a5cae",
+    "date_utc": "2026-10-24T12:28:26Z",
+    "standards_commit": "85e5f99ba0c5e7eb7075327f3b9abbaeedd2c0bd",
     "agent_skills_commit": "aeac41d4d005999432bb7312f7ff06383a91d59d",
     "superpowers_commit": "2ce8aa15d05bd57213e6f746f953aafb7ded7a8b",
     "harbor_version": "0.24.0",
@@ -13,159 +13,479 @@
   },
   "trials": [
     {
-      "task": "write-dandegate-build-cache",
-      "track": "write",
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
       "condition": "none",
-      "reward": 1.0,
-      "functional": 1.0,
-      "adherence": 0.6667,
-      "turns": 33,
-      "cost_usd": 0.3615732,
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 10,
+      "cost_usd": 0.07586840000000002,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
-        "general#write-scoped-imperative-commit-messages": false,
-        "rust/design#quantities-and-error-codes": true,
-        "general#parse-at-the-boundary": true,
-        "general#comments-inside-code-stay-short": true,
-        "general#documentation-describes-current-state-only": true,
-        "general#use-british-english": true,
-        "general#keep-lines-within-120-columns": false,
-        "rust/tests#properties": true,
-        "skills/design-read#check": false
-      }
-    },
-    {
-      "task": "write-makiatto-image-transform",
-      "track": "write",
-      "condition": "none",
-      "reward": 0.4333,
-      "functional": 0.4333,
-      "adherence": 0.6,
-      "turns": 23,
-      "cost_usd": 0.2700344,
-      "standards_files_read": [],
-      "skills_read": [],
-      "rules": {
-        "general#write-scoped-imperative-commit-messages": false,
-        "rust/design#quantities-and-error-codes": true,
-        "general#parse-at-the-boundary": true,
-        "general#comments-inside-code-stay-short": true,
-        "general#documentation-describes-current-state-only": true,
-        "general#use-british-english": false,
-        "general#keep-lines-within-120-columns": false,
-        "rust/tests#properties": true,
-        "skills/design-read#check": false,
-        "rust/documentation#clippy": true
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
     },
     {
       "task": "review-makiatto-live-reconfiguration",
       "track": "review",
       "condition": "none",
-      "reward": 0.8333,
-      "functional": 0.8333,
-      "adherence": 0.2,
-      "turns": 10,
-      "cost_usd": 0.09798600000000002,
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 12,
+      "cost_usd": 0.07424200000000002,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
-        "review/must-fix#detached_server_on_timeout": true,
-        "review/must-fix#transform_cache_ignores_env": true,
-        "review/must-fix#unvalidated_route_weight_deserialize": true,
-        "review/should-fix#debug_format_in_log_or_idiom": false,
-        "review/bait-resistance#compiled_component_cache_without_env": true,
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
         "skills/change-review#verdict": false,
         "skills/change-review#done-final-marker": false,
         "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
         "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "none",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 12,
+      "cost_usd": 0.0719796,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
     },
     {
       "task": "review-rust-mutants-prepared-targets",
       "track": "review",
       "condition": "none",
-      "reward": 0.8333,
-      "functional": 0.8333,
-      "adherence": 0.2,
-      "turns": 12,
-      "cost_usd": 0.08896999999999998,
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 11,
+      "cost_usd": 0.09539239999999999,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
-        "review/must-fix#prebuild_failure_ignored_or_unverified_prepared": true,
-        "review/must-fix#shared_mutable_target_across_shards": true,
-        "review/must-fix#warm_cold_profile_mismatch": true,
-        "review/should-fix#idiom_clone_or_loop": false,
-        "review/bait-resistance#timing_variance_in_evidence": true,
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
         "skills/change-review#verdict": false,
         "skills/change-review#done-final-marker": false,
         "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
         "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "none",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 13,
+      "cost_usd": 0.0743356,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "none",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 11,
+      "cost_usd": 0.08325800000000001,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
     },
     {
       "task": "review-soppo-match-divergence",
       "track": "review",
       "condition": "none",
-      "reward": 0.6111,
-      "functional": 0.6111,
-      "adherence": 0.2,
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.25,
       "turns": 14,
-      "cost_usd": 0.08197879999999999,
+      "cost_usd": 0.06946,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
-        "review/must-fix#guarded_arm_false_divergence": true,
-        "review/must-fix#tautological_expected_value_in_test": false,
-        "review/must-fix#unseeded_proptest_persistence": true,
-        "review/should-fix#separate_unit_test_or_idiom": false,
-        "review/bait-resistance#source_loader_trait": true,
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
         "skills/change-review#verdict": false,
         "skills/change-review#done-final-marker": false,
         "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
         "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
     },
     {
-      "task": "write-soppo-interpolation-format",
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "none",
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.25,
+      "turns": 8,
+      "cost_usd": 0.0681752,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "none",
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.25,
+      "turns": 9,
+      "cost_usd": 0.08438559999999999,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "write-dandegate-build-cache",
       "track": "write",
       "condition": "none",
       "reward": 1.0,
       "functional": 1.0,
-      "adherence": 0.5833,
-      "turns": 18,
-      "cost_usd": 0.21281560000000002,
-      "standards_files_read": [],
-      "skills_read": [],
-      "rules": {
-        "general#write-scoped-imperative-commit-messages": false,
-        "rust/design#quantities-and-error-codes": true,
-        "general#parse-at-the-boundary": true,
-        "general#comments-inside-code-stay-short": true,
-        "general#documentation-describes-current-state-only": true,
-        "general#use-british-english": true,
-        "general#keep-lines-within-120-columns": false,
-        "rust/tests#properties": true,
-        "skills/design-read#check": true,
-        "rust/design#invariants": false,
-        "rust/tests#scenarios-first": false,
-        "skills/design-read#settled-interpolation": false
-      }
-    },
-    {
-      "task": "write-tdollhouse-rigid-attachments",
-      "track": "write",
-      "condition": "none",
-      "reward": 0.4688,
-      "functional": 0.4688,
-      "adherence": 0.6667,
-      "turns": 21,
-      "cost_usd": 0.2977476,
+      "adherence": 0.7778,
+      "turns": 36,
+      "cost_usd": 0.44620119999999996,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -177,18 +497,19 @@
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": true,
         "rust/tests#properties": true,
-        "skills/design-read#check": false
-      }
+        "skills/concord#check": true
+      },
+      "review": null
     },
     {
       "task": "write-dandegate-build-cache",
       "track": "write",
-      "condition": "agent-skills",
-      "reward": 1.0,
-      "functional": 1.0,
-      "adherence": 0.6667,
-      "turns": 35,
-      "cost_usd": 0.5428604,
+      "condition": "none",
+      "reward": 0.3,
+      "functional": 0.3,
+      "adherence": 0.7778,
+      "turns": 24,
+      "cost_usd": 0.304096,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -200,18 +521,68 @@
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": false,
         "rust/tests#properties": true,
-        "skills/design-read#check": false
-      }
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-dandegate-build-cache",
+      "track": "write",
+      "condition": "none",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.6667,
+      "turns": 36,
+      "cost_usd": 0.3949576,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false
+      },
+      "review": null
     },
     {
       "task": "write-makiatto-image-transform",
       "track": "write",
-      "condition": "agent-skills",
-      "reward": 1.0,
-      "functional": 1.0,
-      "adherence": 0.7,
-      "turns": 31,
-      "cost_usd": 0.4175656,
+      "condition": "none",
+      "reward": 0.4333,
+      "functional": 0.4333,
+      "adherence": 0.9,
+      "turns": 26,
+      "cost_usd": 0.21102200000000002,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-makiatto-image-transform",
+      "track": "write",
+      "condition": "none",
+      "reward": 0.4333,
+      "functional": 0.4333,
+      "adherence": 0.8,
+      "turns": 23,
+      "cost_usd": 0.23511000000000007,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -223,81 +594,827 @@
         "general#use-british-english": false,
         "general#keep-lines-within-120-columns": true,
         "rust/tests#properties": true,
-        "skills/design-read#check": false,
+        "skills/concord#check": true,
         "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-makiatto-image-transform",
+      "track": "write",
+      "condition": "none",
+      "reward": 0.4667,
+      "functional": 0.4667,
+      "adherence": 0.7,
+      "turns": 27,
+      "cost_usd": 0.22181920000000008,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": false,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "none",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.5833,
+      "turns": 28,
+      "cost_usd": 0.231114,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "none",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.5833,
+      "turns": 23,
+      "cost_usd": 0.18255879999999997,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "none",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.5,
+      "turns": 29,
+      "cost_usd": 0.2324716,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "none",
+      "reward": 0.4688,
+      "functional": 0.4688,
+      "adherence": 0.6667,
+      "turns": 24,
+      "cost_usd": 0.2701372000000001,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "none",
+      "reward": 0.4688,
+      "functional": 0.4688,
+      "adherence": 0.7778,
+      "turns": 18,
+      "cost_usd": 0.27179000000000003,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "none",
+      "reward": 0.4688,
+      "functional": 0.4688,
+      "adherence": 0.7778,
+      "turns": 26,
+      "cost_usd": 0.323462,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "agent-skills",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 16,
+      "cost_usd": 0.16854520000000003,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
     },
     {
       "task": "review-makiatto-live-reconfiguration",
       "track": "review",
       "condition": "agent-skills",
-      "reward": 0.8333,
-      "functional": 0.8333,
-      "adherence": 0.2,
-      "turns": 14,
-      "cost_usd": 0.11535520000000002,
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 18,
+      "cost_usd": 0.18298,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
-        "review/must-fix#detached_server_on_timeout": true,
-        "review/must-fix#transform_cache_ignores_env": true,
-        "review/must-fix#unvalidated_route_weight_deserialize": true,
-        "review/should-fix#debug_format_in_log_or_idiom": false,
-        "review/bait-resistance#compiled_component_cache_without_env": true,
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
         "skills/change-review#verdict": false,
         "skills/change-review#done-final-marker": false,
         "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
         "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "agent-skills",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 17,
+      "cost_usd": 0.140298,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
     },
     {
       "task": "review-rust-mutants-prepared-targets",
       "track": "review",
       "condition": "agent-skills",
-      "reward": 0.8333,
-      "functional": 0.8333,
-      "adherence": 0.2,
-      "turns": 19,
-      "cost_usd": 0.15082639999999997,
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 12,
+      "cost_usd": 0.145682,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
-        "review/must-fix#prebuild_failure_ignored_or_unverified_prepared": true,
-        "review/must-fix#shared_mutable_target_across_shards": true,
-        "review/must-fix#warm_cold_profile_mismatch": true,
-        "review/should-fix#idiom_clone_or_loop": false,
-        "review/bait-resistance#timing_variance_in_evidence": true,
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
         "skills/change-review#verdict": false,
         "skills/change-review#done-final-marker": false,
         "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
         "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "agent-skills",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 14,
+      "cost_usd": 0.14416320000000002,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "agent-skills",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 20,
+      "cost_usd": 0.1830808,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
     },
     {
       "task": "review-soppo-match-divergence",
       "track": "review",
       "condition": "agent-skills",
-      "reward": 0.7778,
-      "functional": 0.7778,
-      "adherence": 0.2,
-      "turns": 20,
-      "cost_usd": 0.122714,
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.0,
+      "turns": 16,
+      "cost_usd": 0.21225480000000002,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
-        "review/must-fix#guarded_arm_false_divergence": true,
-        "review/must-fix#tautological_expected_value_in_test": true,
-        "review/must-fix#unseeded_proptest_persistence": false,
-        "review/should-fix#separate_unit_test_or_idiom": true,
-        "review/bait-resistance#source_loader_trait": true,
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
         "skills/change-review#verdict": false,
         "skills/change-review#done-final-marker": false,
         "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
-        "general#use-british-english": true
+        "general#use-british-english": false
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "agent-skills",
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.0,
+      "turns": 15,
+      "cost_usd": 0.1303608,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": false
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "agent-skills",
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.25,
+      "turns": 22,
+      "cost_usd": 0.23721640000000005,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "write-dandegate-build-cache",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.6667,
+      "turns": 36,
+      "cost_usd": 0.5214928,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-dandegate-build-cache",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 0.3,
+      "functional": 0.3,
+      "adherence": 0.7778,
+      "turns": 36,
+      "cost_usd": 0.5710204,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-dandegate-build-cache",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.6667,
+      "turns": 36,
+      "cost_usd": 0.5527908,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-makiatto-image-transform",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 0.4667,
+      "functional": 0.4667,
+      "adherence": 0.8,
+      "turns": 34,
+      "cost_usd": 0.41572000000000014,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-makiatto-image-transform",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 0.4667,
+      "functional": 0.4667,
+      "adherence": 0.7,
+      "turns": 36,
+      "cost_usd": 0.38688760000000005,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": false,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-makiatto-image-transform",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 0.4667,
+      "functional": 0.4667,
+      "adherence": 0.6,
+      "turns": 34,
+      "cost_usd": 0.416254,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": false,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 0.45,
+      "functional": 0.45,
+      "adherence": 0.5,
+      "turns": 25,
+      "cost_usd": 0.3011156,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
     },
     {
       "task": "write-soppo-interpolation-format",
@@ -307,7 +1424,7 @@
       "functional": 0.45,
       "adherence": 0.5,
       "turns": 32,
-      "cost_usd": 0.401458,
+      "cost_usd": 0.34853320000000004,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -319,11 +1436,39 @@
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": false,
         "rust/tests#properties": true,
-        "skills/design-read#check": false,
+        "skills/concord#check": false,
         "rust/design#invariants": false,
         "rust/tests#scenarios-first": false,
-        "skills/design-read#settled-interpolation": false
-      }
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.5833,
+      "turns": 33,
+      "cost_usd": 0.36268520000000004,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
     },
     {
       "task": "write-tdollhouse-rigid-attachments",
@@ -331,9 +1476,9 @@
       "condition": "agent-skills",
       "reward": 0.4688,
       "functional": 0.4688,
-      "adherence": 0.6667,
+      "adherence": 0.7778,
       "turns": 32,
-      "cost_usd": 0.4344644,
+      "cost_usd": 0.37735840000000004,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -345,8 +1490,570 @@
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": true,
         "rust/tests#properties": true,
-        "skills/design-read#check": false
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 0.4062,
+      "functional": 0.4062,
+      "adherence": 0.7778,
+      "turns": 31,
+      "cost_usd": 0.3777523999999999,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "agent-skills",
+      "reward": 0.1562,
+      "functional": 0.1562,
+      "adherence": 0.7778,
+      "turns": 36,
+      "cost_usd": 0.35608959999999995,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 14,
+      "cost_usd": 0.121068,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 15,
+      "cost_usd": 0.10821080000000001,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 14,
+      "cost_usd": 0.1353712,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 18,
+      "cost_usd": 0.131752,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 13,
+      "cost_usd": 0.12406800000000001,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 0.25,
+      "turns": 16,
+      "cost_usd": 0.11121639999999999,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.0,
+      "turns": 17,
+      "cost_usd": 0.15228479999999997,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": false
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.25,
+      "turns": 14,
+      "cost_usd": 0.14782240000000005,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "superpowers",
+      "reward": 0.5,
+      "functional": 0.5,
+      "adherence": 0.25,
+      "turns": 23,
+      "cost_usd": 0.15050639999999998,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": false,
+        "review/defect#unseeded_proptest_persistence": false,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": false,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": false,
+        "skills/change-review#done-final-marker": false,
+        "rules/review#cite-specific-rule": false,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": false,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "write-dandegate-build-cache",
+      "track": "write",
+      "condition": "superpowers",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.5556,
+      "turns": 29,
+      "cost_usd": 0.45959279999999997,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": false,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-dandegate-build-cache",
+      "track": "write",
+      "condition": "superpowers",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.6667,
+      "turns": 36,
+      "cost_usd": 0.44060599999999994,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false
+      },
+      "review": null
     },
     {
       "task": "write-dandegate-build-cache",
@@ -356,7 +2063,7 @@
       "functional": 1.0,
       "adherence": 0.7778,
       "turns": 36,
-      "cost_usd": 0.42683760000000004,
+      "cost_usd": 0.5019752,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -368,8 +2075,34 @@
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": true,
         "rust/tests#properties": true,
-        "skills/design-read#check": true
-      }
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-makiatto-image-transform",
+      "track": "write",
+      "condition": "superpowers",
+      "reward": 0.4667,
+      "functional": 0.4667,
+      "adherence": 0.5,
+      "turns": 34,
+      "cost_usd": 0.4652496,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": false,
+        "general#use-british-english": false,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/documentation#clippy": true
+      },
+      "review": null
     },
     {
       "task": "write-makiatto-image-transform",
@@ -378,8 +2111,8 @@
       "reward": 0.4667,
       "functional": 0.4667,
       "adherence": 0.7,
-      "turns": 29,
-      "cost_usd": 0.42762680000000014,
+      "turns": 32,
+      "cost_usd": 0.43707680000000004,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -391,81 +2124,35 @@
         "general#use-british-english": false,
         "general#keep-lines-within-120-columns": false,
         "rust/tests#properties": true,
-        "skills/design-read#check": true,
+        "skills/concord#check": true,
         "rust/documentation#clippy": true
-      }
+      },
+      "review": null
     },
     {
-      "task": "review-makiatto-live-reconfiguration",
-      "track": "review",
+      "task": "write-makiatto-image-transform",
+      "track": "write",
       "condition": "superpowers",
-      "reward": 0.8333,
-      "functional": 0.8333,
-      "adherence": 0.2,
-      "turns": 11,
-      "cost_usd": 0.09686519999999998,
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.7,
+      "turns": 33,
+      "cost_usd": 0.41621519999999984,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
-        "review/must-fix#detached_server_on_timeout": true,
-        "review/must-fix#transform_cache_ignores_env": true,
-        "review/must-fix#unvalidated_route_weight_deserialize": true,
-        "review/should-fix#debug_format_in_log_or_idiom": false,
-        "review/bait-resistance#compiled_component_cache_without_env": true,
-        "skills/change-review#verdict": false,
-        "skills/change-review#done-final-marker": false,
-        "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
-        "general#use-british-english": true
-      }
-    },
-    {
-      "task": "review-rust-mutants-prepared-targets",
-      "track": "review",
-      "condition": "superpowers",
-      "reward": 0.8333,
-      "functional": 0.8333,
-      "adherence": 0.2,
-      "turns": 14,
-      "cost_usd": 0.1187944,
-      "standards_files_read": [],
-      "skills_read": [],
-      "rules": {
-        "review/must-fix#prebuild_failure_ignored_or_unverified_prepared": true,
-        "review/must-fix#shared_mutable_target_across_shards": true,
-        "review/must-fix#warm_cold_profile_mismatch": true,
-        "review/should-fix#idiom_clone_or_loop": false,
-        "review/bait-resistance#timing_variance_in_evidence": true,
-        "skills/change-review#verdict": false,
-        "skills/change-review#done-final-marker": false,
-        "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
-        "general#use-british-english": true
-      }
-    },
-    {
-      "task": "review-soppo-match-divergence",
-      "track": "review",
-      "condition": "superpowers",
-      "reward": 0.3889,
-      "functional": 0.3889,
-      "adherence": 0.2,
-      "turns": 10,
-      "cost_usd": 0.07274639999999999,
-      "standards_files_read": [],
-      "skills_read": [],
-      "rules": {
-        "review/must-fix#guarded_arm_false_divergence": true,
-        "review/must-fix#tautological_expected_value_in_test": false,
-        "review/must-fix#unseeded_proptest_persistence": false,
-        "review/should-fix#separate_unit_test_or_idiom": false,
-        "review/bait-resistance#source_loader_trait": true,
-        "skills/change-review#verdict": false,
-        "skills/change-review#done-final-marker": false,
-        "rules/review#cite-specific-rule": false,
-        "skills/change-review#must-and-should-fix-kinds": false,
-        "general#use-british-english": true
-      }
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": false,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/documentation#clippy": true
+      },
+      "review": null
     },
     {
       "task": "write-soppo-interpolation-format",
@@ -473,9 +2160,9 @@
       "condition": "superpowers",
       "reward": 0.45,
       "functional": 0.45,
-      "adherence": 0.5833,
-      "turns": 28,
-      "cost_usd": 0.3419916,
+      "adherence": 0.6667,
+      "turns": 27,
+      "cost_usd": 0.3017448,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -487,21 +2174,76 @@
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": true,
         "rust/tests#properties": true,
-        "skills/design-read#check": false,
+        "skills/concord#check": true,
         "rust/design#invariants": false,
         "rust/tests#scenarios-first": false,
-        "skills/design-read#settled-interpolation": false
-      }
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "superpowers",
+      "reward": 0.45,
+      "functional": 0.45,
+      "adherence": 0.5,
+      "turns": 33,
+      "cost_usd": 0.36376319999999995,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "superpowers",
+      "reward": 0.45,
+      "functional": 0.45,
+      "adherence": 0.4167,
+      "turns": 33,
+      "cost_usd": 0.42122479999999995,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": false,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": false
+      },
+      "review": null
     },
     {
       "task": "write-tdollhouse-rigid-attachments",
       "track": "write",
       "condition": "superpowers",
-      "reward": 0.4062,
-      "functional": 0.4062,
-      "adherence": 0.7778,
-      "turns": 36,
-      "cost_usd": 0.40229199999999987,
+      "reward": 0.4375,
+      "functional": 0.4375,
+      "adherence": 0.6667,
+      "turns": 34,
+      "cost_usd": 0.3653092000000001,
       "standards_files_read": [],
       "skills_read": [],
       "rules": {
@@ -513,8 +2255,689 @@
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": true,
         "rust/tests#properties": true,
-        "skills/design-read#check": true
+        "skills/concord#check": false
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "superpowers",
+      "reward": 0.3438,
+      "functional": 0.3438,
+      "adherence": 0.7778,
+      "turns": 29,
+      "cost_usd": 0.40085560000000003,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "superpowers",
+      "reward": 0.4688,
+      "functional": 0.4688,
+      "adherence": 0.7778,
+      "turns": 23,
+      "cost_usd": 0.3211008000000001,
+      "standards_files_read": [],
+      "skills_read": [],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "standards",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 1.0,
+      "turns": 16,
+      "cost_usd": 0.2564704,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
       }
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "standards",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 1.0,
+      "turns": 15,
+      "cost_usd": 0.22370280000000003,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-makiatto-live-reconfiguration",
+      "track": "review",
+      "condition": "standards",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 1.0,
+      "turns": 15,
+      "cost_usd": 0.21466480000000002,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#detached_server_on_timeout": true,
+        "review/defect#transform_cache_ignores_env": true,
+        "review/defect#unvalidated_route_weight_deserialize": true,
+        "review/defect#header_length_before_transform": true,
+        "review/defect#public_input_digest": false,
+        "review/bait#compiled_component_cache_without_env": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "detached_server_on_timeout": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "transform_cache_ignores_env": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unvalidated_route_weight_deserialize": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "header_length_before_transform": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "public_input_digest": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "standards",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 1.0,
+      "turns": 12,
+      "cost_usd": 0.21508760000000002,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "standards",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 1.0,
+      "turns": 11,
+      "cost_usd": 0.1910484,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-rust-mutants-prepared-targets",
+      "track": "review",
+      "condition": "standards",
+      "reward": 0.8,
+      "functional": 0.8,
+      "adherence": 1.0,
+      "turns": 14,
+      "cost_usd": 0.23801359999999996,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#prebuild_failure_ignored": true,
+        "review/defect#shared_mutable_target_across_shards": true,
+        "review/defect#warm_cold_profile_mismatch": true,
+        "review/defect#linked_workspace_overwrites_subject": true,
+        "review/defect#workspace_clone": false,
+        "review/bait#timing_variance_in_evidence": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "prebuild_failure_ignored": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "shared_mutable_target_across_shards": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "warm_cold_profile_mismatch": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "linked_workspace_overwrites_subject": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "workspace_clone": {
+            "found": false,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "standards",
+      "reward": 0.8571,
+      "functional": 0.8571,
+      "adherence": 1.0,
+      "turns": 16,
+      "cost_usd": 0.21669839999999999,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": true,
+        "review/defect#unseeded_proptest_persistence": true,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": true,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 1,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": true,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "standards",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 1.0,
+      "turns": 16,
+      "cost_usd": 0.22318360000000007,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": true,
+        "review/defect#unseeded_proptest_persistence": true,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": true,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 0,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": true,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "review-soppo-match-divergence",
+      "track": "review",
+      "condition": "standards",
+      "reward": 0.8571,
+      "functional": 0.8571,
+      "adherence": 1.0,
+      "turns": 18,
+      "cost_usd": 0.247624,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-review/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "review/findings#readable": true,
+        "review/defect#guarded_arm_false_divergence": true,
+        "review/defect#tautological_expected_value_in_test": true,
+        "review/defect#unseeded_proptest_persistence": true,
+        "review/defect#arms_share_nil_narrowing": true,
+        "review/defect#missing_source_exits_success": true,
+        "review/defect#wildcard_hides_expression_variants": true,
+        "review/bait#source_loader_trait": true,
+        "skills/change-review#verdict": true,
+        "skills/change-review#done-final-marker": true,
+        "rules/review#cite-specific-rule": true,
+        "general#use-british-english": true
+      },
+      "review": {
+        "false_positives": 1,
+        "defects": {
+          "guarded_arm_false_divergence": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "tautological_expected_value_in_test": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "unseeded_proptest_persistence": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "arms_share_nil_narrowing": {
+            "found": true,
+            "named_by_standards": false
+          },
+          "missing_source_exits_success": {
+            "found": true,
+            "named_by_standards": true
+          },
+          "wildcard_hides_expression_variants": {
+            "found": true,
+            "named_by_standards": true
+          }
+        }
+      }
+    },
+    {
+      "task": "write-dandegate-build-cache",
+      "track": "write",
+      "condition": "standards",
+      "reward": 0.3,
+      "functional": 0.3,
+      "adherence": 0.7778,
+      "turns": 36,
+      "cost_usd": 0.5659447999999999,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-dandegate-build-cache",
+      "track": "write",
+      "condition": "standards",
+      "reward": 0.3,
+      "functional": 0.3,
+      "adherence": 0.7778,
+      "turns": 36,
+      "cost_usd": 0.5636948,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": false,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
     },
     {
       "task": "write-dandegate-build-cache",
@@ -524,7 +2947,7 @@
       "functional": 1.0,
       "adherence": 0.7778,
       "turns": 36,
-      "cost_usd": 0.5772184,
+      "cost_usd": 0.5235272,
       "standards_files_read": [
         "rules/general.md",
         "rules/languages/rust/README.md",
@@ -538,7 +2961,7 @@
       ],
       "skills_read": [
         "skills/change-write/SKILL.md",
-        "skills/design-read/SKILL.md"
+        "skills/concord/SKILL.md"
       ],
       "rules": {
         "general#write-scoped-imperative-commit-messages": false,
@@ -549,8 +2972,9 @@
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": true,
         "rust/tests#properties": true,
-        "skills/design-read#check": true
-      }
+        "skills/concord#check": true
+      },
+      "review": null
     },
     {
       "task": "write-makiatto-image-transform",
@@ -558,9 +2982,9 @@
       "condition": "standards",
       "reward": 1.0,
       "functional": 1.0,
-      "adherence": 1.0,
-      "turns": 31,
-      "cost_usd": 0.527522,
+      "adherence": 0.9,
+      "turns": 36,
+      "cost_usd": 0.4801080000000001,
       "standards_files_read": [
         "rules/general.md",
         "rules/languages/rust/README.md",
@@ -574,7 +2998,45 @@
       ],
       "skills_read": [
         "skills/change-write/SKILL.md",
-        "skills/design-read/SKILL.md"
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-makiatto-image-transform",
+      "track": "write",
+      "condition": "standards",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.9,
+      "turns": 29,
+      "cost_usd": 0.4395099999999999,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
       ],
       "rules": {
         "general#write-scoped-imperative-commit-messages": true,
@@ -583,118 +3045,90 @@
         "general#comments-inside-code-stay-short": true,
         "general#documentation-describes-current-state-only": true,
         "general#use-british-english": true,
-        "general#keep-lines-within-120-columns": true,
+        "general#keep-lines-within-120-columns": false,
         "rust/tests#properties": true,
-        "skills/design-read#check": true,
+        "skills/concord#check": true,
         "rust/documentation#clippy": true
-      }
+      },
+      "review": null
     },
     {
-      "task": "review-makiatto-live-reconfiguration",
-      "track": "review",
-      "condition": "standards",
-      "reward": 0.8333,
-      "functional": 0.8333,
-      "adherence": 1.0,
-      "turns": 15,
-      "cost_usd": 0.2155364,
-      "standards_files_read": [
-        "rules/general.md",
-        "rules/languages/rust/README.md",
-        "rules/languages/rust/async.md",
-        "rules/languages/rust/design.md",
-        "rules/languages/rust/documentation.md",
-        "rules/languages/rust/errors.md",
-        "rules/languages/rust/performance.md",
-        "rules/languages/rust/tests.md",
-        "rules/review.md"
-      ],
-      "skills_read": [
-        "skills/change-review/SKILL.md",
-        "skills/design-read/SKILL.md"
-      ],
-      "rules": {
-        "review/must-fix#detached_server_on_timeout": true,
-        "review/must-fix#transform_cache_ignores_env": true,
-        "review/must-fix#unvalidated_route_weight_deserialize": true,
-        "review/should-fix#debug_format_in_log_or_idiom": false,
-        "review/bait-resistance#compiled_component_cache_without_env": true,
-        "skills/change-review#verdict": true,
-        "skills/change-review#done-final-marker": true,
-        "rules/review#cite-specific-rule": true,
-        "skills/change-review#must-and-should-fix-kinds": true,
-        "general#use-british-english": true
-      }
-    },
-    {
-      "task": "review-rust-mutants-prepared-targets",
-      "track": "review",
-      "condition": "standards",
-      "reward": 0.8333,
-      "functional": 0.8333,
-      "adherence": 1.0,
-      "turns": 12,
-      "cost_usd": 0.2234388,
-      "standards_files_read": [
-        "rules/general.md",
-        "rules/languages/rust/async.md",
-        "rules/languages/rust/design.md",
-        "rules/languages/rust/errors.md",
-        "rules/languages/rust/performance.md",
-        "rules/languages/rust/tests.md",
-        "rules/review.md"
-      ],
-      "skills_read": [
-        "skills/change-review/SKILL.md",
-        "skills/design-read/SKILL.md"
-      ],
-      "rules": {
-        "review/must-fix#prebuild_failure_ignored_or_unverified_prepared": true,
-        "review/must-fix#shared_mutable_target_across_shards": true,
-        "review/must-fix#warm_cold_profile_mismatch": true,
-        "review/should-fix#idiom_clone_or_loop": false,
-        "review/bait-resistance#timing_variance_in_evidence": true,
-        "skills/change-review#verdict": true,
-        "skills/change-review#done-final-marker": true,
-        "rules/review#cite-specific-rule": true,
-        "skills/change-review#must-and-should-fix-kinds": true,
-        "general#use-british-english": true
-      }
-    },
-    {
-      "task": "review-soppo-match-divergence",
-      "track": "review",
+      "task": "write-makiatto-image-transform",
+      "track": "write",
       "condition": "standards",
       "reward": 1.0,
       "functional": 1.0,
-      "adherence": 1.0,
-      "turns": 15,
-      "cost_usd": 0.22651839999999998,
+      "adherence": 0.9,
+      "turns": 34,
+      "cost_usd": 0.6600976,
       "standards_files_read": [
         "rules/general.md",
         "rules/languages/rust/README.md",
+        "rules/languages/rust/async.md",
         "rules/languages/rust/design.md",
         "rules/languages/rust/documentation.md",
         "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
         "rules/languages/rust/tests.md",
         "rules/review.md"
       ],
       "skills_read": [
-        "skills/change-review/SKILL.md",
-        "skills/design-read/SKILL.md"
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
       ],
       "rules": {
-        "review/must-fix#guarded_arm_false_divergence": true,
-        "review/must-fix#tautological_expected_value_in_test": true,
-        "review/must-fix#unseeded_proptest_persistence": true,
-        "review/should-fix#separate_unit_test_or_idiom": true,
-        "review/bait-resistance#source_loader_trait": true,
-        "skills/change-review#verdict": true,
-        "skills/change-review#done-final-marker": true,
-        "rules/review#cite-specific-rule": true,
-        "skills/change-review#must-and-should-fix-kinds": true,
-        "general#use-british-english": true
-      }
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/documentation#clippy": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "standards",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.75,
+      "turns": 32,
+      "cost_usd": 0.43299760000000004,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": true
+      },
+      "review": null
     },
     {
       "task": "write-soppo-interpolation-format",
@@ -703,8 +3137,47 @@
       "reward": 1.0,
       "functional": 1.0,
       "adherence": 0.8333,
-      "turns": 27,
-      "cost_usd": 0.4132348000000001,
+      "turns": 33,
+      "cost_usd": 0.44255440000000007,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": true,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true,
+        "rust/design#invariants": false,
+        "rust/tests#scenarios-first": false,
+        "skills/concord#settled-interpolation": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-soppo-interpolation-format",
+      "track": "write",
+      "condition": "standards",
+      "reward": 1.0,
+      "functional": 1.0,
+      "adherence": 0.75,
+      "turns": 32,
+      "cost_usd": 0.3687904,
       "standards_files_read": [
         "rules/general.md",
         "rules/languages/rust/README.md",
@@ -718,7 +3191,7 @@
       ],
       "skills_read": [
         "skills/change-write/SKILL.md",
-        "skills/design-read/SKILL.md"
+        "skills/concord/SKILL.md"
       ],
       "rules": {
         "general#write-scoped-imperative-commit-messages": true,
@@ -727,23 +3200,24 @@
         "general#comments-inside-code-stay-short": true,
         "general#documentation-describes-current-state-only": true,
         "general#use-british-english": true,
-        "general#keep-lines-within-120-columns": true,
+        "general#keep-lines-within-120-columns": false,
         "rust/tests#properties": true,
-        "skills/design-read#check": true,
+        "skills/concord#check": true,
         "rust/design#invariants": false,
         "rust/tests#scenarios-first": false,
-        "skills/design-read#settled-interpolation": true
-      }
+        "skills/concord#settled-interpolation": true
+      },
+      "review": null
     },
     {
       "task": "write-tdollhouse-rigid-attachments",
       "track": "write",
       "condition": "standards",
-      "reward": 0.4062,
-      "functional": 0.4062,
-      "adherence": 1.0,
-      "turns": 23,
-      "cost_usd": 0.4487748000000001,
+      "reward": 0.375,
+      "functional": 0.375,
+      "adherence": 0.7778,
+      "turns": 33,
+      "cost_usd": 0.44864600000000004,
       "standards_files_read": [
         "rules/general.md",
         "rules/languages/rust/README.md",
@@ -756,19 +3230,93 @@
       ],
       "skills_read": [
         "skills/change-write/SKILL.md",
-        "skills/design-read/SKILL.md"
+        "skills/concord/SKILL.md"
       ],
       "rules": {
         "general#write-scoped-imperative-commit-messages": true,
         "rust/design#quantities-and-error-codes": true,
-        "general#parse-at-the-boundary": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": false,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "standards",
+      "reward": 0.375,
+      "functional": 0.375,
+      "adherence": 0.8889,
+      "turns": 32,
+      "cost_usd": 0.406424,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
         "general#comments-inside-code-stay-short": true,
         "general#documentation-describes-current-state-only": true,
         "general#use-british-english": true,
         "general#keep-lines-within-120-columns": true,
         "rust/tests#properties": true,
-        "skills/design-read#check": true
-      }
+        "skills/concord#check": true
+      },
+      "review": null
+    },
+    {
+      "task": "write-tdollhouse-rigid-attachments",
+      "track": "write",
+      "condition": "standards",
+      "reward": 0.375,
+      "functional": 0.375,
+      "adherence": 0.8889,
+      "turns": 30,
+      "cost_usd": 0.5732164000000001,
+      "standards_files_read": [
+        "rules/general.md",
+        "rules/languages/rust/README.md",
+        "rules/languages/rust/async.md",
+        "rules/languages/rust/design.md",
+        "rules/languages/rust/documentation.md",
+        "rules/languages/rust/errors.md",
+        "rules/languages/rust/performance.md",
+        "rules/languages/rust/tests.md",
+        "rules/review.md"
+      ],
+      "skills_read": [
+        "skills/change-write/SKILL.md",
+        "skills/concord/SKILL.md"
+      ],
+      "rules": {
+        "general#write-scoped-imperative-commit-messages": true,
+        "rust/design#quantities-and-error-codes": true,
+        "general#parse-at-the-boundary": false,
+        "general#comments-inside-code-stay-short": true,
+        "general#documentation-describes-current-state-only": true,
+        "general#use-british-english": true,
+        "general#keep-lines-within-120-columns": true,
+        "rust/tests#properties": true,
+        "skills/concord#check": true
+      },
+      "review": null
     }
   ]
 }
