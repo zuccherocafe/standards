@@ -25,15 +25,15 @@ index aa9c1ba..33e991c 100644
 +
 +## Acceptance and evidence
 +
-+Read `docs/design-reads/match-flow.md` and the complete `evidence/checks.log`. Passing scenarios cover unguarded enum matches, a direct nil return, nullable access refusal, and missing returns. The additional match-flow checks exercise guarded syntax and generated return values. No interpreter, backend, or timing claim is part of this slice. The CLI reports diagnostics with a failing exit status and accepts a clean report with exit status zero.
++Read `docs/concord/match-flow.md` and the complete `evidence/checks.log`. Passing scenarios cover unguarded enum matches, a direct nil return, nullable access refusal, and missing returns. The additional match-flow checks exercise guarded syntax and generated return values. No interpreter, backend, or timing claim is part of this slice. The CLI reports diagnostics with a failing exit status and accepts a clean report with exit status zero.
 +
 +## Next use
 +
 +Adding another `Gate` variant must force a decision at each case-dependent operation. Guard-aware coverage remains a single control-flow concept shared by the two consumers.
-diff --git a/docs/design-reads/match-flow.md b/docs/design-reads/match-flow.md
+diff --git a/docs/concord/match-flow.md b/docs/concord/match-flow.md
 index fd92242..e131b35 100644
---- a/docs/design-reads/match-flow.md
-+++ b/docs/design-reads/match-flow.md
+--- a/docs/concord/match-flow.md
++++ b/docs/concord/match-flow.md
 @@ -1,5 +1,21 @@
  # Match-flow design read
  

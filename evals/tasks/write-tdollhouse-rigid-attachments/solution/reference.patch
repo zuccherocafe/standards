@@ -11,10 +11,10 @@ index 32d711b..4e0dc9e 100644
  
  The character reader accepts a focused line-based subset: `character {`, `attach "Badge" to="Cloth"`, and `}`. It also accepts bare attachment statements for callers constructing a character fragment. Names are quoted and contain no escapes. No KDL or binary model importer is needed to exercise the conversion contracts.
  
-diff --git a/docs/design-reads/skin.md b/docs/design-reads/skin.md
+diff --git a/docs/concord/skin.md b/docs/concord/skin.md
 index a414398..e69af0c 100644
---- a/docs/design-reads/skin.md
-+++ b/docs/design-reads/skin.md
+--- a/docs/concord/skin.md
++++ b/docs/concord/skin.md
 @@ -2,31 +2,30 @@
  
  - Area: published cut meshes, skeletal skinning, spring solving, rigid accessories and derived offline geometry

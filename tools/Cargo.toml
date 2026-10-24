@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/dandegate",
-    "crates/design-read",
+    "crates/concord",
     "crates/gdscript-scans",
     "crates/pin-age",
     "crates/rust-mutants",

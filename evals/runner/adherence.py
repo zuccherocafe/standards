@@ -71,7 +71,7 @@ class TrajectoryAudit:
     commands_run: tuple[str, ...]
     standards_files_read: tuple[str, ...]
     skills_read: tuple[str, ...]
-    ran_design_read_check: bool
+    ran_concord_check: bool
     ran_rust_scans: bool
     ran_git_diff_or_show: bool
     turn_count: int
@@ -318,7 +318,7 @@ def parse_pi_session_jsonl(
             ):
                 matched_skills.append(skill_file)
 
-    ran_design_read = any("design-read" in cmd for cmd in verified_commands)
+    ran_concord = any("concord check" in cmd for cmd in verified_commands)
     ran_rust_scans = any("rust-scans" in cmd for cmd in verified_commands)
     ran_diff = any("git diff" in cmd or "git show" in cmd for cmd in verified_commands)
 
@@ -327,7 +327,7 @@ def parse_pi_session_jsonl(
         commands_run=tuple(verified_commands),
         standards_files_read=tuple(sorted(matched_rules)),
         skills_read=tuple(sorted(matched_skills)),
-        ran_design_read_check=ran_design_read,
+        ran_concord_check=ran_concord,
         ran_rust_scans=ran_rust_scans,
         ran_git_diff_or_show=ran_diff,
         turn_count=turn_count,

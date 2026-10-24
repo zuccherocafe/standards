@@ -8,9 +8,9 @@
 
 <State the date, repository, base revision, and branch name. Name the writer and the review process.>
 
-**Size.** <State `small`, `normal`, or `design`. A `small` change is one commit of about 200 lines that adds no type, gets one review, and needs no [brief review](../skills/change-review/SKILL.md#read-the-brief-evidence-and-diff) unless its `Design read` line links a read. A `normal` change is the work outside `small` that is not `design`. A `design` change adds or changes a format, a type, an API, or a dependency, so a redesign of that size goes to the maintainer.>
+**Size.** <State `small`, `normal`, or `design`. A `small` change is one commit of about 200 lines that adds no type, gets one review, and needs no [brief review](../skills/change-review/SKILL.md#read-the-brief-evidence-and-diff) unless its `Concord note` line links a note. A `normal` change is the work outside `small` that is not `design`. A `design` change adds or changes a format, a type, an API, or a dependency, so a redesign of that size goes to the maintainer.>
 
-**Design read.** <<path, or none (reason)>, as [When a read is due](../skills/design-read/SKILL.md#when-a-read-is-due) decides. When linking a read, name the rows this change settles, or state briefly why it settles none.>
+**Concord note.** <<path, or none (reason)>, as [When a concord note is due](../skills/concord/SKILL.md#when-a-concord-note-is-due) decides. When linking a note, name the rows this change settles, or state briefly why it settles none.>
 
 **Concept.** <State the one thing this change makes true, in a sentence the reviewer can check.>
 

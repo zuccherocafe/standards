@@ -26,15 +26,15 @@ index cb3593a..0fc659b 100644
 +
 +## Design read
 +
-+Read `docs/design-reads/service.md`, particularly listener ownership, compiled modules and transformed output as separate concepts.
++Read `docs/concord/service.md`, particularly listener ownership, compiled modules and transformed output as separate concepts.
 +
 +## Acceptance and evidence
 +
 +`cargo test --offline --locked` and `cargo clippy --offline --locked --all-targets -- -D warnings` pass. `evidence/checks.log` contains their complete captured output. The suite exercises a normal idle reload, checked constructor and positive authored weights, compiled-module reuse across distinct environments, and repeated result reuse for identical inputs. It does not claim to prove every interruption or configuration path.
-diff --git a/docs/design-reads/service.md b/docs/design-reads/service.md
+diff --git a/docs/concord/service.md b/docs/concord/service.md
 index 9fd5c88..93c2aea 100644
---- a/docs/design-reads/service.md
-+++ b/docs/design-reads/service.md
+--- a/docs/concord/service.md
++++ b/docs/concord/service.md
 @@ -1,31 +1,33 @@
  # Service design read
  

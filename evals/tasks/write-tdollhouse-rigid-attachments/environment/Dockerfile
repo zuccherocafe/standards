@@ -14,8 +14,8 @@ RUN cargo fetch --locked \
 
 ENV CARGO_NET_OFFLINE=true
 COPY condition_overlay/ /tmp/condition_overlay/
-RUN if [ -f /tmp/condition_overlay/bin/design-read ]; then install /tmp/condition_overlay/bin/* /usr/local/bin/; fi \
-    && design-read check \
+RUN if [ -f /tmp/condition_overlay/bin/concord ]; then install /tmp/condition_overlay/bin/* /usr/local/bin/; fi \
+    && concord check \
     && if [ -d /tmp/condition_overlay/standards ]; then \
         cp -a /tmp/condition_overlay/standards /standards; \
         if [ -f /tmp/condition_overlay/standards_agents_append.md ]; then \

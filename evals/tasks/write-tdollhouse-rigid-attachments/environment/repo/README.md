@@ -10,4 +10,4 @@ This is a focused extraction of `zuccherocafe/tdollhouse` at `ba934cb0b28cbc5010
 
 The character reader accepts a focused line-based subset: `character {`, `attach "Badge" to="Cloth"`, and `}`. It also accepts bare attachment statements for callers constructing a character fragment. Names are quoted and contain no escapes. No KDL or binary model importer is needed to exercise the conversion contracts.
 
-The area read is [Skin](docs/design-reads/skin.md).
+The area read is [Skin](docs/concord/skin.md).

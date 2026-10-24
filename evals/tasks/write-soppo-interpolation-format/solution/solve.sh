@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 
 revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-read = Path("docs/design-reads/interpolation.md")
+read = Path("docs/concord/interpolation.md")
 read.parent.mkdir(parents=True, exist_ok=True)
 read.write_text(f"""# Interpolation design read
 
@@ -42,13 +42,13 @@ PY
 cargo fmt --check
 cargo test --offline
 cargo clippy --offline --all-targets -- -D warnings
-if command -v design-read >/dev/null 2>&1; then
-    design-read check
+if command -v concord >/dev/null 2>&1; then
+    concord check
 fi
 if command -v rust-scans >/dev/null 2>&1; then
     rust-scans --workspace . --core soppo
 fi
-git add src tests/scenarios.rs docs/design-reads/interpolation.md
+git add src tests/scenarios.rs docs/concord/interpolation.md
 git -c user.name='Reference solution' -c user.email='reference@example.invalid' commit \
     -m 'syntax: add typed interpolation format specifiers' \
     -m 'Parse interpolation directives into checked syntax shared by inference, Go generation and source formatting. Refuse malformed directives at parsing and incompatible expression types during inference, with typed errors identifying the directive.' \

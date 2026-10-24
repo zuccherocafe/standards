@@ -11,10 +11,10 @@ index cf89658..ba31e74 100644
  
  ## Scope
  
-diff --git a/docs/design-reads/rust-mutants.md b/docs/design-reads/rust-mutants.md
+diff --git a/docs/concord/rust-mutants.md b/docs/concord/rust-mutants.md
 index a5aaa7a..0abdf61 100644
---- a/docs/design-reads/rust-mutants.md
-+++ b/docs/design-reads/rust-mutants.md
+--- a/docs/concord/rust-mutants.md
++++ b/docs/concord/rust-mutants.md
 @@ -2,22 +2,20 @@
  
  ## Models in play

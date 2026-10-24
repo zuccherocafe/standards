@@ -14,4 +14,4 @@ Use a named `mutants` profile inheriting `test` with optimisation level one, bot
 
 ## Evidence
 
-Read `docs/design-reads/rust-mutants.md` and `evidence/checks.log`. Checks cover command arguments, partitioning and CLI parsing; they do not establish concurrent prepared-target isolation. Timings are reports only and never acceptance thresholds.
+Read `docs/concord/rust-mutants.md` and `evidence/checks.log`. Checks cover command arguments, partitioning and CLI parsing; they do not establish concurrent prepared-target isolation. Timings are reports only and never acceptance thresholds.

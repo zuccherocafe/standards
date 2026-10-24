@@ -91,7 +91,7 @@
       # Advises only: it fails on a pin file it cannot read, never on a pin's age.
       pinAge = workspaceTool "pin-age";
 
-      designRead = workspaceTool "design-read";
+      concord = workspaceTool "concord";
 
       # Harbor runs the evals. evals/uv.lock pins it and everything it imports, each as a wheel for this system, so
       # nothing builds from source and nothing installs at run time. Only Harbor's own commands reach the shell.
@@ -137,7 +137,7 @@
         name = "evals";
         runtimeInputs = [
           harbor
-          designRead
+          concord
           rustScans
           pkgs.python314
           pkgs.jq
@@ -150,7 +150,7 @@
           export EVALS_SUPERPOWERS="${superpowers}"
           export EVALS_SUPERPOWERS_REV="${superpowers.rev or "unknown"}"
           export EVALS_HARBOR="${harbor}/bin/harbor"
-          export EVALS_DESIGN_READ="${designRead}/bin/design-read"
+          export EVALS_CONCORD="${concord}/bin/concord"
           export EVALS_RUST_SCANS="${rustScans}/bin/rust-scans"
           top="$(git rev-parse --show-toplevel)"
           exec python3 -I "$top/evals/runner/evals.py" "$@"
@@ -279,10 +279,9 @@
         rust-mutants = rustMutants;
         cargo-mutants = cargoMutants;
         pin-age = pinAge;
-        design-read = designRead;
         nix-lint = nixLint;
         evals = evalsCli;
-        inherit dandegate harbor;
+        inherit dandegate harbor concord;
       };
 
       checks.${system}.nix-lint = pkgs.runCommand "nix-lint" { } ''
@@ -303,7 +302,7 @@
           gdscriptScans
           rustMutants
           pinAge
-          designRead
+          concord
           nixLint
           harbor
           evalsCli

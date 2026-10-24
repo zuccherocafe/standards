@@ -43,7 +43,7 @@ class TestEvals(unittest.TestCase):
 
     def test_slugify_heading_matches_github_fragments(self) -> None:
         self.assertEqual(slugify_heading("How strictly a rule applies"), "how-strictly-a-rule-applies")
-        self.assertEqual(slugify_heading("What `design-read check` checks"), "what-design-read-check-checks")
+        self.assertEqual(slugify_heading("What `concord check` checks"), "what-concord-check-checks")
 
     def test_discover_live_standards_from_repository(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
@@ -97,7 +97,7 @@ class TestEvals(unittest.TestCase):
                             "type": "toolCall",
                             "id": "tc4",
                             "name": "bash",
-                            "arguments": {"command": "design-read check && git diff"},
+                            "arguments": {"command": "concord check && git diff"},
                         },
                     ],
                 },
@@ -153,7 +153,7 @@ class TestEvals(unittest.TestCase):
         self.assertIn("rules/general.md", audit.standards_files_read)
         self.assertNotIn("rules/review.md", audit.standards_files_read)
         self.assertIn("skills/change-write/SKILL.md", audit.skills_read)
-        self.assertTrue(audit.ran_design_read_check)
+        self.assertTrue(audit.ran_concord_check)
         self.assertTrue(audit.ran_git_diff_or_show)
 
     def test_stage_condition_and_report(self) -> None:

@@ -20,7 +20,7 @@ RUN git init -b main && git config user.name 'Soppo maintainer' \
 
 ENV CARGO_NET_OFFLINE=true
 COPY condition_overlay/ /opt/condition_overlay/
-RUN if [ -f /opt/condition_overlay/bin/design-read ]; then install /opt/condition_overlay/bin/* /usr/local/bin/; fi \
+RUN if [ -f /opt/condition_overlay/bin/concord ]; then install /opt/condition_overlay/bin/* /usr/local/bin/; fi \
     && if [ -d /opt/condition_overlay/standards ]; then \
         cp -a /opt/condition_overlay/standards /standards; \
         if [ -f /opt/condition_overlay/standards_agents_append.md ]; then \

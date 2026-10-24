@@ -233,31 +233,31 @@ def _standards_agents_appendix(spec: TaskSpec, dest_task_dir: Path) -> str:
             "once the review is complete.\n"
         )
 
-    read_dir = dest_task_dir / "environment" / "repo" / "docs" / "design-reads"
+    read_dir = dest_task_dir / "environment" / "repo" / "docs" / "concord"
     read_files: list[str] = (
         sorted(p.name for p in read_dir.glob("*.md") if p.name != "README.md") if read_dir.is_dir() else []
     )
-    design_read_ref = f"docs/design-reads/{read_files[0]}" if read_files else "none"
+    concord_ref = f"docs/concord/{read_files[0]}" if read_files else "none"
     return (
         "\n## Standards and brief\n\n"
         "- Size: normal\n"
-        f"- Design read: `{design_read_ref}`\n"
+        f"- Concord note: `{concord_ref}`\n"
         "- Decided: the product contract in the task prompt is complete; there are no open questions of intent "
         "requiring a `QUESTION:` stop.\n\n"
         "Read `/standards/rules/general.md`, `/standards/rules/languages/rust/`, and `/standards/rules/review.md`. "
-        "Follow `/standards/skills/change-write/SKILL.md` and `/standards/skills/design-read/SKILL.md`. `/app` is "
+        "Follow `/standards/skills/change-write/SKILL.md` and `/standards/skills/concord/SKILL.md`. `/app` is "
         "already an isolated scratch clone with the development shell's tools pre-installed on `PATH`, so run "
-        "commands directly without `nix develop -c`, settle the open disagreement in the design read, run "
-        "`design-read check`, and commit directly on the current branch in `/app`.\n"
+        "commands directly without `nix develop -c`, settle the open disagreement in the concord note, run "
+        "`concord check`, and commit directly on the current branch in `/app`.\n"
     )
 
 
 def _stage_container_tools(repo_root: Path, bin_dir: Path) -> None:
-    """Copy container-compatible `design-read` and `rust-scans` binaries into `bin_dir`."""
+    """Copy container-compatible `concord` and `rust-scans` binaries into `bin_dir`."""
     bin_dir.mkdir(parents=True, exist_ok=True)
     cache_bin_dir = repo_root / ".cache" / "evals" / "container-tools"
-    if (cache_bin_dir / "design-read").is_file() and (cache_bin_dir / "rust-scans").is_file():
-        for bin_name in ("design-read", "rust-scans"):
+    if (cache_bin_dir / "concord").is_file() and (cache_bin_dir / "rust-scans").is_file():
+        for bin_name in ("concord", "rust-scans"):
             shutil.copy2(cache_bin_dir / bin_name, bin_dir / bin_name)
 
 
@@ -405,7 +405,7 @@ def ensure_base_image(repo_root: Path) -> None:
             raise ValueError(f"{pi_dir}: failed to build base image {tag}")
 
     cache_bin_dir = repo_root / ".cache" / "evals" / "container-tools"
-    if not (cache_bin_dir / "design-read").is_file() or not (cache_bin_dir / "rust-scans").is_file():
+    if not (cache_bin_dir / "concord").is_file() or not (cache_bin_dir / "rust-scans").is_file():
         cache_bin_dir.mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [
@@ -420,8 +420,8 @@ def ensure_base_image(repo_root: Path) -> None:
                 "bash",
                 "-c",
                 "set -euo pipefail && cp -R /src /tmp/tools && "
-                "cargo build --locked --manifest-path /tmp/tools/Cargo.toml -p design-read -p rust-scans && "
-                "cp /tmp/tools/target/debug/design-read /tmp/tools/target/debug/rust-scans /out/",
+                "cargo build --locked --manifest-path /tmp/tools/Cargo.toml -p concord -p rust-scans && "
+                "cp /tmp/tools/target/debug/concord /tmp/tools/target/debug/rust-scans /out/",
             ],
             check=True,
             capture_output=True,

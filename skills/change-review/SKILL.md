@@ -9,7 +9,7 @@ You are the one independent reviewer of a change you did not write. Review it ag
 
 ## Read the brief, evidence, and diff
 
-1. Read the review brief. Then read the change's brief, its named decisions, and the writer's report. In a brief review, check the brief's `Design read:` call against [When a read is due](../design-read/SKILL.md#when-a-read-is-due), and when it links a read, check the read against [What `design-read check` checks](../design-read/SKILL.md#what-design-read-check-checks) and [Sample the area in a brief review](../design-read/SKILL.md#sample-the-area-in-a-brief-review).
+1. Read the review brief. Then read the change's brief, its named decisions, and the writer's report. In a brief review, check the brief's `Concord note:` call against [When a concord note is due](../concord/SKILL.md#when-a-concord-note-is-due), and when it links a note, check the note against [What `concord check` checks](../concord/SKILL.md#what-concord-check-checks) and [Sample the area in a brief review](../concord/SKILL.md#sample-the-area-in-a-brief-review).
 2. Before reading code, read the full check log at the tip and any other evidence the brief picked, such as the change report, public API diff, `refusals.txt`, and line counts. The checks are the acceptance signal. Do not rerun what the evidence already shows.
 3. Read the diff against the base with `git diff`. Then read the change at its tip with `git show`. Read every changed function in full, and the code the change calls.
 4. Treat repositories as read-only. To build or run something, first clone into a new scratch folder. Work inside the project's development shell at its resource limits. Stop every process you start by its process ID. Delete the clone afterwards. Never commit.
@@ -26,7 +26,7 @@ Answer every question in [`review.md`](../../rules/review.md), starting with its
 - **A simpler design.** Identify a design with fewer concepts, special cases, or layers that does the same job on real data. State what it removes. Never propose one that is wrong for an input that must get the right answer ([Correctness comes from the design first](../../rules/general.md#design)).
 - **Evidence and its limits.** State what each piece of evidence proves and which claims lack sufficient evidence.
 - **Decision reasons.** Check that the documentation or commit bodies record the reasons that [Record the reasons for decisions](../change-write/SKILL.md#record-the-reasons-for-decisions) requires.
-- **The area's design read.** Check that any area file in `docs/design-reads/` whose rows the change settled or whose prose it made wrong was updated, and that no unsettled disagreement row was deleted before the code satisfied its `Done when` condition ([Keep the area file current](../design-read/SKILL.md#keep-the-area-file-current)).
+- **The area's concord note.** Check that any concord note in `docs/concord/` whose rows the change settled or whose prose it made wrong was updated, and that no unsettled disagreement row was deleted before the code satisfied its `Done when` condition ([Keep the concord note current](../concord/SKILL.md#keep-the-concord-note-current)).
 
 Do not reopen a decision recorded in the brief. Do not request checks of inputs nothing real produces.
 

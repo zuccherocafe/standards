@@ -476,12 +476,12 @@ def grade_write_trial(
 
     results.extend(check_diff_rules(repo_dir, base_rev, cfg))
 
-    if (repo_dir / "docs" / "design-reads").is_dir():
-        dr_proc = _run_cmd(["design-read", "check"], repo_dir)
+    if (repo_dir / "docs" / "concord").is_dir():
+        dr_proc = _run_cmd(["concord", "check"], repo_dir)
         dr_ok = dr_proc.returncode == 0
         results.append(
             RuleCheckResult(
-                rule_id="skills/design-read#check",
+                rule_id="skills/concord#check",
                 applicable=True,
                 passed=dr_ok,
                 detail=dr_proc.stdout.strip() or dr_proc.stderr.strip(),

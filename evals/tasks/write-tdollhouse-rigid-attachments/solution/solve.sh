@@ -7,7 +7,7 @@ git apply "$solution_dir/reference.patch"
 cargo fmt --all
 cargo clippy --locked --offline --all-targets -- -D warnings
 cargo test --locked --offline --workspace
-design-read check
+concord check
 git add src tests docs README.md
 git commit -m 'convert: attach rigid pieces after surface solvers' \
     -m 'Bind each dedicated piece to a closest usable cut triangle and retain its rigid rest offset. Refuse shared ownership and unusable support so a follower cannot deform or drive another owner.' \

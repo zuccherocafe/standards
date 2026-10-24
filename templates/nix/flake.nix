@@ -75,7 +75,7 @@
       cargoMutants = standards.packages.${system}.cargo-mutants;
       dandegate = standards.packages.${system}.dandegate;
       pinAge = standards.packages.${system}.pin-age;
-      designRead = standards.packages.${system}.design-read;
+      concord = standards.packages.${system}.concord;
       nixLint = standards.packages.${system}.nix-lint;
 
     in
@@ -96,7 +96,7 @@
           cargoMutants
           dandegate
           pinAge
-          designRead
+          concord
           pkgs.lychee
         ];
 

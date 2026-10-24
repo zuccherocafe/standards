@@ -18,7 +18,7 @@ If the person you work for is not a maintainer of this project, tell them to rea
 
 The [standards skills](https://github.com/zuccherocafe/standards/tree/main/skills) define each role's work. A tool that loads skills loads them by name. Other agents read the file for their role before starting, as follows:
 
-- To read an area's design or update its area file: [design-read](https://github.com/zuccherocafe/standards/blob/main/skills/design-read/SKILL.md).
+- To read an area and record or update its concord note: [concord](https://github.com/zuccherocafe/standards/blob/main/skills/concord/SKILL.md).
 - To write a change from a brief: [change-write](https://github.com/zuccherocafe/standards/blob/main/skills/change-write/SKILL.md).
 - To review a change: [change-review](https://github.com/zuccherocafe/standards/blob/main/skills/change-review/SKILL.md).
 - To check fixes and land a change: [change-land](https://github.com/zuccherocafe/standards/blob/main/skills/change-land/SKILL.md).
@@ -29,14 +29,14 @@ The skills' quick and full checks refer to commands in this file's Checks sectio
 
 | Topic | Document |
 |---|---|
-| Design reads | `docs/design-reads/` |
+| Concord notes | `docs/concord/` |
 | <topic> | <document> |
 
 ## Toolchain
 
-With Lix, enter the development shell with `nix develop`, or run one command with `nix develop -c <command>`. The shell provides every tool below at its pinned version. Track `flake.nix` and `flake.lock` in `git`, since a flake sees only tracked files. Without the shell, use the fallback steps below.
+With Lix, enter the development shell with `nix develop`, or run one command with `nix develop -c <command>`. The shell provides the tools pinned by `flake.nix` and `flake.lock`. Track `flake.nix` and `flake.lock` in `git`, since a flake sees only tracked files. Without the shell, use the fallback steps below.
 
-<List the exact tool versions the project needs and their sources. Include the language toolchain pinned in `rust-toolchain.toml`, tools used by checks, and manually installed tools. State which component reads each environment variable.>
+<Link the files that pin the toolchain and tools. Give fallback installation steps without repeating their versions. State which component reads each environment variable.>
 
 ## Checks
 

@@ -9,7 +9,7 @@ Each change has a brief based on the standards' `templates/BRIEF.md`. You build 
 
 ## Before you write code
 
-1. Read the entire brief. Then read everything under "Read first": the standards sections, decisions to implement, and earlier review findings to preserve. Stop if the brief's `Design read:` line is missing, says `none` where the [design-read](../design-read/SKILL.md#when-a-read-is-due) trigger applies, or names a read that fails that skill's check.
+1. Read the entire brief. Then read everything under "Read first": the standards sections, decisions to implement, and earlier review findings to preserve. Stop if the brief's `Concord note:` line is missing, says `none` where the [concord](../concord/SKILL.md#when-a-concord-note-is-due) trigger applies, or names a note that fails that skill's check.
 2. Read the project's `AGENTS.md` and its standards: `general.md`, the language standard, and `review.md`.
 3. Open every site the brief names. Find each by its symbol, not its line, since other changes land while you work.
 4. Do not reopen a decision under "Decided". If the brief leaves a required question of intent unanswered, stop. Report `QUESTION:` rather than guess.
@@ -23,7 +23,7 @@ Each change has a brief based on the standards' `templates/BRIEF.md`. You build 
 
 ## Commit one concept at a time
 
-1. Follow the brief's "Do" list. Make one commit per concept in an order that keeps every commit's quick checks passing. Commit the linked design read and update the area file as [Keep the area file current](../design-read/SKILL.md#keep-the-area-file-current) requires.
+1. Follow the brief's "Do" list. Make one commit per concept in an order that keeps every commit's quick checks passing. Commit the linked concord note and keep it current as [Keep the concord note current](../concord/SKILL.md#keep-the-concord-note-current) requires.
 2. Run the quick checks before every commit. Run the full checks at the change's tip after its last commit, and again after every rebase.
 3. Stage files by explicit path. Modify only files assigned to the change. In a shared file such as `AGENTS.md` or a README, change only your lines.
 4. Write each message as [general.md's Version control](../../rules/general.md#version-control) says, with no attribution trailer.

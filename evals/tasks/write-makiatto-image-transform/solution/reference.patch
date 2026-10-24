@@ -11,10 +11,10 @@ index 9e0e7a1..1cb614a 100644
  
  [workspace]
  resolver = "3"
-diff --git a/docs/design-reads/web-serving.md b/docs/design-reads/web-serving.md
+diff --git a/docs/concord/web-serving.md b/docs/concord/web-serving.md
 index 637655f..84eaaa5 100644
---- a/docs/design-reads/web-serving.md
-+++ b/docs/design-reads/web-serving.md
+--- a/docs/concord/web-serving.md
++++ b/docs/concord/web-serving.md
 @@ -1,29 +1,29 @@
  # Web serving design read
  

@@ -28,11 +28,11 @@ new = '''                Err(error) => {
 assert text.count(old) == 1
 path.write_text(text.replace(old, new))
 PY
-cp "$solution/dandegate-cache.md" docs/design-reads/dandegate-cache.md
+cp "$solution/dandegate-cache.md" docs/concord/dandegate-cache.md
 cargo fmt --all
-design-read check
+concord check
 cargo test --offline --locked -p dandegate
-git add crates/dandegate docs/design-reads/dandegate-cache.md
+git add crates/dandegate docs/concord/dandegate-cache.md
 git commit --quiet \
     -m 'dandegate: give project steps a build cache that survives runs' \
     -m 'Fresh comparison checkouts make compilation start cold. Give each step and place a persistent build directory, separate from immutable result reuse and transient source checkouts.' \

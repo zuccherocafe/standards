@@ -68,7 +68,7 @@ for model in models:
 string_error = bool(re.search(r"Result\s*<\s*\(\s*\)\s*,\s*String\s*>", source))
 scenarios = repo / "tests/scenarios.rs"
 scenario_text = scenarios.read_text(encoding="utf-8") if scenarios.is_file() else ""
-read = repo / "docs/design-reads/interpolation.md"
+read = repo / "docs/concord/interpolation.md"
 read_text = read.read_text(encoding="utf-8") if read.is_file() else ""
 section = read_text.partition("## Disagreements")[2].split("\n## ", 1)[0].strip()
 rules = {
@@ -80,7 +80,7 @@ rules = {
         "passed": scenario_text.lstrip().startswith("//!") and "#[test]" in scenario_text,
         "detail": "tests/scenarios.rs documents the public uses and contains scenario tests",
     },
-    "skills/design-read#settled-interpolation": {
+    "skills/concord#settled-interpolation": {
         "passed": section == "None found.",
         "detail": "interpolation disagreement is settled without leaving a table beside None found",
     },
