@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p /app
+cat > /app/findings.jsonl <<'FINDINGS'
+{"file": "src/ast.rs", "lines": [44, 49], "kind": "correctness", "severity": "must-fix", "finding": "Variant coverage counts guarded arms, so a false guard falls through while the match is classed as returning; count only unguarded arms."}
+{"file": "tests/match_flow.rs", "lines": [15, 16], "kind": "tests", "severity": "must-fix", "finding": "The expected value calls stmt_diverges, the predicate under test; author the expected false and the MissingReturn diagnostic."}
+{"file": "tests/match_flow.rs", "lines": [19, 30], "kind": "tests", "severity": "must-fix", "finding": "The property has no fixed seed and keeps default failure persistence; set RngSeed::Fixed and failure_persistence: None."}
+{"file": "src/main.rs", "lines": [28, 31], "kind": "correctness", "severity": "must-fix", "finding": "An unreadable package exits with success, so a misspelt path passes unchecked; let it fail like other errors."}
+{"file": "src/infer.rs", "lines": [74, 78], "kind": "correctness", "severity": "must-fix", "finding": "Every arm shares one nullable set, so a nil check in one arm narrows its siblings and the code after the match; check each arm on a copy."}
+{"file": "src/infer.rs", "lines": [48, 53], "kind": "design", "severity": "should-fix", "finding": "The wildcard in optional_binding hides future Expr variants; name Expr::Integer explicitly."}
+FINDINGS
 cat > /app/REVIEW.md <<'REVIEW'
 # Match-flow review
 
@@ -26,7 +34,19 @@ In `tests/match_flow.rs`, the bare `proptest!` block uses the default configurat
 
 Smallest fix: add `proptest_config(Config { cases: 256, rng_seed: RngSeed::Fixed(0x7d0c), failure_persistence: None, ..Config::default() })` and the corresponding imports. Keep a genuine counterexample as an ordinary authored regression test. This costs one short configuration block and changes no production design. Rule: `/standards/rules/languages/rust/tests.md#properties`.
 
-## 4. Should-fix: a wildcard hides the next expression decision
+## 4. Must-fix: a package that cannot be read passes the check
+
+`src/main.rs` now matches `CheckError::Source(SourceError::Unavailable { .. })` and returns `ExitCode::SUCCESS` after printing "no source to check". A maintainer whose build script names a misspelt or moved package, such as `soppo src/mian.soppo`, gets exit status zero, and any automation reading the status treats a program it never read as checked. The brief's acceptance promise is that the CLI fails on diagnostics and accepts only a clean report; an unread package has no report. Before this change the same input failed.
+
+The change moves the source read behind `PackageSourceReader` and, in moving it, stops refusing a missing file. `/standards/rules/languages/rust/errors.md#where-a-refusal-sits` and **A refusal sits where it is cheapest** in `/standards/rules/general.md#design` require a moved refusal to refuse every input it refused before. Delete the new arm so an unavailable source reaches the existing failing `Err(error)` arm. This is a four-line deletion. Add a CLI scenario with a missing path that expects a failing status.
+
+## 5. Must-fix: one arm's nil check narrows its sibling arms
+
+`src/infer.rs::check_block` now passes the shared `nullable` set to every arm instead of a copy. An `if value is nil { return 0; }` inside the `Open` arm removes `value` for the `Closed` arm and for code after the match. `fn size(value: Text?, gate: Gate) -> int { match gate { Open => { if value is nil { return 0; } return value.length; }, Closed => { return value.length; } } }` is accepted, although `gate = Closed, value = nil` reads `.length` on nil; the base reports `NilDereference`. A nil fact holds only on the path that established it, and arms are alternative paths.
+
+No narrower rule names how flow facts are scoped; this breaks the brief's nil-safety promise under `/standards/rules/general.md#design`, **Correctness comes from the design first**. Restore a copy per arm, and narrow after the match only for bindings every continuing arm narrowed. Add the program above as a scenario expecting `NilDereference`.
+
+## 6. Should-fix: a wildcard hides the next expression decision
 
 In `src/infer.rs::optional_binding`, `_ => None` matches the crate-owned `Expr` enum. Today its only other variant is `Integer`, so there is no wrong result for a current input. A new expression variant would silently inherit the assumption that it cannot read nullable text. Replace the wildcard with `Expr::Integer(_) => None`; this is a one-line fix that restores a compile-time decision on enum growth. Rule: `/standards/rules/languages/rust/design.md#closed-sets`.
 
@@ -36,7 +56,7 @@ In `src/infer.rs::optional_binding`, `_ => None` matches the crate-owned `Expr` 
 
 ## Verdict
 
-**fix first**: repair guarded coverage, replace the tautological expectation, and configure reproducible non-writing properties (findings 1–3). The source-reader decision stays intact.
+**fix first**: repair guarded coverage, replace the tautological expectation, configure reproducible non-writing properties, keep a refused unreadable package refused, and scope nil narrowing to its arm (findings 1–5). The source-reader decision stays intact.
 
 DONE: final
 REVIEW

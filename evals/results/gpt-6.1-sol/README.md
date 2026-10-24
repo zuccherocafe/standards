@@ -7,6 +7,8 @@
 - Harness: `harbor 0.24.0`, `pi 1.4.0`
 - Model: `gpt-6.1-sol` (thinking: `high`, max turns: `35`)
 
+Its review scores came from a keyword grader over `REVIEW.md` that the runner no longer has, so they are not comparable with review scores from `findings.jsonl`.
+
 ## Summary by condition
 
 | Condition | Write avg | Review avg | Overall reward | Adherence | Avg turns | Cost (USD) |

@@ -228,18 +228,27 @@ index 00cca0b..22d48a4 100644
      fn command_line_defaults_to_one_worker() {
          let args = ["--workspace", "subject", "--cases", "cases"];
 diff --git a/tools/crates/rust-mutants/src/shards.rs b/tools/crates/rust-mutants/src/shards.rs
-index 77c3a10..d7723d3 100644
+index 77c3a10..2afb111 100644
 --- a/tools/crates/rust-mutants/src/shards.rs
 +++ b/tools/crates/rust-mutants/src/shards.rs
-@@ -11,6 +11,7 @@ pub(crate) struct Shard {
+@@ -3,6 +3,7 @@
+ use crate::command::{CargoCommand, Prepared};
+ use std::fs;
+ use std::io;
++use std::os::unix::fs::symlink;
+ use std::path::{Path, PathBuf};
+ use std::thread;
+ 
+@@ -11,6 +12,8 @@ pub(crate) struct Shard {
      workspace: PathBuf,
      target: PathBuf,
      cases: Vec<PathBuf>,
 +    command: Prepared,
++    seeded: bool,
  }
  
  #[derive(Debug, PartialEq, Eq)]
-@@ -19,12 +20,25 @@ pub(crate) struct MutationResult {
+@@ -19,12 +22,26 @@ pub(crate) struct MutationResult {
      pub(crate) caught: bool,
  }
  
@@ -266,21 +275,40 @@ index 77c3a10..d7723d3 100644
 +                target,
 +                cases: cases.iter().skip(index).step_by(count).cloned().collect(),
 +                command,
++                seeded: prepared_target.is_some(),
 +            }
          })
          .collect()
  }
-@@ -37,7 +51,8 @@ fn stage_workspace(subject: &Path, workspace: &Path) -> io::Result<()> {
+@@ -36,8 +53,26 @@ fn stage_workspace(subject: &Path, workspace: &Path) -> io::Result<()> {
+     Ok(())
  }
  
++/// Point a seeded worker's manifest and sources at the subject's own files, because the seed's
++/// fingerprints record the source paths it compiled.
++fn link_workspace(subject: &Path, workspace: &Path) -> io::Result<()> {
++    fs::create_dir_all(workspace)?;
++    for entry in ["Cargo.toml", "src"] {
++        let link = workspace.join(entry);
++        if fs::symlink_metadata(&link).is_err() {
++            symlink(subject.join(entry), link)?;
++        }
++    }
++    Ok(())
++}
++
  fn run_shard(subject: &Path, shard: &Shard) -> io::Result<Vec<MutationResult>> {
 -    stage_workspace(subject, &shard.workspace)?;
 +    let workspace = shard.workspace.clone();
-+    stage_workspace(subject, &workspace)?;
++    if shard.seeded {
++        link_workspace(subject, &workspace)?;
++    } else {
++        stage_workspace(subject, &workspace)?;
++    }
      let mut results = Vec::with_capacity(shard.cases.len());
      for case in &shard.cases {
          fs::copy(case, shard.workspace.join("src/lib.rs"))?;
-@@ -47,10 +62,9 @@ fn run_shard(subject: &Path, shard: &Shard) -> io::Result<Vec<MutationResult>> {
+@@ -47,10 +82,9 @@ fn run_shard(subject: &Path, shard: &Shard) -> io::Result<Vec<MutationResult>> {
              Err(error) if error.kind() == io::ErrorKind::NotFound => {}
              Err(error) => return Err(error),
          }
@@ -292,7 +320,7 @@ index 77c3a10..d7723d3 100644
          });
      }
      Ok(results)
-@@ -81,7 +95,7 @@ mod tests {
+@@ -81,7 +115,7 @@ mod tests {
      #[test]
      fn cases_are_partitioned_once_in_authored_order() {
          let cases: Vec<PathBuf> = ["a.rs", "b.rs", "c.rs"].map(PathBuf::from).into();

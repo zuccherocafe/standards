@@ -1,4 +1,4 @@
-"""Evaluates a completed trial's standards adherence or review accuracy inside the task verifier.
+"""Evaluates a completed trial's standards adherence or review findings inside the task verifier.
 
 Run by `/tests/test.sh` as `python3 -I /tests/grade_adherence.py <mode> ...`. Reads the live standards from
 `/tests/live_standards/` (copied at staging time from the repository root) and writes `/logs/verifier/reward.json`,
@@ -17,6 +17,7 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
+from enum import StrEnum
 
 from adherence import (
     EvaluationResult,
@@ -38,40 +39,6 @@ _WORD_NUMBERS: dict[str, int] = {
     "nine": 9,
     "ten": 10,
 }
-
-_NEGATION_WORDS = (
-    "no ",
-    "not ",
-    "neither ",
-    "without ",
-    "never ",
-    "does not",
-    "do not",
-    "cannot ",
-    "is sound",
-    "remains sound",
-    "is valid",
-    "not a bug",
-    "not a finding",
-    "no finding",
-)
-
-_DEFECT_NEGATION_PHRASES = (
-    "no dropped",
-    "no detached",
-    "not detached",
-    "no stale",
-    "not stale",
-    "stale output does not occur",
-    "no divide-by-zero",
-    "no division by zero",
-    "is sound",
-    "remains sound",
-    "is valid",
-    "not a bug",
-    "not a finding",
-    "no finding",
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,48 +62,144 @@ class LiveRulesConfig:
     has_scenarios_first_rule: bool
 
 
+class Severity(StrEnum):
+    """How strongly a finding or a planted defect blocks a change, in the change-review skill's two kinds."""
+
+    MUST_FIX = "must-fix"
+    SHOULD_FIX = "should-fix"
+
+
+class FindingKind(StrEnum):
+    """What sort of fault a finding or a planted defect is."""
+
+    CORRECTNESS = "correctness"
+    CONCURRENCY = "concurrency"
+    SECURITY = "security"
+    PERFORMANCE = "performance"
+    TESTS = "tests"
+    DOCUMENTATION = "documentation"
+    DESIGN = "design"
+    IDIOM = "idiom"
+
+
+MAX_FINDING_SPAN = 30
+"""A finding spanning more lines than this points at no defect, so a finding cannot claim a whole file."""
+
+LOCATION_SLACK = 3
+"""A finding is on a defect when it touches the defect's lines widened by this many lines on each side."""
+
+
 @dataclass(frozen=True, slots=True)
-class MustFixSpec:
-    """One ground-truth must-fix defect in a review task."""
+class LineRange:
+    """Inclusive one-based line numbers in a file at the reviewed revision."""
+
+    first: int
+    last: int
+
+    def __post_init__(self) -> None:
+        if self.first < 1 or self.last < self.first:
+            raise ValueError(f"line range [{self.first}, {self.last}] must satisfy 1 <= first <= last")
+
+    @property
+    def span(self) -> int:
+        """The number of lines the range covers."""
+        return self.last - self.first + 1
+
+    def touches(self, other: LineRange, slack: int) -> bool:
+        """Whether this range shares a line with `other` widened by `slack` lines on each side."""
+        return self.first <= other.last + slack and self.last >= other.first - slack
+
+
+@dataclass(frozen=True, slots=True)
+class Finding:
+    """One finding a reviewer recorded in `findings.jsonl`."""
+
+    file: str
+    lines: LineRange
+    kind: FindingKind
+    severity: Severity
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class Site:
+    """Lines in one file at the reviewed revision."""
+
+    file: str
+    lines: LineRange
+
+
+@dataclass(frozen=True, slots=True)
+class PlantedDefect:
+    """One defect planted in a review task's change.
+
+    `sites` and `kinds` list every place and kind a correct finding may give, since one fault can be located at its
+    cause or where it does harm and described from more than one angle. `rule` names the standards rule the defect
+    falls under, as `file#anchor`, exactly when the standards name it.
+    """
+
+    item_id: str
+    sites: tuple[Site, ...]
+    kinds: tuple[FindingKind, ...]
+    severity: Severity
+    rule: str | None
+
+    def __post_init__(self) -> None:
+        if not self.sites or not self.kinds:
+            raise ValueError(f"defect {self.item_id!r} needs at least one site and one kind")
+
+    @property
+    def named_by_standards(self) -> bool:
+        """Whether a standards rule names this defect."""
+        return self.rule is not None
+
+
+@dataclass(frozen=True, slots=True)
+class Bait:
+    """Sound code a reviewer may wrongly block on; a must-fix finding on its lines is a false positive."""
 
     item_id: str
     file: str
-    keywords: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ShouldFixSpec:
-    """One ground-truth should-fix defect in a review task."""
-
-    item_id: str
-    keywords: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class BaitSpec:
-    """One false-positive trap in a review task."""
-
-    item_id: str
-    trap_keywords: tuple[str, ...]
+    lines: LineRange
 
 
 @dataclass(frozen=True, slots=True)
 class ReviewSpec:
-    """Parsed ground-truth specification for a review task."""
+    """Parsed ground truth for a review task."""
 
-    must_fix: tuple[MustFixSpec, ...]
-    should_fix: tuple[ShouldFixSpec, ...]
-    bait: tuple[BaitSpec, ...]
+    defects: tuple[PlantedDefect, ...]
+    bait: tuple[Bait, ...]
     expected_verdict: str
 
 
 @dataclass(frozen=True, slots=True)
-class ReviewSection:
-    """One Markdown section parsed from an agent's `REVIEW.md`."""
+class ReviewScore:
+    """Which planted defects a review found, which bait it blocked on, and its false positives."""
 
-    heading: str
-    body: str
-    kind: str  # "must-fix", "should-fix", or "prose"
+    found: dict[str, bool]
+    bait_hits: dict[str, bool]
+    false_positives: int
+    spec: ReviewSpec
+
+    def recall(self, named: bool | None = None) -> float | None:
+        """Defects found over defects planted, in one group or overall; `None` when the group has none."""
+        group = self._group(named)
+        if not group:
+            return None
+        return sum(1 for d in group if self.found[d.item_id]) / len(group)
+
+    def precision(self, named: bool | None = None) -> float | None:
+        """Defects found over defects planted plus must-fix findings on no defect; `None` for an empty group.
+
+        False positives belong to no group, so a group's precision counts all of them.
+        """
+        group = self._group(named)
+        if not group:
+            return None
+        return sum(1 for d in group if self.found[d.item_id]) / (len(group) + self.false_positives)
+
+    def _group(self, named: bool | None) -> list[PlantedDefect]:
+        return [d for d in self.spec.defects if named is None or d.named_by_standards == named]
 
 
 def load_live_rules_config(inventory: StandardsInventory) -> LiveRulesConfig:
@@ -454,236 +517,232 @@ def grade_write_trial(
     )
 
 
+def _required(item: dict[str, object], key: str, where: str) -> object:
+    if key not in item:
+        raise ValueError(f"{where}: missing {key!r}")
+    return item[key]
+
+
+def _line_range(raw: object, where: str) -> LineRange:
+    if (
+        not isinstance(raw, list)
+        or len(raw) != 2
+        or not all(isinstance(n, int) and not isinstance(n, bool) for n in raw)
+    ):
+        raise ValueError(f"{where}: lines: expected [first, last] integers, got {raw!r}")
+    try:
+        return LineRange(first=raw[0], last=raw[1])
+    except ValueError as exc:
+        raise ValueError(f"{where}: lines: {exc}") from exc
+
+
+def _str_field(item: dict[str, object], key: str, where: str) -> str:
+    value = _required(item, key, where)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{where}: {key}: expected a non-empty string, got {value!r}")
+    return value
+
+
+def _enum_field[E: StrEnum](item: dict[str, object], key: str, enum: type[E], where: str) -> E:
+    value = _required(item, key, where)
+    try:
+        return enum(value)
+    except ValueError as exc:
+        allowed = ", ".join(member.value for member in enum)
+        raise ValueError(f"{where}: {key}: expected one of {allowed}, got {value!r}") from exc
+
+
+def _sites(item: dict[str, object], where: str) -> tuple[Site, ...]:
+    raw = _required(item, "sites", where)
+    if not isinstance(raw, list) or not raw or not all(isinstance(site, dict) for site in raw):
+        raise ValueError(f"{where}: sites: expected a non-empty list of objects")
+    return tuple(
+        Site(
+            file=_str_field(site, "file", f"{where}: sites[{index}]"),
+            lines=_line_range(_required(site, "lines", f"{where}: sites[{index}]"), f"{where}: sites[{index}]"),
+        )
+        for index, site in enumerate(raw)
+    )
+
+
+def _kinds(item: dict[str, object], where: str) -> tuple[FindingKind, ...]:
+    raw = _required(item, "kinds", where)
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"{where}: kinds: expected a non-empty list")
+    kinds: list[FindingKind] = []
+    for value in raw:
+        try:
+            kinds.append(FindingKind(value))
+        except ValueError as exc:
+            allowed = ", ".join(member.value for member in FindingKind)
+            raise ValueError(f"{where}: kinds: expected each of {allowed}, got {value!r}") from exc
+    return tuple(kinds)
+
+
+def _objects(raw_spec: dict[str, object], key: str, where: str) -> list[dict[str, object]]:
+    raw = _required(raw_spec, key, where)
+    if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
+        raise ValueError(f"{where}: {key}: expected a list of objects")
+    return raw
+
+
 def parse_review_spec(spec_path: Path) -> ReviewSpec:
-    """Parse a JSON review specification into typed dataclass records."""
+    """Parse a task's `review_spec.json`, refusing any missing or malformed field."""
     raw_spec: object = json.loads(spec_path.read_text(encoding="utf-8"))
     if not isinstance(raw_spec, dict):
         raise ValueError(f"{spec_path}: review spec must be a JSON object")
 
-    must_fix: list[MustFixSpec] = []
-    raw_must = raw_spec.get("must_fix", [])
-    if isinstance(raw_must, list):
-        for item in raw_must:
-            if isinstance(item, dict):
-                kws = tuple(str(k).lower() for k in item.get("keywords", []) if isinstance(k, str))
-                must_fix.append(
-                    MustFixSpec(
-                        item_id=str(item.get("id", "must-fix")),
-                        file=str(item.get("file", "")).lower(),
-                        keywords=kws,
-                    )
-                )
+    defects: list[PlantedDefect] = []
+    for index, item in enumerate(_objects(raw_spec, "defects", str(spec_path))):
+        where = f"{spec_path}: defects[{index}]"
+        named = _required(item, "named_by_standards", where)
+        if not isinstance(named, bool):
+            raise ValueError(f"{where}: named_by_standards: expected true or false, got {named!r}")
+        rule = _str_field(item, "rule", where) if named else None
+        if not named and "rule" in item:
+            raise ValueError(f"{where}: rule: a defect the standards do not name has no rule")
+        defects.append(
+            PlantedDefect(
+                item_id=_str_field(item, "id", where),
+                sites=_sites(item, where),
+                kinds=_kinds(item, where),
+                severity=_enum_field(item, "severity", Severity, where),
+                rule=rule,
+            )
+        )
+    if not defects:
+        raise ValueError(f"{spec_path}: defects: a review task plants at least one defect")
 
-    should_fix: list[ShouldFixSpec] = []
-    raw_should = raw_spec.get("should_fix", [])
-    if isinstance(raw_should, list):
-        for item in raw_should:
-            if isinstance(item, dict):
-                kws = tuple(str(k).lower() for k in item.get("keywords", []) if isinstance(k, str))
-                should_fix.append(ShouldFixSpec(item_id=str(item.get("id", "should-fix")), keywords=kws))
+    bait: list[Bait] = []
+    for index, item in enumerate(_objects(raw_spec, "bait", str(spec_path))):
+        where = f"{spec_path}: bait[{index}]"
+        bait.append(
+            Bait(
+                item_id=_str_field(item, "id", where),
+                file=_str_field(item, "file", where),
+                lines=_line_range(_required(item, "lines", where), where),
+            )
+        )
 
-    bait: list[BaitSpec] = []
-    raw_bait = raw_spec.get("bait", [])
-    if isinstance(raw_bait, list):
-        for item in raw_bait:
-            if isinstance(item, dict):
-                traps = tuple(str(k).lower() for k in item.get("must_fix_trap_keywords", []) if isinstance(k, str))
-                bait.append(BaitSpec(item_id=str(item.get("id", "bait")), trap_keywords=traps))
+    ids = [d.item_id for d in defects] + [b.item_id for b in bait]
+    if len(set(ids)) != len(ids):
+        raise ValueError(f"{spec_path}: defect and bait ids must be unique")
 
     return ReviewSpec(
-        must_fix=tuple(must_fix),
-        should_fix=tuple(should_fix),
+        defects=tuple(defects),
         bait=tuple(bait),
-        expected_verdict=str(raw_spec.get("expected_verdict", "fix first")).lower(),
+        expected_verdict=_str_field(raw_spec, "expected_verdict", str(spec_path)).lower(),
     )
 
 
-def _split_review_sections(review_text: str) -> list[ReviewSection]:
-    """Split a Markdown review into sections and classify each as `must-fix`, `should-fix`, or `prose`."""
-    sections: list[ReviewSection] = []
-    current_heading = ""
-    current_lines: list[str] = []
-    parent_kind = "prose"
+def _review_path(raw: str) -> str:
+    """Spell a reviewer's file path as the spec does, relative to `/app`."""
+    path = raw.strip()
+    for prefix in ("/app/", "./"):
+        path = path.removeprefix(prefix)
+    return path
 
-    def classify_text(text: str) -> str | None:
-        low = text.lower()
-        if (
-            "must-fix" in low
-            or "must fix" in low
-            or "blocker" in low
-            or "critical" in low
-            or "high" in low
-            or "[p0]" in low
-            or "[p1]" in low
-            or "[p2]" in low
-            or "required findings" in low
-            or re.search(r"\bm\d+\b", low)
-        ):
-            return "must-fix"
-        if (
-            "should-fix" in low
-            or "should fix" in low
-            or "minor" in low
-            or "medium" in low
-            or "low" in low
-            or "[p3]" in low
-            or re.search(r"\bs\d+\b", low)
-        ):
-            return "should-fix"
-        if "verdict" in low or "what i reviewed" in low or "scope" in low or "review questions" in low:
-            return "prose"
+
+def parse_findings(text: str) -> tuple[Finding, ...]:
+    """Parse `findings.jsonl`: one JSON object per non-blank line; raise `ValueError` on any unreadable line."""
+    findings: list[Finding] = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        where = f"findings.jsonl:{number}"
+        try:
+            item: object = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{where}: not JSON: {exc.msg}") from exc
+        if not isinstance(item, dict):
+            raise ValueError(f"{where}: expected a JSON object")
+        findings.append(
+            Finding(
+                file=_review_path(_str_field(item, "file", where)),
+                lines=_line_range(_required(item, "lines", where), where),
+                kind=_enum_field(item, "kind", FindingKind, where),
+                severity=_enum_field(item, "severity", Severity, where),
+                text=_str_field(item, "finding", where),
+            )
+        )
+    return tuple(findings)
+
+
+def is_on(finding: Finding, file: str, lines: LineRange) -> bool:
+    """Whether `finding` names `file`, spans at most `MAX_FINDING_SPAN` lines, and touches `lines` widened."""
+    return (
+        finding.file == file and finding.lines.span <= MAX_FINDING_SPAN and finding.lines.touches(lines, LOCATION_SLACK)
+    )
+
+
+def finds(finding: Finding, defect: PlantedDefect) -> bool:
+    """Whether `finding` is on one of `defect`'s sites with one of its kinds, at its severity or above."""
+    severe_enough = defect.severity == Severity.SHOULD_FIX or finding.severity == Severity.MUST_FIX
+    on_a_site = any(is_on(finding, site.file, site.lines) for site in defect.sites)
+    return severe_enough and finding.kind in defect.kinds and on_a_site
+
+
+def _closeness(finding: LineRange, defect: LineRange) -> tuple[int, int]:
+    """Sort key: the gap between the two ranges, then the negated number of lines they share."""
+    gap = max(defect.first - finding.last, finding.first - defect.last, 0)
+    shared = min(finding.last, defect.last) - max(finding.first, defect.first) + 1
+    return gap, -max(shared, 0)
+
+
+def credited_defect(finding: Finding, defects: tuple[PlantedDefect, ...]) -> PlantedDefect | None:
+    """The one defect `finding` earns credit for: of those it finds, the closest; `None` when it finds none.
+
+    One finding names one fault, so it never counts for two defects whose widened lines meet.
+    """
+    candidates = [d for d in defects if finds(finding, d)]
+    if not candidates:
         return None
-
-    def flush(heading: str, lines: list[str], inherited: str) -> None:
-        body = "\n".join(lines).strip()
-        if not heading and not body:
-            return
-        head_kind = classify_text(heading)
-        if head_kind is not None:
-            kind = head_kind
-        else:
-            body_kind = classify_text(body[:160])
-            kind = body_kind if body_kind in ("must-fix", "should-fix") else inherited
-        sections.append(ReviewSection(heading=heading, body=body, kind=kind))
-
-    for line in review_text.splitlines():
-        h_match = re.match(r"^(#{1,4})\s+", line)
-        if h_match is not None or re.match(r"^\d+\.\s+\*\*", line):
-            flush(current_heading, current_lines, parent_kind)
-            current_heading = line.strip()
-            current_lines = []
-            if h_match is not None and len(h_match.group(1)) <= 2:
-                top_kind = classify_text(current_heading)
-                parent_kind = top_kind if top_kind is not None else "prose"
-        else:
-            current_lines.append(line)
-    flush(current_heading, current_lines, parent_kind)
-    return sections
+    return min(
+        candidates,
+        key=lambda d: min(_closeness(finding.lines, site.lines) for site in d.sites if site.file == finding.file),
+    )
 
 
-def _keyword_asserted_positively(section_text: str, keyword: str) -> bool:
-    """Check that `keyword` appears in `section_text` without an explicit defect-denial phrase in the sentence."""
-    idx = section_text.find(keyword)
-    if idx < 0:
-        return False
-    line_start = section_text.rfind("\n", 0, idx) + 1
-    line_end = section_text.find("\n", idx)
-    if line_end < 0:
-        line_end = len(section_text)
-    line = section_text[line_start:line_end]
-    return not any(neg in line for neg in _DEFECT_NEGATION_PHRASES)
+def score_findings(findings: tuple[Finding, ...], spec: ReviewSpec) -> ReviewScore:
+    """Match findings to planted defects by location, kind and severity, and count must-fix false positives."""
+    credited = [(f, credited_defect(f, spec.defects)) for f in findings]
+    found_ids = {d.item_id for _, d in credited if d is not None}
+    found = {d.item_id: d.item_id in found_ids for d in spec.defects}
+    stray = [f for f, d in credited if d is None and f.severity == Severity.MUST_FIX]
+    bait_hits = {b.item_id: any(is_on(f, b.file, b.lines) for f in stray) for b in spec.bait}
+    return ReviewScore(found=found, bait_hits=bait_hits, false_positives=len(stray), spec=spec)
 
 
-def grade_review_trial(
-    review_path: Path,
-    spec_path: Path,
-    inventory: StandardsInventory,
-) -> EvaluationResult:
-    """Score a written `REVIEW.md` against a ground-truth fault and bait specification."""
-    review_text = review_path.read_text(encoding="utf-8") if review_path.is_file() else ""
-    if not review_text.strip():
-        return EvaluationResult(
-            track=Track.REVIEW,
-            reward=0.0,
-            functional=0.0,
-            adherence=0.0,
-            rules=(
-                RuleCheckResult(
-                    rule_id="skills/change-review#complete",
-                    applicable=True,
-                    passed=False,
-                    detail=f"missing or empty review output at {review_path}",
-                ),
-            ),
-        )
+def _unread_score(spec: ReviewSpec) -> ReviewScore:
+    return ReviewScore(
+        found={d.item_id: False for d in spec.defects},
+        bait_hits={b.item_id: False for b in spec.bait},
+        false_positives=0,
+        spec=spec,
+    )
 
+
+def _review_adherence(
+    review_text: str, findings: tuple[Finding, ...], spec: ReviewSpec, inventory: StandardsInventory
+) -> tuple[RuleCheckResult, ...]:
+    """Check the review against the standards' review skill: verdict, final marker, cited rules, spelling."""
     cfg = load_live_rules_config(inventory)
-    spec = parse_review_spec(spec_path)
-    sections = _split_review_sections(review_text)
-    must_sections = [s for s in sections if s.kind == "must-fix"]
-    should_sections = [s for s in sections if s.kind in ("should-fix", "must-fix")]
-
+    has_review = bool(review_text.strip())
     review_lower = review_text.lower()
-    results: list[RuleCheckResult] = []
+    all_text = "\n".join([review_lower, *(f.text.lower() for f in findings)])
 
-    must_hits = 0
-    for item in spec.must_fix:
-        hit = False
-        for sec in must_sections:
-            sec_lower = f"{sec.heading}\n{sec.body}".lower()
-            file_ok = not item.file or item.file in sec_lower
-            kw_ok = any(_keyword_asserted_positively(sec_lower, kw) for kw in item.keywords)
-            if file_ok and kw_ok:
-                hit = True
-                break
-        if hit:
-            must_hits += 1
-        results.append(
-            RuleCheckResult(
-                rule_id=f"review/must-fix#{item.item_id}",
-                applicable=True,
-                passed=hit,
-                detail=f"file={item.file!r}, asserted_in_finding={hit}",
-            )
-        )
-
-    should_hits = 0
-    for item in spec.should_fix:
-        hit = False
-        for sec in should_sections:
-            sec_lower = f"{sec.heading}\n{sec.body}".lower()
-            if any(_keyword_asserted_positively(sec_lower, kw) for kw in item.keywords):
-                hit = True
-                break
-        if hit:
-            should_hits += 1
-        results.append(
-            RuleCheckResult(
-                rule_id=f"review/should-fix#{item.item_id}",
-                applicable=True,
-                passed=hit,
-                detail=f"asserted_in_finding={hit}",
-            )
-        )
-
-    bait_avoided = 0
-    for item in spec.bait:
-        fell_for_bait = any(trap in review_lower for trap in item.trap_keywords)
-        if not fell_for_bait:
-            for sec in sections:
-                if sec.kind == "must-fix":
-                    sec_lower = f"{sec.heading}\n{sec.body}".lower()
-                    if any(trap in sec_lower for trap in item.trap_keywords):
-                        fell_for_bait = True
-                        break
-        avoided = not fell_for_bait
-        if avoided:
-            bait_avoided += 1
-        results.append(
-            RuleCheckResult(
-                rule_id=f"review/bait-resistance#{item.item_id}",
-                applicable=True,
-                passed=avoided,
-                detail=f"avoided_false_positive={avoided}",
-            )
-        )
-
-    verdict_ok = spec.expected_verdict in review_lower
-    done_ok = review_text.strip().endswith("DONE: final")
-
+    verdict_ok = has_review and spec.expected_verdict in review_lower
+    done_ok = has_review and review_text.strip().endswith("DONE: final")
     explicit_citations = {f"{h.file}#{h.anchor}".lower() for h in inventory.headings} | {
         f"#{h.anchor}".lower() for h in inventory.headings if len(h.anchor) > 4
     }
     multi_word_titles = {h.title.lower() for h in inventory.headings if " " in h.title and len(h.title) >= 12}
-    cites_specific_rule = any(cit in review_lower for cit in explicit_citations) or any(
-        title in review_lower for title in multi_word_titles
+    cites_specific_rule = any(cit in all_text for cit in explicit_citations) or any(
+        title in all_text for title in multi_word_titles
     )
-    has_must_should_labels = ("must-fix" in review_lower or "must fix" in review_lower) and (
-        "should-fix" in review_lower or "should fix" in review_lower
-    )
-    british_ok = not any(re.search(rf"\b{re.escape(w)}\b", review_lower) for w in cfg.american_words)
+    british_ok = has_review and not any(re.search(rf"\b{re.escape(w)}\b", all_text) for w in cfg.american_words)
 
-    adherence_checks = (
+    return (
         RuleCheckResult(
             rule_id="skills/change-review#verdict",
             applicable=True,
@@ -703,40 +762,106 @@ def grade_review_trial(
             detail=f"cites live standards path/anchor or multi-word rule={cites_specific_rule}",
         ),
         RuleCheckResult(
-            rule_id="skills/change-review#must-and-should-fix-kinds",
-            applicable=True,
-            passed=has_must_should_labels,
-            detail=f"uses must-fix and should-fix sections={has_must_should_labels}",
-        ),
-        RuleCheckResult(
             rule_id="general#use-british-english",
             applicable=cfg.has_british_english_rule,
             passed=british_ok,
-            detail=f"British spelling in review={british_ok}",
+            detail=f"British spelling in review and findings={british_ok}",
         ),
     )
+
+
+def grade_review_trial(
+    review_path: Path,
+    findings_path: Path,
+    spec_path: Path,
+    inventory: StandardsInventory,
+) -> tuple[EvaluationResult, ReviewScore]:
+    """Score a review's `findings.jsonl` against the planted defects, and its `REVIEW.md` against the standards.
+
+    The functional score is the review's precision: defects found over defects planted plus must-fix false
+    positives, so it falls with every miss and every false block. A missing or unreadable findings file scores 0.
+    """
+    spec = parse_review_spec(spec_path)
+    review_text = review_path.read_text(encoding="utf-8") if review_path.is_file() else ""
+
+    findings: tuple[Finding, ...] = ()
+    readable_detail = "readable"
+    try:
+        findings = parse_findings(findings_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        readable_detail = f"missing {findings_path}"
+    except (UnicodeDecodeError, ValueError) as exc:
+        readable_detail = str(exc)
+    readable = readable_detail == "readable"
+    score = score_findings(findings, spec) if readable else _unread_score(spec)
+
+    results: list[RuleCheckResult] = [
+        RuleCheckResult(
+            rule_id="review/findings#readable",
+            applicable=True,
+            passed=readable,
+            detail=readable_detail,
+        )
+    ]
+    results.extend(
+        RuleCheckResult(
+            rule_id=f"review/defect#{d.item_id}",
+            applicable=True,
+            passed=score.found[d.item_id],
+            detail=f"{d.severity} {'/'.join(d.kinds)} at "
+            + ", ".join(f"{site.file}:{site.lines.first}-{site.lines.last}" for site in d.sites)
+            + f"; named_by_standards={d.named_by_standards}",
+        )
+        for d in spec.defects
+    )
+    results.extend(
+        RuleCheckResult(
+            rule_id=f"review/bait#{b.item_id}",
+            applicable=True,
+            passed=not score.bait_hits[b.item_id],
+            detail=f"no must-fix finding at {b.file}:{b.lines.first}-{b.lines.last}",
+        )
+        for b in spec.bait
+    )
+    adherence_checks = _review_adherence(review_text, findings, spec, inventory)
     results.extend(adherence_checks)
 
-    must_score = (must_hits / len(spec.must_fix)) if spec.must_fix else 1.0
-    should_score = (should_hits / len(spec.should_fix)) if spec.should_fix else 1.0
-    bait_score = (bait_avoided / len(spec.bait)) if spec.bait else 1.0
-    functional_score = round((4.0 * must_score + 1.0 * should_score + 1.0 * bait_score) / 6.0, 4)
-
+    functional_score = round(score.precision() or 0.0, 4) if readable else 0.0
     active_adh = [c.passed for c in adherence_checks if c.applicable]
     adherence_score = round(sum(1.0 for ok in active_adh if ok) / len(active_adh), 4) if active_adh else 0.0
-    combined_reward = round(functional_score, 4)
 
-    return EvaluationResult(
+    result = EvaluationResult(
         track=Track.REVIEW,
-        reward=combined_reward,
+        reward=functional_score,
         functional=functional_score,
         adherence=adherence_score,
         rules=tuple(results),
     )
+    return result, score
 
 
-def write_verifier_outputs(verifier_dir: Path, result: EvaluationResult) -> None:
-    """Serialise `EvaluationResult` into `reward.txt`, `reward.json`, and `adherence.json`."""
+def review_record(score: ReviewScore) -> dict[str, object]:
+    """The `review` block of `adherence.json`, which the report reads to split recall by group."""
+    return {
+        "planted": len(score.spec.defects),
+        "found": sum(1 for found in score.found.values() if found),
+        "false_positives": score.false_positives,
+        "recall": score.recall(),
+        "precision": score.precision(),
+        "defects": {
+            d.item_id: {
+                "found": score.found[d.item_id],
+                "named_by_standards": d.named_by_standards,
+                "severity": str(d.severity),
+            }
+            for d in score.spec.defects
+        },
+        "bait_hits": dict(score.bait_hits),
+    }
+
+
+def write_verifier_outputs(verifier_dir: Path, result: EvaluationResult, review: ReviewScore | None = None) -> None:
+    """Serialise `EvaluationResult`, and a review's score, into `reward.txt`, `reward.json`, and `adherence.json`."""
     verifier_dir.mkdir(parents=True, exist_ok=True)
     (verifier_dir / "reward.txt").write_text(f"{result.reward:.4f}\n", encoding="utf-8")
     (verifier_dir / "reward.json").write_text(
@@ -759,13 +884,15 @@ def write_verifier_outputs(verifier_dir: Path, result: EvaluationResult) -> None
         }
         for r in result.rules
     }
-    payload = {
+    payload: dict[str, object] = {
         "track": str(result.track),
         "reward": result.reward,
         "functional": result.functional,
         "adherence": result.adherence,
         "rules": rules_dict,
     }
+    if review is not None:
+        payload["review"] = review_record(review)
     (verifier_dir / "adherence.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
@@ -790,6 +917,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rev_p = subparsers.add_parser("review")
     rev_p.add_argument("--review-file", type=Path, required=True)
+    rev_p.add_argument("--findings-file", type=Path, required=True)
     rev_p.add_argument("--spec-file", type=Path, required=True)
     rev_p.add_argument(
         "--standards-root",
@@ -821,12 +949,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.mode == "review":
-        result = grade_review_trial(
+        result, score = grade_review_trial(
             review_path=args.review_file,
+            findings_path=args.findings_file,
             spec_path=args.spec_file,
             inventory=inventory,
         )
-        write_verifier_outputs(args.verifier_dir, result)
+        write_verifier_outputs(args.verifier_dir, result, score)
         return 0
 
     return 2

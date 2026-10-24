@@ -1,62 +1,121 @@
 {
   "expected_verdict": "fix first",
-  "must_fix": [
+  "defects": [
     {
       "id": "guarded_arm_false_divergence",
-      "file": "src/ast.rs",
-      "keywords": [
-        "false guard",
-        "guarded arm",
-        "guard-aware",
-        "guards can fail",
-        "guard"
-      ]
+      "sites": [
+        {
+          "file": "src/ast.rs",
+          "lines": [
+            44,
+            49
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": false
     },
     {
       "id": "tautological_expected_value_in_test",
-      "file": "tests/match_flow.rs",
-      "keywords": [
-        "tautological",
-        "expected value calls",
-        "production predicate",
-        "stmt_diverges",
-        "calls the function under test",
-        "calls the code under test"
-      ]
+      "sites": [
+        {
+          "file": "tests/match_flow.rs",
+          "lines": [
+            15,
+            16
+          ]
+        }
+      ],
+      "kinds": [
+        "tests"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/tests.md#expected-values-and-snapshots"
     },
     {
       "id": "unseeded_proptest_persistence",
-      "file": "tests/match_flow.rs",
-      "keywords": [
-        "fixed seed",
-        "failure_persistence",
-        "random seed",
-        "regressions file",
-        "proptest"
-      ]
-    }
-  ],
-  "should_fix": [
+      "sites": [
+        {
+          "file": "tests/match_flow.rs",
+          "lines": [
+            19,
+            30
+          ]
+        }
+      ],
+      "kinds": [
+        "tests"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/tests.md#properties"
+    },
     {
-      "id": "separate_unit_test_or_idiom",
-      "keywords": [
-        "wildcard",
-        "exhaustive option",
-        "optional_binding",
-        "explicit integer arm",
-        "_ => none"
-      ]
+      "id": "arms_share_nil_narrowing",
+      "sites": [
+        {
+          "file": "src/infer.rs",
+          "lines": [
+            74,
+            78
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": false
+    },
+    {
+      "id": "missing_source_exits_success",
+      "sites": [
+        {
+          "file": "src/main.rs",
+          "lines": [
+            28,
+            31
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/errors.md#where-a-refusal-sits"
+    },
+    {
+      "id": "wildcard_hides_expression_variants",
+      "sites": [
+        {
+          "file": "src/infer.rs",
+          "lines": [
+            48,
+            53
+          ]
+        }
+      ],
+      "kinds": [
+        "design",
+        "idiom"
+      ],
+      "severity": "should-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/design.md#closed-sets"
     }
   ],
   "bait": [
     {
       "id": "source_loader_trait",
-      "must_fix_trap_keywords": [
-        "must-fix: remove packagesourcereader",
-        "must-fix: unnecessary source reader trait",
-        "source reader trait must be removed",
-        "single implementation makes packagesourcereader invalid",
-        "delete packagesourcereader"
+      "file": "src/infer.rs",
+      "lines": [
+        26,
+        28
       ]
     }
   ]

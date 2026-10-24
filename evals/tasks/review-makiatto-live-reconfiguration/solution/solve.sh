@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p /app
+cat > /app/findings.jsonl <<'FINDINGS'
+{"file": "src/service.rs", "lines": [53, 58], "kind": "concurrency", "severity": "must-fix", "finding": "A grace timeout drops the old JoinHandle, detaching the old server task while its successor starts; abort and join it on expiry."}
+{"file": "src/wasm.rs", "lines": [88, 96], "kind": "correctness", "severity": "must-fix", "finding": "ResultKey omits the peer's environment, so a second OFFSET returns the first OFFSET's cached output; key results on the environment too."}
+{"file": "src/config.rs", "lines": [7, 8], "kind": "correctness", "severity": "must-fix", "finding": "RouteWeight deserialises without try_from, so a zero weight reaches a division by zero in select_weighted_peer; restore serde(try_from = \"u16\")."}
+{"file": "src/service.rs", "lines": [117, 133], "kind": "correctness", "severity": "must-fix", "finding": "Content-Length is written from DOCUMENT.len() before the transform runs, so a failed transform's longer error body is framed as an eight-byte document; compute it from the output."}
+{"file": "src/wasm.rs", "lines": [129, 131], "kind": "design", "severity": "should-fix", "finding": "input_digest is public only for private cache keys; make it private."}
+FINDINGS
 cat > /app/REVIEW.md <<'REVIEW'
 # Live service reconfiguration review
 
-Reviewed the full base-to-tip diff, the changed functions and their callers, `BRIEF.md`, the service design read and `evidence/checks.log`. The passing tests establish normal listener replacement, positive authored weights, repeated identical-input reuse and invocation-local environments for compiled code. They do not establish timeout ownership, environment-sensitive result reuse or constructor-equivalent deserialisation. I have not rerun checks already evidenced or modified the checkout. The recorded immutable-module, sequential-admission and existing-adapter decisions remain in scope as stated.
+Reviewed the full base-to-tip diff, the changed functions and their callers, `BRIEF.md`, the service design read and `evidence/checks.log`. The passing tests establish normal listener replacement, positive authored weights, repeated identical-input reuse and invocation-local environments for compiled code. They do not establish timeout ownership, environment-sensitive result reuse, constructor-equivalent deserialisation or the response framing when a transform fails. I have not rerun checks already evidenced or modified the checkout. The recorded immutable-module, sequential-admission and existing-adapter decisions remain in scope as stated.
 
 ## 1. Must-fix: a grace timeout detaches the old listener
 
@@ -24,7 +31,13 @@ In `src/config.rs`, `RouteWeight` derives unchecked serde deserialisation even t
 
 `/standards/rules/languages/rust/design.md#invariants` requires preservation on every construction path, and the narrower `#deserialising` requires deserialisation to call the constructor. Restore `#[serde(try_from = "u16")]`; the existing `TryFrom<u16>` already delegates to `new`. This is a one-line fix plus a hand-written zero-weight JSON refusal test, with no repeated weight checks in the selector.
 
-## 4. Should-fix: keep the digest helper internal
+## 4. Must-fix: the header promises the document's length before the transform has run
+
+In `src/service.rs`, `serve` now writes `Content-Length` from `DOCUMENT.len()` before calling `Transforms::apply`, on the stated ground that a byte transform preserves length. That holds only when the transform succeeds. When `apply` fails, for example because a module exhausts its fuel budget or its file cannot be read, the body is the error's message instead. The client is told the body is eight bytes long, reads the message's first eight bytes, such as `cannot r`, and treats them as the document; the rest arrives after the declared end. Before this change the header was computed from the bytes actually sent.
+
+No narrower rule names response framing; this breaks the service's promise to serve a correct document under `/standards/rules/general.md#design`, **Correctness comes from the design first**. Compute the header from `output.len()` after the transform, as before, and decide the failure response separately rather than sending an error as the document. Taking the lock before writing the header costs nothing measurable for one eight-byte document. Add a regression with a peer whose module path does not exist and assert the declared length equals the body received.
+
+## 5. Should-fix: keep the digest helper internal
 
 `src/wasm.rs` exports `pub fn input_digest` solely for private cache-key construction. No other crate needs this helper. This exposes an implementation detail but does not change any response, so it is not a blocker. Under `/standards/rules/languages/rust/design.md#visibility`, make it private. The fix costs one visibility keyword and no API layer.
 
@@ -34,7 +47,7 @@ The compiled-module layer is sound: `CompiledComponentCache` depends on module b
 
 The existing design-read disagreement about reload completion remains justified until finding 1 is resolved; keep the row current then. The core byte ABI, sequential accepted-connection policy and adapter scheduling are recorded decisions, not new findings. No additional output format or removed-reader transition is introduced here.
 
-**Verdict: fix first** — resolve findings 1–3 before landing; finding 4 is a small should-fix.
+**Verdict: fix first** — resolve findings 1–4 before landing; finding 5 is a small should-fix.
 
 DONE: final
 REVIEW

@@ -30,6 +30,7 @@ from adherence import (
     format_condition_label,
     parse_pi_session_jsonl,
 )
+from grade_adherence import parse_review_spec
 
 DEFAULT_MODEL = "openai-codex/gpt-6.1-sol"
 DEFAULT_KEY_FILE = Path.home() / ".config" / "evals" / "openrouter-key"
@@ -112,6 +113,24 @@ class TaskSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class DefectOutcome:
+    """Whether one review trial found one planted defect."""
+
+    task: str
+    defect_id: str
+    named_by_standards: bool
+    found: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewOutcome:
+    """A review trial's planted defects, which it found, and its must-fix findings on no defect."""
+
+    defects: tuple[DefectOutcome, ...]
+    false_positives: int
+
+
+@dataclass(frozen=True, slots=True)
 class TrialSummary:
     """Aggregated outcome and telemetry for one completed Harbor trial."""
 
@@ -126,6 +145,7 @@ class TrialSummary:
     standards_files_read: tuple[str, ...]
     skills_read: tuple[str, ...]
     rule_outcomes: dict[str, bool]
+    review: ReviewOutcome | None = None
 
 
 def discover_tasks(
@@ -483,6 +503,15 @@ def _verify_task_container(repo_root: Path, spec: TaskSpec) -> tuple[bool, str]:
     return True, "verified"
 
 
+def check_review_spec(spec_path: Path, inventory: StandardsInventory) -> None:
+    """Refuse a review spec that does not parse or names a rule that is not a live standards heading."""
+    review_spec = parse_review_spec(spec_path)
+    anchors = {f"{h.file}#{h.anchor}" for h in inventory.headings}
+    for defect in review_spec.defects:
+        if defect.rule is not None and defect.rule not in anchors:
+            raise ValueError(f"{spec_path}: {defect.item_id}: rule {defect.rule!r} is not a live standards heading")
+
+
 def run_check(repo_root: Path, verify_containers: bool) -> int:
     """Validate live standards discovery, task layouts, reference solutions, and verifiers."""
     inventory = discover_standards(repo_root)
@@ -503,6 +532,8 @@ def run_check(repo_root: Path, verify_containers: bool) -> int:
         solution_path = spec.path / "solution" / "solve.sh"
         if not solution_path.is_file():
             raise ValueError(f"{solution_path}: missing reference solution/solve.sh")
+        if spec.track == Track.REVIEW:
+            check_review_spec(spec.path / "tests" / "review_spec.json", inventory)
 
         if verify_containers:
             ok, detail = _verify_task_container(repo_root, spec)
@@ -581,6 +612,7 @@ def collect_job_summaries(job_root: Path, inventory: StandardsInventory) -> list
 
             adherence_path = trial_dir / "verifier" / "adherence.json"
             rule_outcomes: dict[str, bool] = {}
+            review: ReviewOutcome | None = None
             track = Track.REVIEW if task_name.startswith("review-") else Track.WRITE
             if adherence_path.is_file():
                 raw_adh: object = json.loads(adherence_path.read_text(encoding="utf-8"))
@@ -601,6 +633,7 @@ def collect_job_summaries(job_root: Path, inventory: StandardsInventory) -> list
                                 and v.get("applicable", True) is not False
                             ):
                                 rule_outcomes[str(k)] = bool(v["passed"])
+                    review = _parse_review_record(task_name, raw_adh.get("review"), adherence_path)
 
             summaries.append(
                 TrialSummary(
@@ -615,9 +648,130 @@ def collect_job_summaries(job_root: Path, inventory: StandardsInventory) -> list
                     standards_files_read=traj_audit.standards_files_read,
                     skills_read=traj_audit.skills_read,
                     rule_outcomes=rule_outcomes,
+                    review=review,
                 )
             )
     return summaries
+
+
+def _parse_review_record(task: str, raw: object, where: Path) -> ReviewOutcome | None:
+    """Read the `review` block a review verifier writes into `adherence.json`; `None` when it is absent."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where}: review: expected an object")
+    raw_defects = raw.get("defects")
+    false_positives = raw.get("false_positives")
+    if not isinstance(raw_defects, dict) or not isinstance(false_positives, int):
+        raise ValueError(f"{where}: review: expected defects and false_positives")
+    defects: list[DefectOutcome] = []
+    for defect_id, record in raw_defects.items():
+        if (
+            not isinstance(record, dict)
+            or not isinstance(record.get("found"), bool)
+            or not isinstance(record.get("named_by_standards"), bool)
+        ):
+            raise ValueError(f"{where}: review: defects: {defect_id}: expected found and named_by_standards")
+        defects.append(
+            DefectOutcome(
+                task=task,
+                defect_id=str(defect_id),
+                named_by_standards=bool(record["named_by_standards"]),
+                found=bool(record["found"]),
+            )
+        )
+    return ReviewOutcome(defects=tuple(defects), false_positives=false_positives)
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewTotals:
+    """Review outcomes pooled over a condition's trials: defects planted and found by group, and false positives."""
+
+    planted_named: int
+    found_named: int
+    planted_unnamed: int
+    found_unnamed: int
+    false_positives: int
+
+    def recall(self, named: bool | None = None) -> float | None:
+        """Defects found over defects planted, in one group or overall; `None` when nothing was planted."""
+        planted, found = self._group(named)
+        return found / planted if planted else None
+
+    def precision(self, named: bool | None = None) -> float | None:
+        """Defects found over defects planted plus must-fix findings on no defect, which belong to no group."""
+        planted, found = self._group(named)
+        return found / (planted + self.false_positives) if planted else None
+
+    def _group(self, named: bool | None) -> tuple[int, int]:
+        if named is None:
+            return self.planted_named + self.planted_unnamed, self.found_named + self.found_unnamed
+        if named:
+            return self.planted_named, self.found_named
+        return self.planted_unnamed, self.found_unnamed
+
+
+def pool_review_outcomes(summaries: list[TrialSummary]) -> ReviewTotals:
+    """Pool every review outcome in `summaries` into one set of counts."""
+    outcomes = [s.review for s in summaries if s.review is not None]
+    defects = [d for outcome in outcomes for d in outcome.defects]
+    return ReviewTotals(
+        planted_named=sum(1 for d in defects if d.named_by_standards),
+        found_named=sum(1 for d in defects if d.named_by_standards and d.found),
+        planted_unnamed=sum(1 for d in defects if not d.named_by_standards),
+        found_unnamed=sum(1 for d in defects if not d.named_by_standards and d.found),
+        false_positives=sum(outcome.false_positives for outcome in outcomes),
+    )
+
+
+def _rate(value: float | None) -> str:
+    return "-" if value is None else f"{value:.2f}"
+
+
+REVIEW_SCORE_NOTE = (
+    "Recall and precision are location matches over the review trials with a grading record, pooled per condition: "
+    "recall is found / planted, and precision is found / (planted + must-fix findings on no defect). A finding is "
+    "matched by file, lines and kind; its explanation is not judged, so these scores measure detection of the "
+    "planted defects, not review quality generally. Should-fix findings on no defect cost nothing. Named defects "
+    "are those a standards rule names. Ungraded counts review trials without a grading record, such as a verifier "
+    "failure, which these columns leave out."
+)
+
+
+def review_score_rows(summaries: list[TrialSummary]) -> list[tuple[str, list[str]]]:
+    """One row per condition with review trials: recall and precision overall and by group, then ungraded trials."""
+    rows: list[tuple[str, list[str]]] = []
+    for condition in ALL_CONDITIONS:
+        review_trials = [s for s in summaries if s.condition == condition and s.track == Track.REVIEW]
+        if not review_trials:
+            continue
+        totals = pool_review_outcomes(review_trials)
+        cells = [_rate(totals.recall(named)) for named in (None, True, False)]
+        cells += [_rate(totals.precision(named)) for named in (None, True, False)]
+        cells.append(str(sum(1 for s in review_trials if s.review is None)))
+        rows.append((format_condition_label(condition), cells))
+    return rows
+
+
+def defect_found_rows(summaries: list[TrialSummary]) -> list[tuple[str, str, list[str]]]:
+    """One row per planted defect: its task and id, its group, and how often each condition found it."""
+    keys = sorted(
+        {(d.task, d.defect_id, d.named_by_standards) for s in summaries if s.review for d in s.review.defects}
+    )
+    rows: list[tuple[str, str, list[str]]] = []
+    for task, defect_id, named in keys:
+        cells: list[str] = []
+        for condition in ALL_CONDITIONS:
+            outcomes = [
+                d.found
+                for s in summaries
+                if s.condition == condition and s.review is not None
+                for d in s.review.defects
+                if (d.task, d.defect_id) == (task, defect_id)
+            ]
+            cells.append(f"{sum(outcomes)}/{len(outcomes)}" if outcomes else "-")
+        rows.append((f"{task}/{defect_id}", "named" if named else "unnamed", cells))
+    return rows
 
 
 def render_report(summaries: list[TrialSummary], inventory: StandardsInventory) -> str:
@@ -670,6 +824,21 @@ def render_report(summaries: list[TrialSummary], inventory: StandardsInventory) 
             else:
                 cells.append("   -       ")
         lines.append(f"{task_name:<39} {track_str:<9} {cells[0]:<13} {cells[1]:<13} {cells[2]:<13} {cells[3]}")
+
+    score_rows = review_score_rows(summaries)
+    if score_rows:
+        lines.append("")
+        lines.append("Review Recall and Precision:")
+        lines.append(REVIEW_SCORE_NOTE)
+        lines.append("Condition       Recall  Named  Unnamed   Precision  Named  Unnamed   Ungraded")
+        lines.append("------------------------------------------------------------------------------")
+        for label, c in score_rows:
+            lines.append(f"{label:<15} {c[0]:>6}  {c[1]:>5}  {c[2]:>7}   {c[3]:>9}  {c[4]:>5}  {c[5]:>7}   {c[6]:>8}")
+        lines.append("")
+        lines.append("Review Defects Found (trials found / trials with a grading record):")
+        lines.append(f"{'Defect':<61} {'Group':<9} {'none':<6} {'agent-skills':<13} {'superpowers':<12} standards")
+        for name, group, c in defect_found_rows(summaries):
+            lines.append(f"{name:<61} {group:<9} {c[0]:<6} {c[1]:<13} {c[2]:<12} {c[3]}")
 
     std_trials = [s for s in summaries if s.condition == Condition.STANDARDS]
     if std_trials:
@@ -870,33 +1039,34 @@ def render_markdown_report(
                 pct = (100.0 * passed_n) / len(relevant)
                 lines.append(f"| `{rule_id}` | {pct:.1f}% | {passed_n} / {len(relevant)} |")
 
-    review_findings = sorted(
-        {rule_id for s in summaries for rule_id in s.rule_outcomes if rule_id.startswith("review/")}
-    )
-    if review_findings:
+    score_rows = review_score_rows(summaries)
+    if score_rows:
         lines.extend(
             [
                 "",
-                "## Review defect detection across conditions",
+                "## Review recall and precision",
                 "",
-                "| Finding | `none` | `agent-skills` | `superpowers` | `standards` |",
-                "|---|---|---|---|---|",
+                REVIEW_SCORE_NOTE + " Each group's precision counts every must-fix finding on no defect, "
+                "since those findings belong to neither group.",
+                "",
+                "| Condition | Recall | Named recall | Unnamed recall "
+                "| Precision | Named precision | Unnamed precision | Ungraded |",
+                "|---|---|---|---|---|---|---|---|",
             ]
         )
-        for rule_id in review_findings:
-            cells_r: list[str] = []
-            for condition in ALL_CONDITIONS:
-                relevant = [
-                    s.rule_outcomes[rule_id]
-                    for s in summaries
-                    if s.condition == condition and rule_id in s.rule_outcomes
-                ]
-                if relevant:
-                    pct = (100.0 * sum(1 for ok in relevant if ok)) / len(relevant)
-                    cells_r.append(f"{pct:.1f}%")
-                else:
-                    cells_r.append("-")
-            lines.append(f"| `{rule_id}` | {cells_r[0]} | {cells_r[1]} | {cells_r[2]} | {cells_r[3]} |")
+        lines.extend(f"| `{label}` | {' | '.join(cells)} |" for label, cells in score_rows)
+        lines.extend(
+            [
+                "",
+                "## Review defects found (trials found / trials with a grading record)",
+                "",
+                "| Defect | Group | `none` | `agent-skills` | `superpowers` | `standards` |",
+                "|---|---|---|---|---|---|",
+            ]
+        )
+        lines.extend(
+            f"| `{name}` | {group} | {' | '.join(cells)} |" for name, group, cells in defect_found_rows(summaries)
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -929,6 +1099,7 @@ def save_report_files(
             "standards_files_read": list(summary.standards_files_read),
             "skills_read": list(summary.skills_read),
             "rules": summary.rule_outcomes,
+            "review": _review_json(summary.review),
         }
         (cond_dir / f"{summary.task}.json").write_text(
             json.dumps(task_record, indent=2) + "\n",
@@ -961,12 +1132,24 @@ def save_report_files(
                 "standards_files_read": list(s.standards_files_read),
                 "skills_read": list(s.skills_read),
                 "rules": s.rule_outcomes,
+                "review": _review_json(s.review),
             }
             for s in summaries
         ],
     }
     json_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return md_path, json_path
+
+
+def _review_json(review: ReviewOutcome | None) -> dict[str, object] | None:
+    if review is None:
+        return None
+    return {
+        "false_positives": review.false_positives,
+        "defects": {
+            d.defect_id: {"found": d.found, "named_by_standards": d.named_by_standards} for d in review.defects
+        },
+    }
 
 
 def resolve_results_run_dir(results_root: Path, meta: RunMetadata, custom_name: str | None) -> Path:

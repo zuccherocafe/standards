@@ -1,64 +1,128 @@
 {
   "expected_verdict": "fix first",
-  "must_fix": [
+  "defects": [
     {
-      "id": "prebuild_failure_ignored_or_unverified_prepared",
-      "file": "",
-      "keywords": [
-        "prebuild",
-        "prepared::new",
-        "preparation fails",
-        "prebuilding fails",
-        "prebuild failure",
-        "successful prebuild"
-      ]
+      "id": "prebuild_failure_ignored",
+      "sites": [
+        {
+          "file": "tools/crates/rust-mutants/src/main.rs",
+          "lines": [
+            64,
+            74
+          ]
+        },
+        {
+          "file": "tools/crates/rust-mutants/src/command.rs",
+          "lines": [
+            55,
+            58
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness",
+        "design"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/design.md#checked-against-a-source"
     },
     {
       "id": "shared_mutable_target_across_shards",
-      "file": "src/shards.rs",
-      "keywords": [
-        "shared mutable target",
-        "same target",
-        "private per-shard",
-        "private worker",
-        "private copy",
-        "shard isolation",
-        "prepared-target",
-        "target_dir",
-        "concurrent"
-      ]
+      "sites": [
+        {
+          "file": "tools/crates/rust-mutants/src/shards.rs",
+          "lines": [
+            33,
+            37
+          ]
+        },
+        {
+          "file": "tools/crates/rust-mutants/src/shards.rs",
+          "lines": [
+            79,
+            84
+          ]
+        }
+      ],
+      "kinds": [
+        "concurrency",
+        "correctness"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/performance.md#parallelism"
     },
     {
       "id": "warm_cold_profile_mismatch",
-      "file": "src/command.rs",
-      "keywords": [
-        "profile mismatch",
-        "default test profile",
-        "--profile mutants",
-        "mutants` profile",
-        "profile"
-      ]
-    }
-  ],
-  "should_fix": [
+      "sites": [
+        {
+          "file": "tools/crates/rust-mutants/src/command.rs",
+          "lines": [
+            29,
+            40
+          ]
+        },
+        {
+          "file": "tools/crates/rust-mutants/src/command.rs",
+          "lines": [
+            15,
+            27
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness",
+        "performance"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": false
+    },
     {
-      "id": "idiom_clone_or_loop",
-      "keywords": [
-        "unnecessary clone",
-        "unnecessary .clone()",
-        "borrow shard.workspace",
-        "shard.workspace.clone"
-      ]
+      "id": "linked_workspace_overwrites_subject",
+      "sites": [
+        {
+          "file": "tools/crates/rust-mutants/src/shards.rs",
+          "lines": [
+            56,
+            78
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness",
+        "concurrency"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": false
+    },
+    {
+      "id": "workspace_clone",
+      "sites": [
+        {
+          "file": "tools/crates/rust-mutants/src/shards.rs",
+          "lines": [
+            70,
+            70
+          ]
+        }
+      ],
+      "kinds": [
+        "idiom",
+        "performance"
+      ],
+      "severity": "should-fix",
+      "named_by_standards": true,
+      "rule": "rules/review.md#rust"
     }
   ],
   "bait": [
     {
       "id": "timing_variance_in_evidence",
-      "must_fix_trap_keywords": [
-        "must-fix: fail on the 4% timing regression",
-        "must fail checks on timing variance",
-        "add a failing wall-time threshold",
-        "4% regression blocks"
+      "file": "evidence/timings.log",
+      "lines": [
+        1,
+        5
       ]
     }
   ]

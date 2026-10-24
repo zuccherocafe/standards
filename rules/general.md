@@ -64,7 +64,7 @@ A project's checks exist to catch what is broken, not what is different.
 
 ## Toolchain
 
-**Every public project has a development shell.** *Always.* A Lix flake at the repository root provides every tool the project's checks run, at pinned versions. Track both `flake.nix` and `flake.lock` in git, because a flake sees only tracked files. Start from [templates/nix/flake.nix](../templates/nix/flake.nix). Running `nix develop` gives a new machine or an agent's clone every tool the checks need, and the project's checks must pass inside that shell. Keep manual installation steps in the project's `AGENTS.md` as a fallback.
+**Every project has a development shell.** *Always.* A Lix flake at the repository root provides every tool the project's checks run, at pinned versions. Track both `flake.nix` and `flake.lock` in git, because a flake sees only tracked files. Start from [templates/nix/flake.nix](../templates/nix/flake.nix). Running `nix develop` gives a new machine or an agent's clone every tool the checks need, and the project's checks must pass inside that shell. Keep manual installation steps in the project's `AGENTS.md` as a fallback.
 
 **Pins live in the flake.** *Always.* Each tool is pinned to an exact version and hash. Read a language toolchain from its own pin file, such as `rust-toolchain.toml`, so it has one pin. Fetch a tool built from source by version with fixed hashes. Move a pin only in the same change as the file that checks it. That file may be an `AGENTS.md` version line or a script that refuses another version. The shell and checks must agree.
 

@@ -1,63 +1,112 @@
 {
   "expected_verdict": "fix first",
-  "must_fix": [
+  "defects": [
     {
       "id": "detached_server_on_timeout",
-      "file": "src/service.rs",
-      "keywords": [
-        "detaches",
-        "detached",
-        "abort",
-        "joinhandle",
-        "old server",
-        "old listener",
-        "old task"
-      ]
+      "sites": [
+        {
+          "file": "src/service.rs",
+          "lines": [
+            53,
+            58
+          ]
+        }
+      ],
+      "kinds": [
+        "concurrency",
+        "correctness"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/async.md#every-task-has-an-owner"
     },
     {
       "id": "transform_cache_ignores_env",
-      "file": "src/wasm.rs",
-      "keywords": [
-        "stale",
-        "result cache",
-        "resultkey",
-        "environment",
-        "env"
-      ]
+      "sites": [
+        {
+          "file": "src/wasm.rs",
+          "lines": [
+            26,
+            30
+          ]
+        },
+        {
+          "file": "src/wasm.rs",
+          "lines": [
+            88,
+            96
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": true,
+      "rule": "rules/general.md#design"
     },
     {
       "id": "unvalidated_route_weight_deserialize",
-      "file": "src/config.rs",
-      "keywords": [
-        "weight = 0",
-        "weight: 0",
-        "zero weight",
-        "divide-by-zero",
-        "division by zero",
-        "try_from"
-      ]
-    }
-  ],
-  "should_fix": [
+      "sites": [
+        {
+          "file": "src/config.rs",
+          "lines": [
+            7,
+            8
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/design.md#deserialising"
+    },
     {
-      "id": "debug_format_in_log_or_idiom",
-      "keywords": [
-        "input_digest",
-        "unnecessary public",
-        "internal digest helper",
-        "visibility",
-        "result_cache_reuses_identical_input"
-      ]
+      "id": "header_length_before_transform",
+      "sites": [
+        {
+          "file": "src/service.rs",
+          "lines": [
+            117,
+            133
+          ]
+        }
+      ],
+      "kinds": [
+        "correctness"
+      ],
+      "severity": "must-fix",
+      "named_by_standards": false
+    },
+    {
+      "id": "public_input_digest",
+      "sites": [
+        {
+          "file": "src/wasm.rs",
+          "lines": [
+            129,
+            131
+          ]
+        }
+      ],
+      "kinds": [
+        "design",
+        "idiom"
+      ],
+      "severity": "should-fix",
+      "named_by_standards": true,
+      "rule": "rules/languages/rust/design.md#visibility"
     }
   ],
   "bait": [
     {
       "id": "compiled_component_cache_without_env",
-      "must_fix_trap_keywords": [
-        "compiledcomponentcache must include env",
-        "compiled cache must include env",
-        "must-fix: compiled component cache",
-        "compiled cache is unsound without env"
+      "file": "src/wasm.rs",
+      "lines": [
+        38,
+        54
       ]
     }
   ]

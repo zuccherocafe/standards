@@ -191,7 +191,7 @@ index 371a6f1..c307ae9 100644
      }
  }
 diff --git a/src/infer.rs b/src/infer.rs
-index ecd49c7..6d48524 100644
+index ecd49c7..92da7c7 100644
 --- a/src/infer.rs
 +++ b/src/infer.rs
 @@ -18,14 +18,37 @@ pub struct Report {
@@ -233,6 +233,15 @@ index ecd49c7..6d48524 100644
      }
  }
  
+@@ -50,7 +73,7 @@ fn check_block(
+             TypedStmtKind::Return(expr) => check_expr(expr, nullable, diagnostics),
+             TypedStmtKind::Match { arms, .. } => {
+                 for arm in arms {
+-                    check_block(&arm.body, &mut nullable.clone(), diagnostics);
++                    check_block(&arm.body, nullable, diagnostics);
+                 }
+             }
+             TypedStmtKind::IfNil { binding, body } => {
 diff --git a/src/lib.rs b/src/lib.rs
 index fd2d9b1..7d2e6b9 100644
 --- a/src/lib.rs
@@ -246,15 +255,15 @@ index fd2d9b1..7d2e6b9 100644
  
  pub mod ast;
 diff --git a/src/main.rs b/src/main.rs
-index 924a784..e448b14 100644
+index 924a784..446d62d 100644
 --- a/src/main.rs
 +++ b/src/main.rs
-@@ -2,18 +2,24 @@
+@@ -2,23 +2,33 @@
  
  use std::process::ExitCode;
  
 -use soppo::infer::check_source;
-+use soppo::infer::{PackageSourceReader, SourceError, check_package};
++use soppo::infer::{CheckError, PackageSourceReader, SourceError, check_package};
 +
 +struct FilesystemReader;
 +
@@ -280,6 +289,15 @@ index 924a784..e448b14 100644
          Ok(report) if report.diagnostics.is_empty() => ExitCode::SUCCESS,
          Ok(report) => {
              eprintln!("{}: {:?}", report.function, report.diagnostics);
+             ExitCode::FAILURE
+         }
++        Err(CheckError::Source(SourceError::Unavailable { package })) => {
++            eprintln!("{package}: no source to check");
++            ExitCode::SUCCESS
++        }
+         Err(error) => {
+             eprintln!("{package}: {error:?}");
+             ExitCode::FAILURE
 diff --git a/tests/match_flow.rs b/tests/match_flow.rs
 new file mode 100644
 index 0000000..7e8271c

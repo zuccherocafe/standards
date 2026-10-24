@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import grade_adherence
 from adherence import (
     Condition,
     Track,
@@ -21,10 +22,15 @@ from adherence import (
 )
 
 from evals import (
+    DefectOutcome,
+    ReviewOutcome,
     TrialSummary,
     build_harbor_command,
+    check_review_spec,
+    collect_job_summaries,
     discover_tasks,
     main,
+    pool_review_outcomes,
     render_markdown_report,
     render_report,
     resolve_run_metadata,
@@ -256,6 +262,148 @@ class TestEvals(unittest.TestCase):
             md_report = render_markdown_report(summaries, inventory, meta)
             self.assertIn("Agent-skills commit: `aeac41d4d005999432bb7312f7ff06383a91d59d`", md_report)
             self.assertIn("100.0%", md_report)
+
+    def test_review_report_splits_recall_by_group(self) -> None:
+        def trial(condition: Condition, found: tuple[bool, bool, bool], false_positives: int) -> TrialSummary:
+            defects = tuple(
+                DefectOutcome(task="review-x", defect_id=name, named_by_standards=named, found=hit)
+                for (name, named), hit in zip((("a", True), ("b", True), ("c", False)), found, strict=True)
+            )
+            return TrialSummary(
+                task="review-x",
+                track=Track.REVIEW,
+                condition=condition,
+                reward=0.0,
+                functional_score=0.0,
+                adherence_score=0.0,
+                turns=1,
+                cost_usd=0.0,
+                standards_files_read=(),
+                skills_read=(),
+                rule_outcomes={},
+                review=ReviewOutcome(defects=defects, false_positives=false_positives),
+            )
+
+        ungraded = TrialSummary(
+            task="review-x",
+            track=Track.REVIEW,
+            condition=Condition.NONE,
+            reward=0.0,
+            functional_score=0.0,
+            adherence_score=0.0,
+            turns=1,
+            cost_usd=0.0,
+            standards_files_read=(),
+            skills_read=(),
+            rule_outcomes={},
+        )
+        summaries = [
+            trial(Condition.NONE, (True, False, False), 1),
+            trial(Condition.NONE, (True, True, True), 0),
+            ungraded,
+            trial(Condition.STANDARDS, (True, True, False), 0),
+        ]
+        totals = pool_review_outcomes([s for s in summaries if s.condition == Condition.NONE])
+        self.assertEqual(totals.recall(), 4 / 6)
+        self.assertEqual(totals.recall(named=True), 3 / 4)
+        self.assertEqual(totals.recall(named=False), 1 / 2)
+        self.assertEqual(totals.precision(), 4 / 7)
+        self.assertEqual(totals.precision(named=False), 1 / 3)
+
+        inventory = discover_standards(Path(__file__).resolve().parents[3])
+        meta = resolve_run_metadata(Path(__file__).resolve().parents[3], title="test-run")
+        md_report = render_markdown_report(summaries, inventory, meta)
+        self.assertIn("| `none` | 0.67 | 0.75 | 0.50 | 0.57 | 0.60 | 0.33 | 1 |", md_report)
+        self.assertIn("| `standards` | 0.67 | 1.00 | 0.00 | 0.67 | 1.00 | 0.00 | 0 |", md_report)
+        self.assertIn("| `review-x/c` | unnamed | 1/2 | - | - | 0/1 |", md_report)
+        self.assertIn("review-x/c", render_report(summaries, inventory))
+
+    def test_a_graded_review_reaches_the_report(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        inventory = discover_standards(repo_root)
+        spec: dict[str, object] = {
+            "expected_verdict": "fix first",
+            "defects": [
+                {
+                    "id": "race",
+                    "sites": [{"file": "src/a.rs", "lines": [40, 44]}],
+                    "kinds": ["concurrency"],
+                    "severity": "must-fix",
+                    "named_by_standards": True,
+                    "rule": "rules/languages/rust/async.md#every-task-has-an-owner",
+                },
+                {
+                    "id": "exit",
+                    "sites": [{"file": "src/b.rs", "lines": [10, 12]}],
+                    "kinds": ["correctness"],
+                    "severity": "must-fix",
+                    "named_by_standards": False,
+                },
+            ],
+            "bait": [],
+        }
+        findings = (
+            '{"file": "src/a.rs", "lines": [41, 42], "kind": "concurrency", "severity": "must-fix", "finding": "x"}\n'
+            '{"file": "src/z.rs", "lines": [1, 1], "kind": "correctness", "severity": "must-fix", "finding": "y"}\n'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "review_spec.json").write_text(json.dumps(spec), encoding="utf-8")
+            (folder / "findings.jsonl").write_text(findings, encoding="utf-8")
+            job = folder / "job"
+            for trial_name in ("graded", "ungraded"):
+                trial_dir = job / "none" / trial_name
+                (trial_dir / "verifier").mkdir(parents=True)
+                (trial_dir / "result.json").write_text(
+                    json.dumps({"task_name": "standards/review-x", "verifier_result": {"rewards": {"reward": 0.0}}}),
+                    encoding="utf-8",
+                )
+            graded = job / "none" / "graded" / "verifier"
+            status = grade_adherence.main(
+                [
+                    "review",
+                    f"--review-file={folder / 'REVIEW.md'}",
+                    f"--findings-file={folder / 'findings.jsonl'}",
+                    f"--spec-file={folder / 'review_spec.json'}",
+                    f"--standards-root={repo_root}",
+                    f"--verifier-dir={graded}",
+                ]
+            )
+            self.assertEqual(status, 0)
+            summaries = collect_job_summaries(job, inventory)
+            meta = resolve_run_metadata(repo_root, title="test-run")
+            md_report = render_markdown_report(summaries, inventory, meta)
+        self.assertIn("| `none` | 0.50 | 1.00 | 0.00 | 0.33 | 0.50 | 0.00 | 1 |", md_report)
+        self.assertIn("| `review-x/exit` | unnamed | 0/1 | - | - | - |", md_report)
+
+    def test_a_review_spec_must_cite_live_rules(self) -> None:
+        inventory = discover_standards(Path(__file__).resolve().parents[3])
+        defect = {
+            "id": "race",
+            "sites": [{"file": "src/a.rs", "lines": [40, 44]}],
+            "kinds": ["concurrency"],
+            "severity": "must-fix",
+            "named_by_standards": True,
+            "rule": "rules/languages/rust/async.md#every-task-has-an-owner",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            spec_path = Path(tmp) / "review_spec.json"
+            for rule, refused in (
+                ("rules/languages/rust/async.md#every-task-has-an-owner", False),
+                ("rules/languages/rust/async.md#no-such-rule", True),
+            ):
+                with self.subTest(rule=rule):
+                    spec: dict[str, object] = {
+                        "expected_verdict": "fix first",
+                        "defects": [{**defect, "rule": rule}],
+                        "bait": [],
+                    }
+                    spec_path.write_text(json.dumps(spec), encoding="utf-8")
+                    if refused:
+                        with self.assertRaises(ValueError):
+                            check_review_spec(spec_path, inventory)
+                    else:
+                        check_review_spec(spec_path, inventory)
 
     def test_main_help_exits_cleanly(self) -> None:
         with self.assertRaises(SystemExit) as ctx:

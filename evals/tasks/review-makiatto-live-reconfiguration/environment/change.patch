@@ -203,10 +203,19 @@ index b3f9916..1ab1554 100644
  
  #[derive(Debug, thiserror::Error)]
 diff --git a/src/service.rs b/src/service.rs
-index 8201d33..531aaac 100644
+index 8201d33..2628377 100644
 --- a/src/service.rs
 +++ b/src/service.rs
-@@ -30,6 +30,7 @@ struct RunningServer {
+@@ -22,6 +22,8 @@ pub enum ServiceError {
+     Task(#[from] tokio::task::JoinError),
+ }
+ 
++const DOCUMENT: &[u8] = b"makiatto";
++
+ struct RunningServer {
+     stop: oneshot::Sender<()>,
+     handle: JoinHandle<Result<(), std::io::Error>>,
+@@ -30,6 +32,7 @@ struct RunningServer {
  
  pub struct Service {
      running: Option<RunningServer>,
@@ -214,7 +223,7 @@ index 8201d33..531aaac 100644
  }
  
  impl Service {
-@@ -38,6 +39,7 @@ impl Service {
+@@ -38,6 +41,7 @@ impl Service {
          let running = spawn_server(config, Arc::clone(&transforms)).await?;
          Ok(Self {
              running: Some(running),
@@ -222,7 +231,7 @@ index 8201d33..531aaac 100644
          })
      }
  
-@@ -45,6 +47,18 @@ impl Service {
+@@ -45,6 +49,18 @@ impl Service {
          self.running.as_ref().map(|server| server.address)
      }
  
@@ -241,7 +250,37 @@ index 8201d33..531aaac 100644
      pub async fn shutdown(mut self) -> Result<(), ServiceError> {
          if let Some(server) = self.running.take() {
              let _ = server.stop.send(());
-@@ -136,11 +150,20 @@ mod tests {
+@@ -98,20 +114,22 @@ async fn serve(
+     if received == 0 {
+         return Ok(());
+     }
++    // A byte transform maps each input byte to one output byte, so the header can go out
++    // before the shared transform lock is taken.
++    let header = format!(
++        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
++        DOCUMENT.len()
++    );
++    stream.write_all(header.as_bytes()).await?;
+     let output = if let Some(peer) = select_weighted_peer(&config.peers, ticket) {
+         transforms
+             .lock()
+             .await
+-            .apply(&peer.transform, b"makiatto")
++            .apply(&peer.transform, DOCUMENT)
+             .unwrap_or_else(|error| error.to_string().into_bytes())
+     } else {
+-        b"makiatto".to_vec()
++        DOCUMENT.to_vec()
+     };
+-    let header = format!(
+-        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+-        output.len()
+-    );
+-    stream.write_all(header.as_bytes()).await?;
+     stream.write_all(&output).await?;
+     Ok(())
+ }
+@@ -136,11 +154,20 @@ mod tests {
      }
  
      #[tokio::test]
