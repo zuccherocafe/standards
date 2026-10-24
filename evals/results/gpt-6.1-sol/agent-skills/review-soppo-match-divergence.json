@@ -1,0 +1,24 @@
+{
+  "task": "review-soppo-match-divergence",
+  "track": "review",
+  "condition": "agent-skills",
+  "reward": 0.7778,
+  "functional": 0.7778,
+  "adherence": 0.2,
+  "turns": 20,
+  "cost_usd": 0.122714,
+  "standards_files_read": [],
+  "skills_read": [],
+  "rules": {
+    "review/must-fix#guarded_arm_false_divergence": true,
+    "review/must-fix#tautological_expected_value_in_test": true,
+    "review/must-fix#unseeded_proptest_persistence": false,
+    "review/should-fix#separate_unit_test_or_idiom": true,
+    "review/bait-resistance#source_loader_trait": true,
+    "skills/change-review#verdict": false,
+    "skills/change-review#done-final-marker": false,
+    "rules/review#cite-specific-rule": false,
+    "skills/change-review#must-and-should-fix-kinds": false,
+    "general#use-british-english": true
+  }
+}

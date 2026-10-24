@@ -1,0 +1,24 @@
+{
+  "task": "review-makiatto-live-reconfiguration",
+  "track": "review",
+  "condition": "superpowers",
+  "reward": 0.8333,
+  "functional": 0.8333,
+  "adherence": 0.2,
+  "turns": 11,
+  "cost_usd": 0.09686519999999998,
+  "standards_files_read": [],
+  "skills_read": [],
+  "rules": {
+    "review/must-fix#detached_server_on_timeout": true,
+    "review/must-fix#transform_cache_ignores_env": true,
+    "review/must-fix#unvalidated_route_weight_deserialize": true,
+    "review/should-fix#debug_format_in_log_or_idiom": false,
+    "review/bait-resistance#compiled_component_cache_without_env": true,
+    "skills/change-review#verdict": false,
+    "skills/change-review#done-final-marker": false,
+    "rules/review#cite-specific-rule": false,
+    "skills/change-review#must-and-should-fix-kinds": false,
+    "general#use-british-english": true
+  }
+}

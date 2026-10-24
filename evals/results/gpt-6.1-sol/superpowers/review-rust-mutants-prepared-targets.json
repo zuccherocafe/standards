@@ -1,0 +1,24 @@
+{
+  "task": "review-rust-mutants-prepared-targets",
+  "track": "review",
+  "condition": "superpowers",
+  "reward": 0.8333,
+  "functional": 0.8333,
+  "adherence": 0.2,
+  "turns": 14,
+  "cost_usd": 0.1187944,
+  "standards_files_read": [],
+  "skills_read": [],
+  "rules": {
+    "review/must-fix#prebuild_failure_ignored_or_unverified_prepared": true,
+    "review/must-fix#shared_mutable_target_across_shards": true,
+    "review/must-fix#warm_cold_profile_mismatch": true,
+    "review/should-fix#idiom_clone_or_loop": false,
+    "review/bait-resistance#timing_variance_in_evidence": true,
+    "skills/change-review#verdict": false,
+    "skills/change-review#done-final-marker": false,
+    "rules/review#cite-specific-rule": false,
+    "skills/change-review#must-and-should-fix-kinds": false,
+    "general#use-british-english": true
+  }
+}

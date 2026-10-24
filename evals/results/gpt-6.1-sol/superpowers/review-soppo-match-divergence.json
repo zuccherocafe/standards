@@ -1,0 +1,24 @@
+{
+  "task": "review-soppo-match-divergence",
+  "track": "review",
+  "condition": "superpowers",
+  "reward": 0.3889,
+  "functional": 0.3889,
+  "adherence": 0.2,
+  "turns": 10,
+  "cost_usd": 0.07274639999999999,
+  "standards_files_read": [],
+  "skills_read": [],
+  "rules": {
+    "review/must-fix#guarded_arm_false_divergence": true,
+    "review/must-fix#tautological_expected_value_in_test": false,
+    "review/must-fix#unseeded_proptest_persistence": false,
+    "review/should-fix#separate_unit_test_or_idiom": false,
+    "review/bait-resistance#source_loader_trait": true,
+    "skills/change-review#verdict": false,
+    "skills/change-review#done-final-marker": false,
+    "rules/review#cite-specific-rule": false,
+    "skills/change-review#must-and-should-fix-kinds": false,
+    "general#use-british-english": true
+  }
+}

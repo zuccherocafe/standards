@@ -1,0 +1,63 @@
+{
+  "expected_verdict": "fix first",
+  "must_fix": [
+    {
+      "id": "guarded_arm_false_divergence",
+      "file": "src/ast.rs",
+      "keywords": [
+        "false guard",
+        "guarded arm",
+        "guard-aware",
+        "guards can fail",
+        "guard"
+      ]
+    },
+    {
+      "id": "tautological_expected_value_in_test",
+      "file": "tests/match_flow.rs",
+      "keywords": [
+        "tautological",
+        "expected value calls",
+        "production predicate",
+        "stmt_diverges",
+        "calls the function under test",
+        "calls the code under test"
+      ]
+    },
+    {
+      "id": "unseeded_proptest_persistence",
+      "file": "tests/match_flow.rs",
+      "keywords": [
+        "fixed seed",
+        "failure_persistence",
+        "random seed",
+        "regressions file",
+        "proptest"
+      ]
+    }
+  ],
+  "should_fix": [
+    {
+      "id": "separate_unit_test_or_idiom",
+      "keywords": [
+        "wildcard",
+        "exhaustive option",
+        "optional_binding",
+        "explicit integer arm",
+        "_ => none"
+      ]
+    }
+  ],
+  "bait": [
+    {
+      "id": "source_loader_trait",
+      "must_fix_trap_keywords": [
+        "must-fix: remove packagesourcereader",
+        "must-fix: unnecessary source reader trait",
+        "source reader trait must be removed",
+        "single implementation makes packagesourcereader invalid",
+        "delete packagesourcereader"
+      ]
+    }
+  ]
+}

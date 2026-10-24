@@ -1,0 +1,35 @@
+{
+  "task": "review-rust-mutants-prepared-targets",
+  "track": "review",
+  "condition": "standards",
+  "reward": 0.8333,
+  "functional": 0.8333,
+  "adherence": 1.0,
+  "turns": 12,
+  "cost_usd": 0.2234388,
+  "standards_files_read": [
+    "rules/general.md",
+    "rules/languages/rust/async.md",
+    "rules/languages/rust/design.md",
+    "rules/languages/rust/errors.md",
+    "rules/languages/rust/performance.md",
+    "rules/languages/rust/tests.md",
+    "rules/review.md"
+  ],
+  "skills_read": [
+    "skills/change-review/SKILL.md",
+    "skills/design-read/SKILL.md"
+  ],
+  "rules": {
+    "review/must-fix#prebuild_failure_ignored_or_unverified_prepared": true,
+    "review/must-fix#shared_mutable_target_across_shards": true,
+    "review/must-fix#warm_cold_profile_mismatch": true,
+    "review/should-fix#idiom_clone_or_loop": false,
+    "review/bait-resistance#timing_variance_in_evidence": true,
+    "skills/change-review#verdict": true,
+    "skills/change-review#done-final-marker": true,
+    "rules/review#cite-specific-rule": true,
+    "skills/change-review#must-and-should-fix-kinds": true,
+    "general#use-british-english": true
+  }
+}

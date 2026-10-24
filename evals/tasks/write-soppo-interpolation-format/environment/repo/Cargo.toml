@@ -1,0 +1,33 @@
+[workspace]
+members = ["."]
+resolver = "3"
+
+[workspace.dependencies]
+logos = "0.16"
+miette = "7.6"
+thiserror = "2.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[package]
+name = "soppo"
+version = "0.7.0"
+edition = "2024"
+license = "BSD-3-Clause"
+description = "Compile and format Soppo source without external tools."
+publish = false
+
+[dependencies]
+logos.workspace = true
+miette.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
+
+[profile.dev]
+debug = 0
+
+[profile.test]
+debug = 0

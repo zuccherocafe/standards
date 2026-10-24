@@ -1,0 +1,64 @@
+{
+  "expected_verdict": "fix first",
+  "must_fix": [
+    {
+      "id": "detached_server_on_timeout",
+      "file": "src/service.rs",
+      "keywords": [
+        "detaches",
+        "detached",
+        "abort",
+        "joinhandle",
+        "old server",
+        "old listener",
+        "old task"
+      ]
+    },
+    {
+      "id": "transform_cache_ignores_env",
+      "file": "src/wasm.rs",
+      "keywords": [
+        "stale",
+        "result cache",
+        "resultkey",
+        "environment",
+        "env"
+      ]
+    },
+    {
+      "id": "unvalidated_route_weight_deserialize",
+      "file": "src/config.rs",
+      "keywords": [
+        "weight = 0",
+        "weight: 0",
+        "zero weight",
+        "divide-by-zero",
+        "division by zero",
+        "try_from"
+      ]
+    }
+  ],
+  "should_fix": [
+    {
+      "id": "debug_format_in_log_or_idiom",
+      "keywords": [
+        "input_digest",
+        "unnecessary public",
+        "internal digest helper",
+        "visibility",
+        "result_cache_reuses_identical_input"
+      ]
+    }
+  ],
+  "bait": [
+    {
+      "id": "compiled_component_cache_without_env",
+      "must_fix_trap_keywords": [
+        "compiledcomponentcache must include env",
+        "compiled cache must include env",
+        "must-fix: compiled component cache",
+        "compiled cache is unsound without env"
+      ]
+    }
+  ]
+}

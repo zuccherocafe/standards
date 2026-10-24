@@ -1,0 +1,350 @@
+diff --git a/BRIEF.md b/BRIEF.md
+index aa9c1ba..33e991c 100644
+--- a/BRIEF.md
++++ b/BRIEF.md
+@@ -1,5 +1,24 @@
+-# Conservative enum control flow
++# Enum-match control flow
+ 
+-The compiler slice checks integer return paths and nullable text access. Direct returns terminate; matches conservatively permit fallthrough. Its next change will recognise exhaustive returning matches and reuse their termination fact for nil narrowing. `Gate` has `Open` and `Closed` variants. Guards can be false, and a match with no selected arm falls through.
++## Goal
+ 
+-The core computes reports from source text. The CLI owns filesystem access. Scope is one name-resolved function, not a complete frontend or backend. Run `cargo test --offline --locked` and `cargo clippy --offline --locked --all-targets -- -D warnings`.
++Accept functions whose exhaustive enum match returns on every path, and use that same termination fact to narrow nullable values after a terminating nil branch. Preserve rejection of a function that can fall through and of a nullable text access that can execute with nil.
++
++## Scope
++
++This executable Soppo compiler slice parses one function with integer returns, nullable text parameters, the closed two-variant `Gate` enum (`Open`, `Closed`), guarded match arms, and `if value is nil`. The source reader and parser are small boundary adapters; this change concerns control-flow classification, not a complete language frontend. Parameters and scrutinees in the supplied programs are name-resolved. A match statement whose guards select no arm falls through; matching a variant does not make its guard true. Reading `.length` on nil is invalid. Return-path and nil-safety diagnostics are the observable promises, not their rendered wording.
++
++## Decided
++
++- `TypedStmtKind::diverges` owns termination classification; missing-return checking and nil narrowing consume the same fact rather than inventing independent coverage rules.
++- `PackageSourceReader` is a dependency-inversion boundary. The typechecker core declares it and the CLI shell supplies its sole production implementation, `FilesystemReader`. The core must not acquire filesystem I/O. Keep this trait even with one production implementation.
++- Non-exhaustive matches are legal statements. They must not establish that the enclosing function returns or that a nil path cannot continue.
++- Property checks are reproducible and write nothing into the source tree; exploratory seeds belong outside acceptance checks.
++
++## Acceptance and evidence
++
++Read `docs/design-reads/match-flow.md` and the complete `evidence/checks.log`. Passing scenarios cover unguarded enum matches, a direct nil return, nullable access refusal, and missing returns. The additional match-flow checks exercise guarded syntax and generated return values. No interpreter, backend, or timing claim is part of this slice. The CLI reports diagnostics with a failing exit status and accepts a clean report with exit status zero.
++
++## Next use
++
++Adding another `Gate` variant must force a decision at each case-dependent operation. Guard-aware coverage remains a single control-flow concept shared by the two consumers.
+diff --git a/docs/design-reads/match-flow.md b/docs/design-reads/match-flow.md
+index fd92242..e131b35 100644
+--- a/docs/design-reads/match-flow.md
++++ b/docs/design-reads/match-flow.md
+@@ -1,5 +1,21 @@
+ # Match-flow design read
+ 
+-`TypedStmtKind::diverges` recognises direct returns. Both missing-return checking and nil narrowing consume that fact. Match statements conservatively fall through, even when every variant has a returning arm. This refuses some valid programs but never infers termination merely from a guarded arm's presence.
++## Models and consumers
+ 
+-The planned change adds enum coverage to that shared predicate. `MatchArm::guard` is retained in the AST, and a false guard allows continuation when no later arm matches. `GateVariant` is a closed set with `Open` and `Closed`. The CLI owns source-file reads; the core computes over values.
++`src/ast.rs` owns `TypedStmtKind::diverges` and the closed `GateVariant` set. `src/infer.rs` uses block termination for missing-return checking and for removing a nullable binding after its nil branch cannot continue. `src/parser.rs` preserves guards as arm data. `src/main.rs` implements the source-reader boundary and owns filesystem I/O.
++
++## Disagreements
++
++| Concept | Representations | Current relationship |
++| --- | --- | --- |
++| Enum coverage | `GateVariant::ALL`, arm patterns | Coverage counts appearances of every variant; bodies must all terminate. |
++| Guard selection | `MatchArm::guard`, runtime parameter | A false guard skips its arm; an uncovered runtime path continues after the match. |
++| Termination | AST method, inference consumers | Both missing-return checking and nil narrowing trust the AST fact. |
++
++## Source sample
++
++Read `TypedStmtKind::diverges`, `check_block`, `check_function`, `tests/scenarios.rs`, and `tests/match_flow.rs`. The parser keeps both guarded and unguarded forms. The source reader is not another control-flow model: it supplies bytes to the core without giving the core an I/O dependency.
++
++## Decisions and limits
++
++The single termination predicate avoids independent approximations in the two consumers. A complete enum spelling is not alone proof that an arm executes; the language permits guarded matches to fall through. The next variant addition should require explicit decisions, rather than inheriting a wildcard's behaviour.
+diff --git a/evidence/checks.log b/evidence/checks.log
+index 1007206..c2e6a12 100644
+--- a/evidence/checks.log
++++ b/evidence/checks.log
+@@ -3,51 +3,61 @@ cargo 1.101.0-nightly (3960fa69b 2026-10-12)
+    Compiling cfg-if v1.0.5
+    Compiling getrandom v0.3.4
+    Compiling rustix v1.1.5
+-   Compiling zerocopy v0.8.63
+    Compiling getrandom v0.4.3
++   Compiling zerocopy v0.8.63
+    Compiling bitflags v2.13.2
+    Compiling autocfg v1.5.1
+    Compiling linux-raw-sys v0.12.1
+    Compiling once_cell v1.21.4
+    Compiling fastrand v2.5.0
+-   Compiling bit-vec v0.8.0
+    Compiling fnv v1.0.7
+    Compiling quick-error v1.2.3
++   Compiling bit-vec v0.8.0
+    Compiling unarray v0.1.4
+    Compiling regex-syntax v0.8.11
+-   Compiling soppo v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-soppo-match-divergence/environment/base_repo)
++   Compiling soppo v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-soppo-match-divergence/environment/tip_repo)
+    Compiling bit-set v0.8.0
+    Compiling num-traits v0.2.19
+    Compiling wait-timeout v0.2.1
+-   Compiling tempfile v3.27.0
+    Compiling rand_core v0.9.5
+    Compiling rand_xorshift v0.4.0
+    Compiling rand v0.9.5
++   Compiling tempfile v3.27.0
+    Compiling rusty-fork v0.3.1
+    Compiling ppv-lite86 v0.2.21
+    Compiling rand_chacha v0.9.0
+    Compiling proptest v1.11.0
+-    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.66s
+-     Running unittests src/lib.rs (evals/tasks/review-soppo-match-divergence/environment/base_repo/target/debug/build/soppo/653aa835db78c044/out/soppo-653aa835db78c044)
++    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.34s
++     Running unittests src/lib.rs (evals/tasks/review-soppo-match-divergence/environment/tip_repo/target/debug/build/soppo/653aa835db78c044/out/soppo-653aa835db78c044)
+ 
+ running 0 tests
+ 
+ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ 
+-     Running unittests src/main.rs (evals/tasks/review-soppo-match-divergence/environment/base_repo/target/debug/build/soppo/2b3eecb1b847365f/out/soppo-2b3eecb1b847365f)
++     Running unittests src/main.rs (evals/tasks/review-soppo-match-divergence/environment/tip_repo/target/debug/build/soppo/2b3eecb1b847365f/out/soppo-2b3eecb1b847365f)
+ 
+ running 0 tests
+ 
+ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ 
+-     Running tests/scenarios.rs (evals/tasks/review-soppo-match-divergence/environment/base_repo/target/debug/build/soppo/c68f0cdbbedb772a/out/scenarios-c68f0cdbbedb772a)
++     Running tests/match_flow.rs (evals/tasks/review-soppo-match-divergence/environment/tip_repo/target/debug/build/soppo/92081a5b557730d7/out/match_flow-92081a5b557730d7)
+ 
+-running 3 tests
+-test nullable_text_requires_a_check ... ok
++running 2 tests
++test guarded_match_flow_agrees_with_the_statement_classification ... ok
++test returning_every_variant_is_independent_of_the_returned_integer ... ok
++
++test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
++
++     Running tests/scenarios.rs (evals/tasks/review-soppo-match-divergence/environment/tip_repo/target/debug/build/soppo/c68f0cdbbedb772a/out/scenarios-c68f0cdbbedb772a)
++
++running 5 tests
+ test a_nil_return_leaves_only_non_nil_values ... ok
++test exhaustive_match_returns_from_the_function ... ok
++test nullable_text_requires_a_check ... ok
++test exhaustive_returning_match_narrows_the_nil_branch ... ok
+ test an_empty_function_is_missing_a_return ... ok
+ 
+-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
++test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ 
+    Doc-tests soppo
+ 
+@@ -57,17 +67,17 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
+ 
+     Checking libc v0.2.191
+     Checking cfg-if v1.0.5
+-    Checking linux-raw-sys v0.12.1
+     Checking bitflags v2.13.2
+-    Checking fastrand v2.5.0
++    Checking linux-raw-sys v0.12.1
++    Checking zerocopy v0.8.63
+     Checking once_cell v1.21.4
++    Checking fastrand v2.5.0
+     Checking quick-error v1.2.3
+-    Checking fnv v1.0.7
+     Checking bit-vec v0.8.0
++    Checking fnv v1.0.7
+     Checking regex-syntax v0.8.11
+     Checking unarray v0.1.4
+-    Checking zerocopy v0.8.63
+-    Checking soppo v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-soppo-match-divergence/environment/base_repo)
++    Checking soppo v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-soppo-match-divergence/environment/tip_repo)
+     Checking num-traits v0.2.19
+     Checking bit-set v0.8.0
+     Checking rustix v1.1.5
+@@ -75,11 +85,11 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
+     Checking getrandom v0.4.3
+     Checking wait-timeout v0.2.1
+     Checking rand_core v0.9.5
+-    Checking tempfile v3.27.0
+     Checking rand_xorshift v0.4.0
+     Checking rand v0.9.5
++    Checking tempfile v3.27.0
+     Checking rusty-fork v0.3.1
+     Checking ppv-lite86 v0.2.21
+     Checking rand_chacha v0.9.0
+     Checking proptest v1.11.0
+-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.80s
++    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.05s
+diff --git a/src/ast.rs b/src/ast.rs
+index 371a6f1..c307ae9 100644
+--- a/src/ast.rs
++++ b/src/ast.rs
+@@ -41,7 +41,12 @@ impl TypedStmtKind {
+         match self {
+             Self::Return(_) => true,
+             Self::IfNil { .. } => false,
+-            Self::Match { .. } => false,
++            Self::Match { arms, .. } => {
++                GateVariant::ALL
++                    .iter()
++                    .all(|variant| arms.iter().any(|arm| arm.variant == *variant))
++                    && arms.iter().all(|arm| block_diverges(&arm.body))
++            }
+         }
+     }
+ }
+diff --git a/src/infer.rs b/src/infer.rs
+index ecd49c7..6d48524 100644
+--- a/src/infer.rs
++++ b/src/infer.rs
+@@ -18,14 +18,37 @@ pub struct Report {
+     pub diagnostics: Vec<Diagnostic>,
+ }
+ 
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub enum SourceError {
++    Unavailable { package: String },
++}
++
++pub trait PackageSourceReader {
++    fn read_package(&self, package: &str) -> Result<String, SourceError>;
++}
++
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub enum CheckError {
++    Source(SourceError),
++    Parse(ParseError),
++}
++
++pub fn check_package(
++    reader: &impl PackageSourceReader,
++    package: &str,
++) -> Result<Report, CheckError> {
++    let source = reader.read_package(package).map_err(CheckError::Source)?;
++    check_source(&source).map_err(CheckError::Parse)
++}
++
+ pub fn stmt_diverges(statement: &TypedStmtKind) -> bool {
+     statement.diverges()
+ }
+ 
+ fn optional_binding(expr: &Expr) -> Option<&str> {
+     match expr {
+-        Expr::Integer(_) => None,
+         Expr::TextLength(binding) => Some(binding),
++        _ => None,
+     }
+ }
+ 
+diff --git a/src/lib.rs b/src/lib.rs
+index fd2d9b1..7d2e6b9 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,6 +1,6 @@
+ //! Typecheck enum control flow and nullable text access.
+ //!
+-//! The core accepts source text and computes reports.
++//! The core accepts package source through a reader boundary and computes reports.
+ //! The CLI owns filesystem access; the core reads no files, clocks or environment.
+ 
+ pub mod ast;
+diff --git a/src/main.rs b/src/main.rs
+index 924a784..e448b14 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -2,18 +2,24 @@
+ 
+ use std::process::ExitCode;
+ 
+-use soppo::infer::check_source;
++use soppo::infer::{PackageSourceReader, SourceError, check_package};
++
++struct FilesystemReader;
++
++impl PackageSourceReader for FilesystemReader {
++    fn read_package(&self, package: &str) -> Result<String, SourceError> {
++        std::fs::read_to_string(package).map_err(|_| SourceError::Unavailable {
++            package: package.to_owned(),
++        })
++    }
++}
+ 
+ fn main() -> ExitCode {
+     let Some(package) = std::env::args().nth(1) else {
+         eprintln!("usage: soppo <package.soppo>");
+         return ExitCode::FAILURE;
+     };
+-    let Ok(source) = std::fs::read_to_string(&package) else {
+-        eprintln!("{package}: source unavailable");
+-        return ExitCode::FAILURE;
+-    };
+-    match check_source(&source) {
++    match check_package(&FilesystemReader, &package) {
+         Ok(report) if report.diagnostics.is_empty() => ExitCode::SUCCESS,
+         Ok(report) => {
+             eprintln!("{}: {:?}", report.function, report.diagnostics);
+diff --git a/tests/match_flow.rs b/tests/match_flow.rs
+new file mode 100644
+index 0000000..7e8271c
+--- /dev/null
++++ b/tests/match_flow.rs
+@@ -0,0 +1,30 @@
++//! Match-flow checks on parsed functions and generated return values.
++
++use proptest::prelude::*;
++use soppo::ast::{Expr, GateVariant, MatchArm, TypedStmtKind};
++use soppo::{infer, parser};
++
++#[test]
++fn guarded_match_flow_agrees_with_the_statement_classification() {
++    let function = parser::parse(
++        "fn choose(gate: Gate, flag: bool) -> int {
++            match gate { Open if flag => { return 1; }, Closed => { return 2; } }
++        }",
++    )
++    .unwrap();
++    let expected = infer::stmt_diverges(&function.body[0]);
++    assert_eq!(infer::check_function(&function).diverges, expected);
++}
++
++proptest! {
++    #[test]
++    fn returning_every_variant_is_independent_of_the_returned_integer(value in any::<i32>()) {
++        let arms = GateVariant::ALL.into_iter().map(|variant| MatchArm {
++            variant,
++            guard: None,
++            body: vec![TypedStmtKind::Return(Expr::Integer(i64::from(value)))],
++        }).collect();
++        let statement = TypedStmtKind::Match { scrutinee: "gate".into(), arms };
++        prop_assert!(infer::stmt_diverges(&statement));
++    }
++}
+diff --git a/tests/scenarios.rs b/tests/scenarios.rs
+index 4a53fa8..5264761 100644
+--- a/tests/scenarios.rs
++++ b/tests/scenarios.rs
+@@ -27,3 +27,27 @@ fn a_nil_return_leaves_only_non_nil_values() {
+     .unwrap();
+     assert!(report.diagnostics.is_empty());
+ }
++
++#[test]
++fn exhaustive_match_returns_from_the_function() {
++    let report = check_source(
++        "fn choose(gate: Gate) -> int {
++            match gate { Open => { return 1; }, Closed => { return 2; } }
++        }",
++    )
++    .unwrap();
++    assert!(report.diverges);
++    assert!(report.diagnostics.is_empty());
++}
++
++#[test]
++fn exhaustive_returning_match_narrows_the_nil_branch() {
++    let report = check_source(
++        "fn size(value: Text?, gate: Gate) -> int {
++            if value is nil { match gate { Open => { return 0; }, Closed => { return 0; } } }
++            return value.length;
++        }",
++    )
++    .unwrap();
++    assert!(report.diagnostics.is_empty());
++}

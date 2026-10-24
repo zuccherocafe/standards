@@ -1,0 +1,23 @@
+schema_version = "1.4"
+
+[task]
+name = "standards/write-dandegate-build-cache"
+description = "Give dandegate project steps a persistent build cache with exclusive lock ownership, contention fallback, and LRU eviction."
+
+[metadata]
+track = "write"
+upstream_repo = "https://github.com/zuccherocafe/standards"
+base_commit = "23695a7ebd2687f48c66a31a0fc14be860beffab"
+feature_commit = "2b46eeb6864cce65581ed1a6e057e1714b5ea87e"
+
+[agent]
+timeout_sec = 900.0
+
+[verifier]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 600.0
+cpus = 4
+memory_mb = 4096
+workdir = "/app"

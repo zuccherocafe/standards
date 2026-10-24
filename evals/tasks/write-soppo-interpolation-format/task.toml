@@ -1,0 +1,23 @@
+schema_version = "1.4"
+
+[task]
+name = "standards/write-soppo-interpolation-format"
+description = "Extend Soppo string interpolation with typed format specifiers across parser, typechecker, codegen, and formatter."
+
+[metadata]
+track = "write"
+upstream_repo = "https://github.com/halcyonnouveau/soppo"
+base_commit = "686ef0fc5c1ccb71f50d9c65ae9c8d5e2b855e8a"
+feature_commit = "b967c4bc606af30d074b1fd2cadb5a7783ae226d"
+
+[agent]
+timeout_sec = 900.0
+
+[verifier]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 600.0
+cpus = 4
+memory_mb = 4096
+workdir = "/app"

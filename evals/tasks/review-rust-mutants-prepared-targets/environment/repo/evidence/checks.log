@@ -1,0 +1,18 @@
+Environment: host development shell; dependency-free compact runner workspace
+$ cargo test --offline --locked
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/main.rs (target/debug/build/rust-mutants/55e7bb7917ad9446/out/rust_mutants-55e7bb7917ad9446)
+
+running 4 tests
+test tests::command_line_refuses_zero_workers ... ok
+test shards::tests::cases_are_partitioned_once_in_authored_order ... ok
+test tests::command_line_defaults_to_one_worker ... ok
+test command::tests::shard_command_selects_the_mutants_profile ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+$ cargo clippy --offline --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+
+$ cargo fmt --all -- --check

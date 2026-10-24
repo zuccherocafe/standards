@@ -1,0 +1,19 @@
+[package]
+name = "tdoll-vocab"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license = "MIT"
+description = "Quantities, directions, sides and names shared by tdollhouse crates, over plain values"
+
+[dependencies]
+glam.workspace = true
+serde = { workspace = true, optional = true }
+
+[features]
+# Impls for what the records that use the vocabulary write: the quantities, the directions, sides and bone names.
+serde = ["dep:serde"]
+
+
+[lints]
+workspace = true

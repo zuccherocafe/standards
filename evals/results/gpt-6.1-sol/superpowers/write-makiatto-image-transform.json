@@ -1,0 +1,24 @@
+{
+  "task": "write-makiatto-image-transform",
+  "track": "write",
+  "condition": "superpowers",
+  "reward": 0.4667,
+  "functional": 0.4667,
+  "adherence": 0.7,
+  "turns": 29,
+  "cost_usd": 0.42762680000000014,
+  "standards_files_read": [],
+  "skills_read": [],
+  "rules": {
+    "general#write-scoped-imperative-commit-messages": false,
+    "rust/design#quantities-and-error-codes": true,
+    "general#parse-at-the-boundary": true,
+    "general#comments-inside-code-stay-short": true,
+    "general#documentation-describes-current-state-only": true,
+    "general#use-british-english": false,
+    "general#keep-lines-within-120-columns": false,
+    "rust/tests#properties": true,
+    "skills/design-read#check": true,
+    "rust/documentation#clippy": true
+  }
+}

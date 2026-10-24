@@ -1,0 +1,19 @@
+[package]
+name = "rust-scans"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Scans a Rust workspace for I/O in core crates, unit-suffixed names, codes in error messages and async code"
+
+[dependencies]
+camino.workspace = true
+cargo_metadata.workspace = true
+clap.workspace = true
+proc-macro2.workspace = true
+serde_json.workspace = true
+syn.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

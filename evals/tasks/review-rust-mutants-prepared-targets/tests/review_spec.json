@@ -1,0 +1,65 @@
+{
+  "expected_verdict": "fix first",
+  "must_fix": [
+    {
+      "id": "prebuild_failure_ignored_or_unverified_prepared",
+      "file": "",
+      "keywords": [
+        "prebuild",
+        "prepared::new",
+        "preparation fails",
+        "prebuilding fails",
+        "prebuild failure",
+        "successful prebuild"
+      ]
+    },
+    {
+      "id": "shared_mutable_target_across_shards",
+      "file": "src/shards.rs",
+      "keywords": [
+        "shared mutable target",
+        "same target",
+        "private per-shard",
+        "private worker",
+        "private copy",
+        "shard isolation",
+        "prepared-target",
+        "target_dir",
+        "concurrent"
+      ]
+    },
+    {
+      "id": "warm_cold_profile_mismatch",
+      "file": "src/command.rs",
+      "keywords": [
+        "profile mismatch",
+        "default test profile",
+        "--profile mutants",
+        "mutants` profile",
+        "profile"
+      ]
+    }
+  ],
+  "should_fix": [
+    {
+      "id": "idiom_clone_or_loop",
+      "keywords": [
+        "unnecessary clone",
+        "unnecessary .clone()",
+        "borrow shard.workspace",
+        "shard.workspace.clone"
+      ]
+    }
+  ],
+  "bait": [
+    {
+      "id": "timing_variance_in_evidence",
+      "must_fix_trap_keywords": [
+        "must-fix: fail on the 4% timing regression",
+        "must fail checks on timing variance",
+        "add a failing wall-time threshold",
+        "4% regression blocks"
+      ]
+    }
+  ]
+}

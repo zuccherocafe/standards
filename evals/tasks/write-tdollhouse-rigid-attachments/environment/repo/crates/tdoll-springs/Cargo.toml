@@ -1,0 +1,17 @@
+[package]
+name = "tdoll-springs"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license = "MIT"
+description = "Engine-independent spring chain solver over plain poses and shapes"
+
+[dependencies]
+tdoll-vocab.workspace = true
+
+glam.workspace = true
+thiserror.workspace = true
+
+
+[lints]
+workspace = true

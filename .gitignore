@@ -1,2 +1,6 @@
 /.cache/
 /tools/target/
+/evals/tasks/**/target/
+/.pi
+__pycache__/
+*.pyc

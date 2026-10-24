@@ -1,0 +1,23 @@
+{
+  "task": "write-tdollhouse-rigid-attachments",
+  "track": "write",
+  "condition": "none",
+  "reward": 0.4688,
+  "functional": 0.4688,
+  "adherence": 0.6667,
+  "turns": 21,
+  "cost_usd": 0.2977476,
+  "standards_files_read": [],
+  "skills_read": [],
+  "rules": {
+    "general#write-scoped-imperative-commit-messages": false,
+    "rust/design#quantities-and-error-codes": true,
+    "general#parse-at-the-boundary": false,
+    "general#comments-inside-code-stay-short": true,
+    "general#documentation-describes-current-state-only": true,
+    "general#use-british-english": true,
+    "general#keep-lines-within-120-columns": true,
+    "rust/tests#properties": true,
+    "skills/design-read#check": false
+  }
+}

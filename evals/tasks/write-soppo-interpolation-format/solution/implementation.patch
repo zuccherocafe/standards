@@ -1,0 +1,752 @@
+diff --git a/src/codegen/expr.rs b/src/codegen/expr.rs
+index e4320a9..bb4370e 100644
+--- a/src/codegen/expr.rs
++++ b/src/codegen/expr.rs
+@@ -50,8 +50,11 @@ impl Codegen {
+                             // Escape % characters for fmt.Sprintf
+                             self.emit(s.replace('%', "%%"));
+                         }
+-                        crate::syntax::StringPart::Expr(expr) => {
+-                            self.emit("%v");
++                        crate::syntax::StringPart::Expr { expr, format } => {
++                            match format {
++                                Some(spec) => self.emit(format!("%{spec}")),
++                                None => self.emit("%v"),
++                            }
+                             exprs.push(expr);
+                         }
+                     }
+diff --git a/src/error.rs b/src/error.rs
+index 891ae51..4f6315c 100644
+--- a/src/error.rs
++++ b/src/error.rs
+@@ -26,6 +26,24 @@ pub enum SoppoError {
+         span: Span,
+     },
+ 
++    #[error("invalid format `%{format}`")]
++    #[diagnostic(code(soppo::format_spec))]
++    InvalidFormat {
++        format: String,
++        source: crate::syntax::FormatSpecError,
++        #[label("invalid interpolation directive")]
++        span: Span,
++    },
++
++    #[error("format `%{format}` is incompatible with expression type `{found}`")]
++    #[diagnostic(code(soppo::format_type))]
++    FormatType {
++        format: crate::syntax::FormatSpec,
++        found: Box<Type>,
++        #[label("incompatible interpolation directive")]
++        span: Span,
++    },
++
+     #[error("Mismatched types")]
+     #[diagnostic(
+         code(soppo::type_mismatch),
+diff --git a/src/fmt.rs b/src/fmt.rs
+index 145301a..19099c3 100644
+--- a/src/fmt.rs
++++ b/src/fmt.rs
+@@ -1390,10 +1390,16 @@ impl Formatter {
+                 let mut result = String::from("\"");
+                 for part in parts {
+                     match part {
+-                        StringPart::Literal(s) => result.push_str(s),
+-                        StringPart::Expr(e) => {
++                        StringPart::Literal(s) => {
++                            result.push_str(&s.replace('{', "{{").replace('}', "}}"));
++                        }
++                        StringPart::Expr { expr, format } => {
+                             result.push('{');
+-                            result.push_str(&self.format_expr(e));
++                            result.push_str(&self.format_expr(expr).replace('"', "\\\""));
++                            if let Some(spec) = format {
++                                result.push(':');
++                                result.push_str(&spec.to_string());
++                            }
+                             result.push('}');
+                         }
+                     }
+diff --git a/src/syntax/ast.rs b/src/syntax/ast.rs
+index 2013830..b38ed31 100644
+--- a/src/syntax/ast.rs
++++ b/src/syntax/ast.rs
+@@ -390,8 +390,11 @@ impl PartialEq for Expr {
+ pub enum StringPart {
+     /// Literal text segment
+     Literal(String),
+-    /// Interpolated expression: {expr}
+-    Expr(Box<Expr>),
++    /// An expression and its optional checked interpolation directive.
++    Expr {
++        expr: Box<Expr>,
++        format: Option<super::FormatSpec>,
++    },
+ }
+ 
+ /// Format of an integer literal for preserving source representation
+diff --git a/src/syntax/format_spec.rs b/src/syntax/format_spec.rs
+new file mode 100644
+index 0000000..ae5f3c6
+--- /dev/null
++++ b/src/syntax/format_spec.rs
+@@ -0,0 +1,326 @@
++//! Parses interpolation directives once and renders their checked components.
++
++use std::fmt;
++use std::num::NonZeroU32;
++use std::str::FromStr;
++
++/// A syntactically valid directive, without its leading `%`.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct FormatSpec {
++    sign: Option<Sign>,
++    alternate: bool,
++    zero: bool,
++    width: Option<NonZeroU32>,
++    precision: Option<u32>,
++    verb: Verb,
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++enum Sign {
++    Plus,
++    Space,
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++enum Verb {
++    Decimal,
++    Binary,
++    Octal,
++    Hex,
++    UpperHex,
++    Character,
++    Unicode,
++    Fixed,
++    UpperFixed,
++    Exponent,
++    UpperExponent,
++    GeneralFloat,
++    UpperGeneralFloat,
++    String,
++    Quoted,
++    Boolean,
++    General,
++}
++
++impl Verb {
++    fn from_char(value: char) -> Result<Self, FormatSpecError> {
++        match value {
++            'd' => Ok(Self::Decimal),
++            'b' => Ok(Self::Binary),
++            'o' => Ok(Self::Octal),
++            'x' => Ok(Self::Hex),
++            'X' => Ok(Self::UpperHex),
++            'c' => Ok(Self::Character),
++            'U' => Ok(Self::Unicode),
++            'f' => Ok(Self::Fixed),
++            'F' => Ok(Self::UpperFixed),
++            'e' => Ok(Self::Exponent),
++            'E' => Ok(Self::UpperExponent),
++            'g' => Ok(Self::GeneralFloat),
++            'G' => Ok(Self::UpperGeneralFloat),
++            's' => Ok(Self::String),
++            'q' => Ok(Self::Quoted),
++            't' => Ok(Self::Boolean),
++            'v' => Ok(Self::General),
++            other => Err(FormatSpecError::UnknownVerb(other)),
++        }
++    }
++
++    fn as_str(self) -> &'static str {
++        match self {
++            Self::Decimal => "d",
++            Self::Binary => "b",
++            Self::Octal => "o",
++            Self::Hex => "x",
++            Self::UpperHex => "X",
++            Self::Character => "c",
++            Self::Unicode => "U",
++            Self::Fixed => "f",
++            Self::UpperFixed => "F",
++            Self::Exponent => "e",
++            Self::UpperExponent => "E",
++            Self::GeneralFloat => "g",
++            Self::UpperGeneralFloat => "G",
++            Self::String => "s",
++            Self::Quoted => "q",
++            Self::Boolean => "t",
++            Self::General => "v",
++        }
++    }
++}
++
++/// A directive the author must correct before compilation.
++#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
++pub enum FormatSpecError {
++    #[error("empty format specifier")]
++    Empty,
++    #[error("unknown format verb `{0}`")]
++    UnknownVerb(char),
++    #[error("duplicate or conflicting format flags")]
++    Flags,
++    #[error("malformed format width or precision")]
++    Number,
++    #[error("unsupported format flags or precision for this verb")]
++    Modifiers,
++}
++
++impl FormatSpec {
++    /// Parse the complete directive, rejecting duplicate flags and incomplete numbers.
++    ///
++    /// # Errors
++    /// Returns [`FormatSpecError`] when the directive cannot be rendered safely.
++    ///
++    /// ```
++    /// use soppo::syntax::FormatSpec;
++    /// let spec = FormatSpec::new("04x")?;
++    /// assert_eq!(spec.to_string(), "04x");
++    /// # Ok::<(), soppo::syntax::FormatSpecError>(())
++    /// ```
++    pub fn new(raw: &str) -> Result<Self, FormatSpecError> {
++        let mut chars = raw.chars();
++        let verb = Verb::from_char(chars.next_back().ok_or(FormatSpecError::Empty)?)?;
++        let mut remaining = chars.as_str();
++        let mut sign = None;
++        let mut alternate = false;
++        let mut zero = false;
++        while let Some(flag) = remaining.chars().next() {
++            match flag {
++                '+' | ' ' => {
++                    if sign.is_some() {
++                        return Err(FormatSpecError::Flags);
++                    }
++                    sign = Some(if flag == '+' { Sign::Plus } else { Sign::Space });
++                }
++                '#' => {
++                    if alternate {
++                        return Err(FormatSpecError::Flags);
++                    }
++                    alternate = true;
++                }
++                '0' => {
++                    if zero {
++                        return Err(FormatSpecError::Flags);
++                    }
++                    zero = true;
++                }
++                _ => break,
++            }
++            remaining = &remaining[flag.len_utf8()..];
++        }
++        let width_end = remaining
++            .find(|c: char| !c.is_ascii_digit())
++            .unwrap_or(remaining.len());
++        let width = if width_end == 0 {
++            None
++        } else {
++            Some(
++                remaining[..width_end]
++                    .parse()
++                    .map_err(|_| FormatSpecError::Number)?,
++            )
++        };
++        remaining = &remaining[width_end..];
++        let precision = if let Some(number) = remaining.strip_prefix('.') {
++            if number.is_empty() || !number.chars().all(|c| c.is_ascii_digit()) {
++                return Err(FormatSpecError::Number);
++            }
++            Some(number.parse().map_err(|_| FormatSpecError::Number)?)
++        } else if remaining.is_empty() {
++            None
++        } else {
++            return Err(FormatSpecError::Number);
++        };
++        let modifiers_valid = match verb {
++            Verb::Decimal
++            | Verb::Binary
++            | Verb::Octal
++            | Verb::Hex
++            | Verb::UpperHex
++            | Verb::Character
++            | Verb::Unicode => precision.is_none(),
++            Verb::Fixed
++            | Verb::UpperFixed
++            | Verb::Exponent
++            | Verb::UpperExponent
++            | Verb::GeneralFloat
++            | Verb::UpperGeneralFloat => !alternate && !zero,
++            Verb::String | Verb::Quoted | Verb::Boolean => {
++                sign.is_none() && !alternate && !zero && precision.is_none()
++            }
++            Verb::General => precision.is_none() && !zero,
++        };
++        if !modifiers_valid || (zero && width.is_none()) {
++            return Err(FormatSpecError::Modifiers);
++        }
++        Ok(Self {
++            sign,
++            alternate,
++            zero,
++            width,
++            precision,
++            verb,
++        })
++    }
++
++    pub(crate) fn accepts_type_name(&self, type_name: Option<&str>) -> bool {
++        let integer = matches!(
++            type_name,
++            Some(
++                "int"
++                    | "int8"
++                    | "int16"
++                    | "int32"
++                    | "int64"
++                    | "uint"
++                    | "uint8"
++                    | "uint16"
++                    | "uint32"
++                    | "uint64"
++                    | "uintptr"
++                    | "byte"
++                    | "rune"
++            )
++        );
++        match self.verb {
++            Verb::Decimal | Verb::Binary | Verb::Octal | Verb::Character | Verb::Unicode => integer,
++            Verb::Hex | Verb::UpperHex => integer || type_name == Some("string"),
++            Verb::Fixed
++            | Verb::UpperFixed
++            | Verb::Exponent
++            | Verb::UpperExponent
++            | Verb::GeneralFloat
++            | Verb::UpperGeneralFloat => matches!(type_name, Some("float32" | "float64")),
++            Verb::String | Verb::Quoted => type_name == Some("string"),
++            Verb::Boolean => type_name == Some("bool"),
++            Verb::General => true,
++        }
++    }
++}
++
++impl FromStr for FormatSpec {
++    type Err = FormatSpecError;
++
++    fn from_str(raw: &str) -> Result<Self, Self::Err> {
++        Self::new(raw)
++    }
++}
++
++impl fmt::Display for FormatSpec {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        match self.sign {
++            Some(Sign::Plus) => f.write_str("+")?,
++            Some(Sign::Space) => f.write_str(" ")?,
++            None => {}
++        }
++        if self.alternate {
++            f.write_str("#")?;
++        }
++        if self.zero {
++            f.write_str("0")?;
++        }
++        if let Some(width) = self.width {
++            write!(f, "{width}")?;
++        }
++        if let Some(precision) = self.precision {
++            write!(f, ".{precision}")?;
++        }
++        f.write_str(self.verb.as_str())
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::{FormatSpec, FormatSpecError};
++
++    #[test]
++    fn directives_render_their_checked_components() {
++        for raw in [
++            "04x", "+#08X", " d", ".2f", "+8.0G", "s", "t", "v", "#v", "U",
++        ] {
++            assert_eq!(FormatSpec::new(raw).unwrap().to_string(), raw, "{raw}");
++        }
++    }
++
++    #[test]
++    fn malformed_directives_are_refused() {
++        assert_eq!(FormatSpec::new(""), Err(FormatSpecError::Empty));
++        assert_eq!(FormatSpec::new("z"), Err(FormatSpecError::UnknownVerb('z')));
++        for raw in [
++            "++d", "+ d", "##x", "004x", "4-d", ".f", "2.3.4f", "4dd", "0d", "#f", ".2d",
++        ] {
++            assert!(FormatSpec::new(raw).is_err(), "{raw}");
++        }
++    }
++
++    #[test]
++    fn numeric_fields_are_bounded() {
++        for raw in ["999999999999999999999d", ".999999999999999999999f"] {
++            assert_eq!(FormatSpec::new(raw), Err(FormatSpecError::Number), "{raw}");
++        }
++    }
++
++    #[test]
++    fn compatibility_is_owned_by_the_directive() {
++        assert!(
++            FormatSpec::new("x")
++                .unwrap()
++                .accepts_type_name(Some("string"))
++        );
++        assert!(
++            FormatSpec::new("U")
++                .unwrap()
++                .accepts_type_name(Some("rune"))
++        );
++        assert!(
++            !FormatSpec::new(".2f")
++                .unwrap()
++                .accepts_type_name(Some("int"))
++        );
++        assert!(
++            !FormatSpec::new("d")
++                .unwrap()
++                .accepts_type_name(Some("string"))
++        );
++        assert!(FormatSpec::new("v").unwrap().accepts_type_name(None));
++    }
++}
+diff --git a/src/syntax/mod.rs b/src/syntax/mod.rs
+index 4ebf421..e524bb4 100644
+--- a/src/syntax/mod.rs
++++ b/src/syntax/mod.rs
+@@ -1,9 +1,11 @@
+ mod ast;
++mod format_spec;
+ mod lexer;
+ mod parser;
+ mod source;
+ 
+ pub use ast::*;
++pub use format_spec::{FormatSpec, FormatSpecError};
+ pub use lexer::{Comment, Lexer, Token};
+ pub use parser::Parser;
+ pub use source::{FileId, FileRegistry, LineColumn, ModuleId, Span, Symbol};
+diff --git a/src/syntax/parser/expr.rs b/src/syntax/parser/expr.rs
+index 32faa74..28d5309 100644
+--- a/src/syntax/parser/expr.rs
++++ b/src/syntax/parser/expr.rs
+@@ -981,23 +981,27 @@ impl Parser {
+                 // Track where the expression starts (after the '{')
+                 let expr_start_byte = string_content_byte_start + byte_pos + 1;
+ 
+-                // Extract the expression inside {}
+-                let mut expr_str = String::new();
++                let mut content = String::new();
+                 let mut brace_depth = 1;
++                let mut quoted = QuotedContent::default();
+ 
+-                for (_, inner_ch) in char_indices.by_ref() {
+-                    if inner_ch == '{' {
+-                        brace_depth += 1;
+-                        expr_str.push(inner_ch);
+-                    } else if inner_ch == '}' {
+-                        brace_depth -= 1;
+-                        if brace_depth == 0 {
+-                            break;
++                while let Some((_, mut inner_ch)) = char_indices.next() {
++                    if inner_ch == '\\'
++                        && let Some((_, '\\' | '"')) = char_indices.peek()
++                    {
++                        inner_ch = char_indices.next().expect("peeked a quoted character").1;
++                    }
++                    if !quoted.observe(inner_ch) {
++                        if inner_ch == '{' {
++                            brace_depth += 1;
++                        } else if inner_ch == '}' {
++                            brace_depth -= 1;
++                            if brace_depth == 0 {
++                                break;
++                            }
+                         }
+-                        expr_str.push(inner_ch);
+-                    } else {
+-                        expr_str.push(inner_ch);
+                     }
++                    content.push(inner_ch);
+                 }
+ 
+                 if brace_depth != 0 {
+@@ -1007,9 +1011,19 @@ impl Parser {
+                     });
+                 }
+ 
+-                // Parse the expression with byte offset so errors point to correct location
+-                let mut expr_parser =
+-                    Parser::new_with_offset(&expr_str, self.file, expr_start_byte);
++                let (expr_str, raw_format) = split_interpolation_content(&content);
++                let format = raw_format
++                    .map(|raw| {
++                        crate::syntax::FormatSpec::new(raw).map_err(|source| {
++                            SoppoError::InvalidFormat {
++                                format: raw.to_owned(),
++                                source,
++                                span,
++                            }
++                        })
++                    })
++                    .transpose()?;
++                let mut expr_parser = Parser::new_with_offset(expr_str, self.file, expr_start_byte);
+                 let expr = expr_parser.parse_expr().map_err(|e| {
+                     // Remap parse errors to parent string span as fallback
+                     match e {
+@@ -1017,7 +1031,16 @@ impl Parser {
+                         other => other,
+                     }
+                 })?;
+-                parts.push(StringPart::Expr(Box::new(expr)));
++                if expr_parser.peek().is_some() {
++                    return Err(SoppoError::Parse {
++                        message: "unexpected text after interpolation expression".to_owned(),
++                        span,
++                    });
++                }
++                parts.push(StringPart::Expr {
++                    expr: Box::new(expr),
++                    format,
++                });
+             } else if ch == '}' {
+                 // Check for escaped brace: }}
+                 if char_indices.peek().map(|(_, c)| *c) == Some('}') {
+@@ -1041,6 +1064,49 @@ impl Parser {
+     }
+ }
+ 
++#[derive(Default)]
++struct QuotedContent {
++    delimiter: Option<char>,
++    escaped: bool,
++}
++
++impl QuotedContent {
++    fn observe(&mut self, ch: char) -> bool {
++        if let Some(delimiter) = self.delimiter {
++            if self.escaped {
++                self.escaped = false;
++            } else if ch == '\\' && delimiter != '`' {
++                self.escaped = true;
++            } else if ch == delimiter {
++                self.delimiter = None;
++            }
++            true
++        } else if matches!(ch, '"' | '\'' | '`') {
++            self.delimiter = Some(ch);
++            true
++        } else {
++            false
++        }
++    }
++}
++
++fn split_interpolation_content(content: &str) -> (&str, Option<&str>) {
++    let mut depth = 0_usize;
++    let mut quoted = QuotedContent::default();
++    for (index, ch) in content.char_indices() {
++        if quoted.observe(ch) {
++            continue;
++        }
++        match ch {
++            '(' | '[' | '{' => depth += 1,
++            ')' | ']' | '}' => depth = depth.saturating_sub(1),
++            ':' if depth == 0 => return (&content[..index], Some(&content[index + 1..])),
++            _ => {}
++        }
++    }
++    (content, None)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+@@ -1048,6 +1114,23 @@ mod tests {
+     use crate::syntax::ast::ExprKind;
+     use crate::syntax::source::FileId;
+ 
++    #[test]
++    fn interpolation_delimiters_ignore_nested_and_quoted_colons() {
++        for (content, expression, directive) in [
++            ("arr[1:3]", "arr[1:3]", None),
++            ("arr[0:2]:v", "arr[0:2]", Some("v")),
++            ("call(`a:b`):s", "call(`a:b`)", Some("s")),
++            ("\"a:b\":q", "\"a:b\"", Some("q")),
++            ("items[other[1:2]]:v", "items[other[1:2]]", Some("v")),
++        ] {
++            assert_eq!(
++                split_interpolation_content(content),
++                (expression, directive),
++                "{content}"
++            );
++        }
++    }
++
+     fn parse_expr_helper(source: &str) -> Result<Expr> {
+         Parser::new(source, FileId(0)).parse_expr()
+     }
+diff --git a/src/types/infer/expr.rs b/src/types/infer/expr.rs
+index a53b07e..93651dd 100644
+--- a/src/types/infer/expr.rs
++++ b/src/types/infer/expr.rs
+@@ -26,15 +26,30 @@ impl Infer {
+             ExprKind::Rune(_) => Ok(Type::simple("rune")),
+ 
+             ExprKind::StringInterpolation(parts) => {
+-                // Type check each interpolated expression
+                 let mut had_error = false;
+                 for part in parts {
+-                    if let crate::syntax::StringPart::Expr(expr) = part {
+-                        // Any type can be interpolated - it will be converted to string
+-                        let ty = self.infer_expr(expr);
+-                        if ty.is_error() {
+-                            had_error = true;
+-                        }
++                    let (expr, format) = match part {
++                        crate::syntax::StringPart::Literal(_) => continue,
++                        crate::syntax::StringPart::Expr { expr, format } => (expr, format),
++                    };
++                    let ty = self.infer_expr(expr);
++                    if ty.is_error() {
++                        had_error = true;
++                        continue;
++                    }
++                    let name = match &ty {
++                        Type::Con { sym, .. } => Some(sym.name.as_str()),
++                        Type::Func { .. } | Type::Var(_) | Type::Never | Type::Error => None,
++                    };
++                    if let Some(spec) = format
++                        && !spec.accepts_type_name(name)
++                    {
++                        self.emit_error(SoppoError::FormatType {
++                            format: spec.clone(),
++                            found: Box::new(ty),
++                            span: expr.span,
++                        });
++                        had_error = true;
+                     }
+                 }
+                 if had_error {
+diff --git a/tests/scenarios.rs b/tests/scenarios.rs
+new file mode 100644
+index 0000000..6617f54
+--- /dev/null
++++ b/tests/scenarios.rs
+@@ -0,0 +1,107 @@
++//! Uses, most common first:
++//! - Compile interpolated messages to Go without invoking external tools.
++//! - Format source while preserving interpolation directives.
++//! - Refuse directives that cannot format an expression's type.
++
++use soppo::{compile_source, format_source};
++
++#[test]
++fn compile_interpolated_messages() {
++    let source = r#"package main
++func main() {
++    n := 42
++    price := 19.99
++    name := "Ada"
++    flag := true
++    println("{n:04x} {price:.2f} {name:s} {flag:t} 100% {n}")
++}
++"#;
++    let go = compile_source(source).unwrap();
++    assert!(
++        go.contains(r#"fmt.Sprintf("%04x %.2f %s %t 100%% %v", n, price, name, flag, n)"#),
++        "{go}"
++    );
++}
++
++#[test]
++fn format_and_compile_interpolation_with_slices() {
++    let source = r#"package main
++func main() {
++    arr := []int{1, 2, 3}
++    println("val: {arr[1:3]} {arr[0:2]:v} {arr[0]:04x}")
++}
++"#;
++    let formatted = format_source(source).unwrap();
++    assert!(formatted.contains("{arr[0:2]:v}"), "{formatted}");
++    assert!(formatted.contains("{arr[0]:04x}"), "{formatted}");
++    assert_eq!(format_source(&formatted).unwrap(), formatted);
++    let go = compile_source(&formatted).unwrap();
++    assert!(go.contains("val: %v %v %04x"), "{go}");
++}
++
++#[test]
++fn refuse_type_incompatible_directives() {
++    for (declaration, expression, directive, type_name) in [
++        ("n := 42", "n", ".2f", "int"),
++        ("name := \"Ada\"", "name", "d", "string"),
++        ("flag := true", "flag", "s", "bool"),
++    ] {
++        let source = format!(
++            "package main\nfunc main() {{\n{declaration}\nprintln(\"{{{expression}:{directive}}}\")\n}}\n"
++        );
++        let error = compile_source(&source).unwrap_err().to_string();
++        assert!(
++            error.contains(directive) && error.contains(type_name),
++            "{source}: {error}"
++        );
++    }
++}
++
++#[test]
++fn refuse_malformed_directives_before_codegen() {
++    for spec in [
++        "", "z", "++d", "004x", "4-d", ".f", ".2.3f", "0d", "#f", ".2d",
++    ] {
++        let source =
++            format!("package main\nfunc main() {{\nn := 42\nprintln(\"{{n:{spec}}}\")\n}}\n");
++        assert!(compile_source(&source).is_err(), "{spec}");
++        assert!(format_source(&source).is_err(), "{spec}");
++    }
++}
++
++#[test]
++fn preserve_literal_braces_and_quoted_expression_colons() {
++    let source = r#"package main
++func main() {
++    println("{{literal}} {`a:b`:s} {\"hello\":q}")
++}
++"#;
++    let formatted = format_source(source).unwrap();
++    assert!(formatted.contains("{{literal}}"), "{formatted}");
++    assert_eq!(format_source(&formatted).unwrap(), formatted);
++    let go = compile_source(&formatted).unwrap();
++    assert!(go.contains("{literal} %s %q"), "{go}");
++}
++
++#[test]
++fn accept_each_numeric_type_and_verb() {
++    for type_name in [
++        "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64",
++        "byte", "rune",
++    ] {
++        for spec in ["d", "b", "o", "x", "X", "c", "U", "+#08x", " 4d"] {
++            let source = format!(
++                "package main\nfunc main() {{\nvar n {type_name} = 42\nprintln(\"{{n:{spec}}}\")\n}}\n"
++            );
++            assert!(compile_source(&source).is_ok(), "{source}");
++        }
++    }
++    for type_name in ["float32", "float64"] {
++        for spec in ["f", "F", "e", "E", "g", "G", "+8.2f", " .0G"] {
++            let source = format!(
++                "package main\nfunc main() {{\nvar n {type_name} = 2.5\nprintln(\"{{n:{spec}}}\")\n}}\n"
++            );
++            assert!(compile_source(&source).is_ok(), "{source}");
++        }
++    }
++}

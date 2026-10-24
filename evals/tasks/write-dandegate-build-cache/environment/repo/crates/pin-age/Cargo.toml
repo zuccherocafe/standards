@@ -1,0 +1,16 @@
+[package]
+name = "pin-age"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Says which toolchain pins are due to move: one line for each pin published more than 30 days ago"
+
+[dependencies]
+clap.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

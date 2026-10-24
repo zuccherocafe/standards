@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p /app
+cat > /app/REVIEW.md <<'REVIEW'
+# Live service reconfiguration review
+
+Reviewed the full base-to-tip diff, the changed functions and their callers, `BRIEF.md`, the service design read and `evidence/checks.log`. The passing tests establish normal listener replacement, positive authored weights, repeated identical-input reuse and invocation-local environments for compiled code. They do not establish timeout ownership, environment-sensitive result reuse or constructor-equivalent deserialisation. I have not rerun checks already evidenced or modified the checkout. The recorded immutable-module, sequential-admission and existing-adapter decisions remain in scope as stated.
+
+## 1. Must-fix: a grace timeout detaches the old listener
+
+In `src/service.rs`, `Service::reload` moves `old.handle` into `tokio::time::timeout`. A client can connect and send no bytes, then an operator reloads with a one-second grace budget and another listen address. The old `serve` remains inside its thirty-second read wait. When the grace expires the timeout drops the handle, which detaches rather than stops the old server task; the successor starts while the old task still owns its listener and connection. Reusing the same address can instead fail to bind. This breaks the brief's no-overlap and bounded-drain promises, not merely an imagined scheduling order.
+
+The most specific rules are `/standards/rules/languages/rust/async.md#every-task-has-an-owner` and `#shut-down-in-dependency-order`; `#deadlines-propagate` explicitly distinguishes a timeout from task cancellation. Keep a mutable handle outside the timeout, await `timeout(grace, &mut handle)`, and on expiry call `abort()` and await the handle before starting its successor. Observe expected cancellation separately from task failure. This is a small lifecycle fix and needs a silent-client interruption regression, not a second supervisor.
+
+## 2. Must-fix: the generated-result key loses the environment
+
+In `src/wasm.rs`, `Transforms::apply` constructs `ResultKey` from only `wasm_path` and `input_digest`. Two positive-weight peers can name the same shift module with `OFFSET=1` and `OFFSET=2`; alternatively an operator changes that map at reload. After transforming `a` with the first configuration, the second returns cached `b` instead of `c`. With the service's fixed document, the corresponding shifted HTTP response is likewise stale output. The shared cache survives reload and bypasses `execute`, so a fresh execution store cannot correct the cache hit.
+
+`/standards/rules/general.md#design`, **Generated output is typed and trusted**, permits reuse only while every input that shaped the result is unchanged. Add the canonical ordered environment map, or its stable digest, to `ResultKey` and test both configurations through `Transforms::apply`. This costs one key field and a regression; there is no need to rebuild modules when only the environment changes. The immutable-module deployment decision explains why live module-byte replacement is not an additional finding.
+
+## 3. Must-fix: authored zero weights bypass the checked constructor
+
+In `src/config.rs`, `RouteWeight` derives unchecked serde deserialisation even though `new(0)` refuses the value. An operator can provide a JSON configuration with one peer whose `weight` is `0`; `Config::from_json` accepts it and the first request reaches `ticket % total` with total zero in `select_weighted_peer`, causing a divide-by-zero panic in the listener task. The direct-constructor test and positive JSON fixture do not exercise this path.
+
+`/standards/rules/languages/rust/design.md#invariants` requires preservation on every construction path, and the narrower `#deserialising` requires deserialisation to call the constructor. Restore `#[serde(try_from = "u16")]`; the existing `TryFrom<u16>` already delegates to `new`. This is a one-line fix plus a hand-written zero-weight JSON refusal test, with no repeated weight checks in the selector.
+
+## 4. Should-fix: keep the digest helper internal
+
+`src/wasm.rs` exports `pub fn input_digest` solely for private cache-key construction. No other crate needs this helper. This exposes an implementation detail but does not change any response, so it is not a blocker. Under `/standards/rules/languages/rust/design.md#visibility`, make it private. The fix costs one visibility keyword and no API layer.
+
+## Sound reuse and review limits
+
+The compiled-module layer is sound: `CompiledComponentCache` depends on module bytes and engine settings, while the invocation's environment enters a fresh `Store` in `execute`. The test `fresh_stores_supply_environment_to_one_compiled_module` reuses the same module and observes both `b` and `c`. Environment belongs to the result identity, not to immutable compiled code. This follows `/standards/rules/general.md#design`, **Generated output is typed and trusted**, because compilation does not consume that input. No change to the compiled key is needed.
+
+The existing design-read disagreement about reload completion remains justified until finding 1 is resolved; keep the row current then. The core byte ABI, sequential accepted-connection policy and adapter scheduling are recorded decisions, not new findings. No additional output format or removed-reader transition is introduced here.
+
+**Verdict: fix first** — resolve findings 1–3 before landing; finding 4 is a small should-fix.
+
+DONE: final
+REVIEW

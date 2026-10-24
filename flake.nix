@@ -7,6 +7,23 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    agent-skills = {
+      url = "github:addyosmani/agent-skills";
+      flake = false;
+    };
+    superpowers = {
+      url = "github:obra/superpowers";
+      flake = false;
+    };
   };
 
   outputs =
@@ -14,6 +31,10 @@
       self,
       nixpkgs,
       rust-overlay,
+      pyproject-nix,
+      uv2nix,
+      agent-skills,
+      superpowers,
     }:
     let
       system = "x86_64-linux";
@@ -71,6 +92,70 @@
       pinAge = workspaceTool "pin-age";
 
       designRead = workspaceTool "design-read";
+
+      # Harbor runs the evals. evals/uv.lock pins it and everything it imports, each as a wheel for this system, so
+      # nothing builds from source and nothing installs at run time. Only Harbor's own commands reach the shell.
+      evals = uv2nix.lib.workspace.loadWorkspace {
+        workspaceRoot = pkgs.lib.fileset.toSource {
+          root = ./evals;
+          fileset = pkgs.lib.fileset.unions [
+            ./evals/pyproject.toml
+            ./evals/uv.lock
+          ];
+        };
+      };
+      evalsPython =
+        (pkgs.callPackage pyproject-nix.build.packages { python = pkgs.python314; }).overrideScope
+          (
+            pkgs.lib.composeExtensions (evals.mkPyprojectOverlay { sourcePreference = "wheel"; }) (
+              _final: prev: {
+                harbor = prev.harbor.overrideAttrs {
+                  # Harbor's only executable scripts run inside containers, which have /bin/sh and no Nix store.
+                  dontPatchShebangs = true;
+                };
+              }
+            )
+          );
+      harborApplication = (pkgs.callPackages pyproject-nix.build.util { }).mkApplication {
+        venv = evalsPython.mkVirtualEnv "evals" evals.deps.default;
+        package = evalsPython.harbor;
+      };
+      # Harbor's own container calls resolve short image names through evals/registries.conf alone, in place of the
+      # host's registries settings, which the rest of the shell and the host keep. Podman's compose otherwise starts
+      # each command's output with a banner, which Harbor's agents read as the first line of a version.
+      harbor =
+        pkgs.runCommand "harbor-${evalsPython.harbor.version}" { nativeBuildInputs = [ pkgs.makeWrapper ]; }
+          ''
+            for program in ${harborApplication}/bin/*; do
+              makeWrapper "$program" "$out/bin/''${program##*/}" --set CONTAINERS_REGISTRIES_CONF ${./evals/registries.conf} \
+                --set PODMAN_COMPOSE_WARNING_LOGS false \
+                --prefix PYTHONPATH : ${./evals/runner}
+            done
+          '';
+
+      evalsCli = pkgs.writeShellApplication {
+        name = "evals";
+        runtimeInputs = [
+          harbor
+          designRead
+          rustScans
+          pkgs.python314
+          pkgs.jq
+          pkgs.git
+          pkgs.coreutils
+        ];
+        text = ''
+          export EVALS_AGENT_SKILLS="${agent-skills}"
+          export EVALS_AGENT_SKILLS_REV="${agent-skills.rev or "unknown"}"
+          export EVALS_SUPERPOWERS="${superpowers}"
+          export EVALS_SUPERPOWERS_REV="${superpowers.rev or "unknown"}"
+          export EVALS_HARBOR="${harbor}/bin/harbor"
+          export EVALS_DESIGN_READ="${designRead}/bin/design-read"
+          export EVALS_RUST_SCANS="${rustScans}/bin/rust-scans"
+          top="$(git rev-parse --show-toplevel)"
+          exec python3 -I "$top/evals/runner/evals.py" "$@"
+        '';
+      };
 
       crate =
         {
@@ -139,6 +224,9 @@
         excludeShellChecks = [ "SC2329" ];
         runtimeInputs = [
           rust
+          pkgs.python314
+          pkgs.ruff
+          pkgs.pyrefly
           pinAge
           nixLint
           pkgs.lychee
@@ -172,6 +260,14 @@
           step "rust format" cargo fmt --manifest-path tools/Cargo.toml --check
           step "rust lint" cargo clippy --manifest-path tools/Cargo.toml --locked --all-targets -- -D warnings
           step "rust tests" cargo test --manifest-path tools/Cargo.toml --locked
+          python_format() { files '*.py' | xargs -0 ruff format --config evals/ruff.toml --check; }
+          python_lint() { files '*.py' | xargs -0 ruff check --config evals/ruff.toml; }
+          python_types() { files '*.py' | xargs -0 pyrefly check; }
+          python_tests() { python3 -I -m unittest discover -s evals/runner/tests -t evals/runner; }
+          step "python format" python_format
+          step "python lint" python_lint
+          step "python types" python_types
+          step "python tests" python_tests
           exit "$failed"
         '';
       };
@@ -185,7 +281,8 @@
         pin-age = pinAge;
         design-read = designRead;
         nix-lint = nixLint;
-        inherit dandegate;
+        evals = evalsCli;
+        inherit dandegate harbor;
       };
 
       checks.${system}.nix-lint = pkgs.runCommand "nix-lint" { } ''
@@ -208,8 +305,17 @@
           pinAge
           designRead
           nixLint
+          harbor
+          evalsCli
+          pkgs.python314
+          pkgs.ruff
+          pkgs.pyrefly
+          # Reads Harbor's and pi's records for the evals' accounting.
+          pkgs.jq
           pkgs.jujutsu
         ];
+        # Harbor otherwise reports each command and job to its developers.
+        env.HARBOR_TELEMETRY = "off";
       };
     };
 }

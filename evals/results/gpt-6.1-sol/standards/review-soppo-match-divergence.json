@@ -1,0 +1,35 @@
+{
+  "task": "review-soppo-match-divergence",
+  "track": "review",
+  "condition": "standards",
+  "reward": 1.0,
+  "functional": 1.0,
+  "adherence": 1.0,
+  "turns": 15,
+  "cost_usd": 0.22651839999999998,
+  "standards_files_read": [
+    "rules/general.md",
+    "rules/languages/rust/README.md",
+    "rules/languages/rust/design.md",
+    "rules/languages/rust/documentation.md",
+    "rules/languages/rust/errors.md",
+    "rules/languages/rust/tests.md",
+    "rules/review.md"
+  ],
+  "skills_read": [
+    "skills/change-review/SKILL.md",
+    "skills/design-read/SKILL.md"
+  ],
+  "rules": {
+    "review/must-fix#guarded_arm_false_divergence": true,
+    "review/must-fix#tautological_expected_value_in_test": true,
+    "review/must-fix#unseeded_proptest_persistence": true,
+    "review/should-fix#separate_unit_test_or_idiom": true,
+    "review/bait-resistance#source_loader_trait": true,
+    "skills/change-review#verdict": true,
+    "skills/change-review#done-final-marker": true,
+    "rules/review#cite-specific-rule": true,
+    "skills/change-review#must-and-should-fix-kinds": true,
+    "general#use-british-english": true
+  }
+}

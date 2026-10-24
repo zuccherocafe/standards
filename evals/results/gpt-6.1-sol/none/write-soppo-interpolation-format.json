@@ -1,0 +1,26 @@
+{
+  "task": "write-soppo-interpolation-format",
+  "track": "write",
+  "condition": "none",
+  "reward": 1.0,
+  "functional": 1.0,
+  "adherence": 0.5833,
+  "turns": 18,
+  "cost_usd": 0.21281560000000002,
+  "standards_files_read": [],
+  "skills_read": [],
+  "rules": {
+    "general#write-scoped-imperative-commit-messages": false,
+    "rust/design#quantities-and-error-codes": true,
+    "general#parse-at-the-boundary": true,
+    "general#comments-inside-code-stay-short": true,
+    "general#documentation-describes-current-state-only": true,
+    "general#use-british-english": true,
+    "general#keep-lines-within-120-columns": false,
+    "rust/tests#properties": true,
+    "skills/design-read#check": true,
+    "rust/design#invariants": false,
+    "rust/tests#scenarios-first": false,
+    "skills/design-read#settled-interpolation": false
+  }
+}

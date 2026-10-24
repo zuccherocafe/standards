@@ -1,0 +1,23 @@
+{
+  "task": "write-dandegate-build-cache",
+  "track": "write",
+  "condition": "agent-skills",
+  "reward": 1.0,
+  "functional": 1.0,
+  "adherence": 0.6667,
+  "turns": 35,
+  "cost_usd": 0.5428604,
+  "standards_files_read": [],
+  "skills_read": [],
+  "rules": {
+    "general#write-scoped-imperative-commit-messages": false,
+    "rust/design#quantities-and-error-codes": true,
+    "general#parse-at-the-boundary": true,
+    "general#comments-inside-code-stay-short": true,
+    "general#documentation-describes-current-state-only": true,
+    "general#use-british-english": true,
+    "general#keep-lines-within-120-columns": false,
+    "rust/tests#properties": true,
+    "skills/design-read#check": false
+  }
+}

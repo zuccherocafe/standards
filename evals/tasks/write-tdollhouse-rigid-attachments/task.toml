@@ -1,0 +1,23 @@
+schema_version = "1.4"
+
+[task]
+name = "standards/write-tdollhouse-rigid-attachments"
+description = "Attach rigid pieces to deforming surface triangles at rest, refuse invalid ownership or degenerate support, and pose them offline after solvers."
+
+[metadata]
+track = "write"
+upstream_repo = "https://github.com/zuccherocafe/tdollhouse"
+base_commit = "ba934cb0b28cbc50107d4206f20144c3f37dd61b"
+feature_commit = "3cfba3fba8e727bf55315bc52d81b4e471795ecd"
+
+[agent]
+timeout_sec = 900.0
+
+[verifier]
+timeout_sec = 300.0
+
+[environment]
+build_timeout_sec = 600.0
+cpus = 4
+memory_mb = 4096
+workdir = "/app"

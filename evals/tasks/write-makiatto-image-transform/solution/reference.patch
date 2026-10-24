@@ -1,0 +1,1169 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 9e0e7a1..1cb614a 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -4,7 +4,7 @@ version = "0.1.0"
+ edition = "2024"
+ publish = false
+ license = "MIT OR Apache-2.0"
+-description = "Serves domain-scoped static files from node configuration."
++description = "Serves domain-scoped static files and bounded, cached PNG transformations."
+ 
+ [workspace]
+ resolver = "3"
+diff --git a/docs/design-reads/web-serving.md b/docs/design-reads/web-serving.md
+index 637655f..84eaaa5 100644
+--- a/docs/design-reads/web-serving.md
++++ b/docs/design-reads/web-serving.md
+@@ -1,29 +1,29 @@
+ # Web serving design read
+ 
+-- Area: domain-scoped static files, node configuration and image requests
++- Area: domain-scoped static files, image queries, transformation policy and rebuildable outputs
+ - Last full read: c01ba4110bc9aa06238c96c6d1e3cdb9bef31625
+-- Inspected: `src/lib.rs`, `src/config.rs`, `src/web.rs`
++- Inspected: `src/config.rs`, `src/web.rs`, `src/query.rs`, `src/image.rs`, `tests/scenarios.rs`
+ 
+ ## Models in play
+ 
+-`Config` owns `WebConfig` and the domain alias map. `WebConfig.static_dir` names the parent of domain directories. `WebServer` resolves the hostname and aliases, confines a canonical path to the selected domain root and returns `Response` bytes and their media type. Requests carry raw query text, which static serving ignores.
++`Config` owns the static directory, aliases and `ImageConfig`. Checked `Dimension`, `Quality` and `ByteLimit` values carry pixel, encoding and source-size constraints across the configuration and request boundaries.
++
++`ImageParams` owns query parsing, aliases and the closed `FitMode` and `OutputFormat` sets. `Raster` owns decoded RGBA pixels and pure geometry. `Recipe` owns resolved dimensions, fit, output format and quality, and defines the versioned cache identity together with the source content digest.
++
++`WebServer` owns domain lookup and filesystem effects. Canonical paths keep requests within the selected domain root; cache writes publish complete files by rename. Disabled processing, unrelated queries and non-PNG sources use the original-file path.
+ 
+ ## Overlaps
+ 
+-The planned image policy and query options both describe dimensions, formats and quality. Keeping raw numeric configuration fields beside untyped query values would give validation and defaulting two owners. A disk cache would need a representation of the complete transformation rather than only a path and timestamp.
++Configuration defaults and request overrides meet once when `Raster::plan` builds a recipe. Both inputs use the same quantity types and neither encoding nor storage re-parses their raw values. Source metadata is an early size refusal, not an identity; the cache key uses the exact bytes decoded by the request.
+ 
+ ## Half-done transitions
+ 
+-Image processing is not modelled. Static serving has one path resolver and no transformed representation or output cache. The open design choices concern how the image model joins this serving boundary without a second resolver or inconsistent refusals.
++None found. Recognised query parameters enter the typed request model once. Static serving and transformation share the same domain and canonical path resolver.
+ 
+ ## What later work needs
+ 
+-Dynamic PNG transformations need configuration limits, validated query options, geometry and output encoding. Rebuildable cached bytes need an identity that includes source content and all result-shaping choices. Untransformed requests must remain independent of image limits.
++Additional formats must extend `OutputFormat`, its encoding behaviour and its media type together. A change in the sampling or encoding contract must advance the cache recipe version because existing outputs are rebuildable rather than durable source data. The PNG codec uses a 256 MiB raster budget and quality selects lossless compression effort; it does not discard pixels.
+ 
+ ## Disagreements
+ 
+-| Concept | Owner | Sites | Consequence | Done when |
+-|---|---|---|---|---|
+-| Image query vocabulary | web serving | `src/web.rs` `WebServer::serve` | Raw query text cannot carry validated fit, format, dimensions or aliases into processing. | Query parsing produces one checked transformation request with closed modes. |
+-| Image policy quantities | configuration | `src/config.rs` `Config`; `src/web.rs` `WebServer::serve` | Raw unit fields would allow invalid limits and repeat validation at each request. | Configuration and requests share validated quantity types; loading refuses invalid policy. |
+-| Transformed output identity | web serving | `src/web.rs` `WebServer::serve` | A path or timestamp alone can reuse stale bytes or collide across output choices. | One complete recipe plus source content digest defines each cache entry. |
++None found.
+diff --git a/src/config.rs b/src/config.rs
+index 37a3711..f819d45 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -1,38 +1,193 @@
+-//! Node configuration for domain-scoped static files.
++//! Loads node configuration and owns the quantities shared by requests and image limits.
+ 
+-use std::collections::BTreeMap;
++use std::{collections::BTreeMap, num::NonZeroU32};
+ 
+ use camino::Utf8PathBuf;
+-use serde::Deserialize;
++use serde::{Deserialize, Serialize};
+ 
+-/// Configuration loaded from a node's TOML file.
++/// A positive number of pixels along one axis.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
++#[serde(try_from = "u32")]
++pub struct Dimension(NonZeroU32);
++
++impl Dimension {
++    /// Construct a positive pixel dimension.
++    ///
++    /// # Errors
++    /// Returns [`DimensionError`] when `value` is zero.
++    pub fn new(value: u32) -> Result<Self, DimensionError> {
++        NonZeroU32::new(value).map(Self).ok_or(DimensionError)
++    }
++
++    /// The number of pixels.
++    #[must_use]
++    pub const fn get(self) -> u32 {
++        self.0.get()
++    }
++}
++
++impl TryFrom<u32> for Dimension {
++    type Error = DimensionError;
++    fn try_from(value: u32) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++/// A dimension must contain at least one pixel.
++#[derive(Clone, Copy, Debug, thiserror::Error)]
++#[error("dimension must be positive")]
++pub struct DimensionError;
++
++/// An encoding quality in the inclusive range 1 to 100.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
++#[serde(try_from = "u8")]
++pub struct Quality(u8);
++
++impl Quality {
++    /// Construct an encoding quality.
++    ///
++    /// # Errors
++    /// Returns [`QualityError`] outside 1 to 100.
++    pub fn new(value: u8) -> Result<Self, QualityError> {
++        if (1..=100).contains(&value) {
++            Ok(Self(value))
++        } else {
++            Err(QualityError)
++        }
++    }
++
++    /// The encoding quality percentage.
++    #[must_use]
++    pub const fn get(self) -> u8 {
++        self.0
++    }
++}
++
++impl TryFrom<u8> for Quality {
++    type Error = QualityError;
++    fn try_from(value: u8) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++/// A quality lies outside the supported range.
++#[derive(Clone, Copy, Debug, thiserror::Error)]
++#[error("quality must be between 1 and 100")]
++pub struct QualityError;
++
++/// A positive limit on encoded source bytes.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
++#[serde(try_from = "u64")]
++pub struct ByteLimit(std::num::NonZeroU64);
++
++impl ByteLimit {
++    /// Construct a source byte limit.
++    ///
++    /// # Errors
++    /// Returns [`ByteLimitError`] for zero.
++    pub fn new(value: u64) -> Result<Self, ByteLimitError> {
++        std::num::NonZeroU64::new(value)
++            .map(Self)
++            .ok_or(ByteLimitError)
++    }
++
++    /// The maximum encoded size in bytes.
++    #[must_use]
++    pub const fn get(self) -> u64 {
++        self.0.get()
++    }
++}
++
++impl TryFrom<u64> for ByteLimit {
++    type Error = ByteLimitError;
++    fn try_from(value: u64) -> Result<Self, Self::Error> {
++        Self::new(value)
++    }
++}
++
++/// A source byte limit must be positive.
++#[derive(Clone, Copy, Debug, thiserror::Error)]
++#[error("source byte limit must be positive")]
++pub struct ByteLimitError;
++
++/// Node configuration, including domain aliases and image policy.
+ #[derive(Clone, Debug, Deserialize)]
++#[serde(deny_unknown_fields)]
+ pub struct Config {
+-    /// Filesystem serving policy.
++    /// Static file location.
+     pub web: WebConfig,
+-    /// Domain aliases mapped to directory names under the static root.
++    /// Alias hostname to on-disk domain directory.
+     #[serde(default)]
+     pub domains: BTreeMap<String, String>,
++    /// Limits and output cache policy.
++    #[serde(default)]
++    pub images: ImageConfig,
+ }
+ 
+ impl Config {
+-    /// Parse a node configuration document.
++    /// Parse authored TOML into checked configuration.
+     ///
+     /// # Errors
+-    /// Returns [`ConfigError`] when TOML syntax or a known field is invalid.
+-    pub fn from_toml(document: &str) -> Result<Self, ConfigError> {
+-        toml::from_str(document).map_err(ConfigError)
++    /// Returns [`ConfigError`] for invalid syntax, unknown fields or invalid quantities.
++    ///
++    /// ```
++    /// use makiatto::config::Config;
++    /// let config = Config::from_toml("[web]\nstatic_dir = 'sites'\n[images]\nmax_width = 800")?;
++    /// assert_eq!(config.images.max_width.get(), 800);
++    /// # Ok::<(), makiatto::config::ConfigError>(())
++    /// ```
++    pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
++        toml::from_str(text).map_err(|source| ConfigError {
++            source: Box::new(source),
++        })
+     }
+ }
+ 
+-/// The root directory contains a subdirectory for each domain.
++/// Location of the domain-scoped static tree.
+ #[derive(Clone, Debug, Deserialize)]
++#[serde(deny_unknown_fields)]
+ pub struct WebConfig {
+-    /// Directory containing domain roots.
++    /// Parent directory of the domain directories.
+     pub static_dir: Utf8PathBuf,
+ }
+ 
+-/// A configuration document could not be read as node settings.
++/// Transformation configuration; byte and pixel limits apply before expensive processing.
++#[derive(Clone, Debug, Deserialize)]
++#[serde(default, deny_unknown_fields)]
++pub struct ImageConfig {
++    /// Whether recognised image queries transform PNG sources.
++    pub enabled: bool,
++    /// Maximum requested and resulting width.
++    pub max_width: Dimension,
++    /// Maximum requested and resulting height.
++    pub max_height: Dimension,
++    /// Encoding quality when the query omits it.
++    pub default_quality: Quality,
++    /// Maximum encoded source size.
++    pub max_file_size: ByteLimit,
++    /// Directory of rebuildable content-addressed outputs.
++    pub cache_dir: Utf8PathBuf,
++}
++
++impl Default for ImageConfig {
++    fn default() -> Self {
++        Self {
++            enabled: true,
++            max_width: Dimension(NonZeroU32::MIN.saturating_add(4095)),
++            max_height: Dimension(NonZeroU32::MIN.saturating_add(4095)),
++            default_quality: Quality(85),
++            max_file_size: ByteLimit(
++                std::num::NonZeroU64::MIN.saturating_add(10 * 1024 * 1024 - 1),
++            ),
++            cache_dir: Utf8PathBuf::from(".cache/images"),
++        }
++    }
++}
++
++/// An authored node configuration could not be loaded.
+ #[derive(Debug, thiserror::Error)]
+-#[error("parse node configuration: {0}")]
+-pub struct ConfigError(#[source] toml::de::Error);
++#[error("load node configuration at the field and line reported by the cause")]
++pub struct ConfigError {
++    #[source]
++    source: Box<toml::de::Error>,
++}
+diff --git a/src/image.rs b/src/image.rs
+new file mode 100644
+index 0000000..9a826c5
+--- /dev/null
++++ b/src/image.rs
+@@ -0,0 +1,253 @@
++//! Decodes bounded PNGs and computes image geometry without reading files or mutable state.
++
++use std::io::Cursor;
++
++use serde::Serialize;
++use sha2::{Digest, Sha256};
++
++use crate::{
++    config::{Dimension, ImageConfig, Quality},
++    query::{FitMode, ImageParams, OutputFormat},
++};
++
++const MAX_RASTER_BYTES: usize = 256 * 1024 * 1024;
++
++#[derive(Debug)]
++pub(crate) struct Raster {
++    width: Dimension,
++    height: Dimension,
++    rgba: Vec<u8>,
++}
++
++/// A PNG could not be decoded, transformed or encoded within the supported memory bound.
++#[derive(Debug, thiserror::Error)]
++pub enum TransformError {
++    /// The encoded source is not a supported PNG.
++    #[error("decode source png")]
++    Decode(#[source] png::DecodingError),
++    /// A decoded or requested raster needs more than 256 MiB.
++    #[error("image raster exceeds the 256 mib processing limit")]
++    RasterLimit,
++    /// A computed or requested dimension exceeds node policy.
++    #[error("image dimensions exceed configured limits")]
++    Dimensions,
++    /// A PNG could not be encoded.
++    #[error("encode output png")]
++    Encode(#[source] png::EncodingError),
++    /// A cache recipe could not be encoded.
++    #[error("encode image cache recipe")]
++    Recipe(#[source] serde_json::Error),
++}
++
++impl Raster {
++    pub(crate) fn decode(bytes: &[u8]) -> Result<Self, TransformError> {
++        let mut decoder = png::Decoder::new(Cursor::new(bytes));
++        decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
++        decoder.set_limits(png::Limits {
++            bytes: MAX_RASTER_BYTES,
++        });
++        let mut reader = decoder.read_info().map_err(TransformError::Decode)?;
++        let width = Dimension::new(reader.info().width).map_err(|_| TransformError::RasterLimit)?;
++        let height =
++            Dimension::new(reader.info().height).map_err(|_| TransformError::RasterLimit)?;
++        let size = raster_size(width.get(), height.get())?;
++        let mut buffer = vec![
++            0;
++            reader
++                .output_buffer_size()
++                .ok_or(TransformError::RasterLimit)?
++        ];
++        let info = reader
++            .next_frame(&mut buffer)
++            .map_err(TransformError::Decode)?;
++        let mut rgba = Vec::with_capacity(size);
++        let channels = info.color_type.samples();
++        for pixel in buffer[..info.buffer_size()].chunks_exact(channels) {
++            match info.color_type {
++                png::ColorType::Rgba => rgba.extend_from_slice(pixel),
++                png::ColorType::Rgb => rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 255]),
++                png::ColorType::Grayscale => {
++                    rgba.extend_from_slice(&[pixel[0], pixel[0], pixel[0], 255]);
++                }
++                png::ColorType::GrayscaleAlpha => {
++                    rgba.extend_from_slice(&[pixel[0], pixel[0], pixel[0], pixel[1]]);
++                }
++                png::ColorType::Indexed => return Err(TransformError::RasterLimit),
++            }
++        }
++        Ok(Self {
++            width,
++            height,
++            rgba,
++        })
++    }
++
++    pub(crate) fn plan(
++        &self,
++        params: &ImageParams,
++        config: &ImageConfig,
++    ) -> Result<Recipe, TransformError> {
++        let source_width = u64::from(self.width.get());
++        let source_height = u64::from(self.height.get());
++        let width = params
++            .width
++            .map_or(source_width, |value| u64::from(value.get()));
++        let height = params
++            .height
++            .map_or(source_height, |value| u64::from(value.get()));
++        let (width, height) = match (params.width, params.height) {
++            (Some(_), None) => (
++                width,
++                ((width * source_height + source_width / 2) / source_width).max(1),
++            ),
++            (None, Some(_)) => (
++                ((height * source_width + source_height / 2) / source_height).max(1),
++                height,
++            ),
++            (Some(_), Some(_)) | (None, None) => (width, height),
++        };
++        if width > u64::from(config.max_width.get()) || height > u64::from(config.max_height.get())
++        {
++            return Err(TransformError::Dimensions);
++        }
++        Ok(Recipe {
++            width: Dimension::new(u32::try_from(width).map_err(|_| TransformError::Dimensions)?)
++                .map_err(|_| TransformError::Dimensions)?,
++            height: Dimension::new(u32::try_from(height).map_err(|_| TransformError::Dimensions)?)
++                .map_err(|_| TransformError::Dimensions)?,
++            fit: params.fit,
++            format: params.format,
++            quality: params.quality.unwrap_or(config.default_quality),
++        })
++    }
++
++    pub(crate) fn transform(&self, recipe: &Recipe) -> Result<Vec<u8>, TransformError> {
++        let source_width = u64::from(self.width.get());
++        let source_height = u64::from(self.height.get());
++        let target_width = u64::from(recipe.width.get());
++        let target_height = u64::from(recipe.height.get());
++        let fitted = || {
++            if target_width * source_height <= target_height * source_width {
++                (
++                    target_width,
++                    ((target_width * source_height + source_width / 2) / source_width).max(1),
++                )
++            } else {
++                (
++                    ((target_height * source_width + source_height / 2) / source_height).max(1),
++                    target_height,
++                )
++            }
++        };
++        let (scaled_width, scaled_height, width, height) = match recipe.fit {
++            FitMode::Fill => (target_width, target_height, target_width, target_height),
++            FitMode::Contain => {
++                let (width, height) = fitted();
++                (width, height, width, height)
++            }
++            FitMode::ScaleDown => {
++                let (width, height) =
++                    if source_width <= target_width && source_height <= target_height {
++                        (source_width, source_height)
++                    } else {
++                        fitted()
++                    };
++                (width, height, width, height)
++            }
++            FitMode::Cover => {
++                let (scaled_width, scaled_height) =
++                    if target_width * source_height >= target_height * source_width {
++                        (
++                            target_width,
++                            (target_width * source_height).div_ceil(source_width),
++                        )
++                    } else {
++                        (
++                            (target_height * source_width).div_ceil(source_height),
++                            target_height,
++                        )
++                    };
++                (scaled_width, scaled_height, target_width, target_height)
++            }
++        };
++        let width = u32::try_from(width).map_err(|_| TransformError::RasterLimit)?;
++        let height = u32::try_from(height).map_err(|_| TransformError::RasterLimit)?;
++        let size = raster_size(width, height)?;
++        let offset_x = (scaled_width - u64::from(width)) / 2;
++        let offset_y = (scaled_height - u64::from(height)) / 2;
++        let mut rgba = Vec::with_capacity(size);
++        for y in 0..u64::from(height) {
++            let source_y =
++                u128::from(y + offset_y) * u128::from(source_height) / u128::from(scaled_height);
++            for x in 0..u64::from(width) {
++                let source_x =
++                    u128::from(x + offset_x) * u128::from(source_width) / u128::from(scaled_width);
++                let index = usize::try_from((source_y * u128::from(source_width) + source_x) * 4)
++                    .map_err(|_| TransformError::RasterLimit)?;
++                rgba.extend_from_slice(&self.rgba[index..index + 4]);
++            }
++        }
++        match recipe.format {
++            OutputFormat::RawRgba => Ok(rgba),
++            OutputFormat::Png => {
++                let mut output = Vec::new();
++                {
++                    let mut encoder = png::Encoder::new(&mut output, width, height);
++                    encoder.set_color(png::ColorType::Rgba);
++                    encoder.set_depth(png::BitDepth::Eight);
++                    encoder.set_compression(if recipe.quality.get() < 50 {
++                        png::Compression::Fastest
++                    } else {
++                        png::Compression::Balanced
++                    });
++                    let mut writer = encoder.write_header().map_err(TransformError::Encode)?;
++                    writer
++                        .write_image_data(&rgba)
++                        .map_err(TransformError::Encode)?;
++                }
++                Ok(output)
++            }
++        }
++    }
++}
++
++fn raster_size(width: u32, height: u32) -> Result<usize, TransformError> {
++    usize::try_from(u64::from(width) * u64::from(height))
++        .ok()
++        .and_then(|area| area.checked_mul(4))
++        .filter(|size| *size <= MAX_RASTER_BYTES)
++        .ok_or(TransformError::RasterLimit)
++}
++
++#[derive(Clone, Debug, Serialize)]
++pub(crate) struct Recipe {
++    width: Dimension,
++    height: Dimension,
++    fit: FitMode,
++    format: OutputFormat,
++    quality: Quality,
++}
++
++impl Recipe {
++    pub(crate) fn key(&self, source: &[u8]) -> Result<String, TransformError> {
++        let mut hash = Sha256::new();
++        hash.update(b"makiatto-image-v1\0");
++        hash.update(Sha256::digest(source));
++        hash.update(serde_json::to_vec(self).map_err(TransformError::Recipe)?);
++        let alphabet = b"0123456789abcdef";
++        Ok(hash
++            .finalize()
++            .iter()
++            .flat_map(|byte| {
++                [
++                    char::from(alphabet[usize::from(byte >> 4)]),
++                    char::from(alphabet[usize::from(byte & 15)]),
++                ]
++            })
++            .collect())
++    }
++
++    pub(crate) const fn content_type(&self) -> &'static str {
++        self.format.content_type()
++    }
++}
+diff --git a/src/lib.rs b/src/lib.rs
+index 5956e1a..56027ed 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,4 +1,9 @@
+-//! Domain-scoped static serving for an HTTP adapter, without transport or background tasks.
++//! Serves domain-scoped static files and bounded, cached PNG transformations.
++//!
++//! Configuration is parsed once into checked quantities. The web boundary owns file and cache I/O;
++//! image geometry and sampling operate on decoded values without I/O. Networking is out of scope.
+ 
+ pub mod config;
++mod image;
++mod query;
+ pub mod web;
+diff --git a/src/query.rs b/src/query.rs
+new file mode 100644
+index 0000000..53c4aed
+--- /dev/null
++++ b/src/query.rs
+@@ -0,0 +1,123 @@
++//! Parses URL query syntax once into closed image options and checked quantities.
++
++use serde::{Deserialize, Serialize};
++use serde_json::{Map, Value};
++
++use crate::config::{Dimension, Quality};
++
++#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
++#[serde(rename_all = "kebab-case")]
++pub(crate) enum FitMode {
++    #[default]
++    Contain,
++    Cover,
++    Fill,
++    ScaleDown,
++}
++
++#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
++#[serde(rename_all = "snake_case")]
++pub(crate) enum OutputFormat {
++    #[default]
++    Png,
++    RawRgba,
++}
++
++impl OutputFormat {
++    pub(crate) const fn content_type(self) -> &'static str {
++        match self {
++            Self::Png => "image/png",
++            Self::RawRgba => "application/octet-stream",
++        }
++    }
++}
++
++#[derive(Clone, Debug, Default, Deserialize)]
++#[serde(default, deny_unknown_fields)]
++pub(crate) struct ImageParams {
++    #[serde(alias = "w")]
++    pub(crate) width: Option<Dimension>,
++    #[serde(alias = "h")]
++    pub(crate) height: Option<Dimension>,
++    pub(crate) fit: FitMode,
++    pub(crate) format: OutputFormat,
++    #[serde(alias = "q")]
++    pub(crate) quality: Option<Quality>,
++}
++
++impl ImageParams {
++    pub(crate) fn parse(query: &str) -> Result<Option<Self>, ParseQueryError> {
++        let mut fields = Map::new();
++        for pair in query.split('&').filter(|pair| !pair.is_empty()) {
++            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
++            let key = decode(key)?;
++            let typed = match key.as_str() {
++                "w" | "width" | "h" | "height" | "q" | "quality" => Value::from(
++                    decode(value)?
++                        .parse::<u64>()
++                        .map_err(|_| ParseQueryError::Number { field: key.clone() })?,
++                ),
++                "fit" | "format" => Value::String(decode(value)?),
++                _ => continue,
++            };
++            if fields.insert(key.clone(), typed).is_some() {
++                return Err(ParseQueryError::Duplicate { field: key });
++            }
++        }
++        if fields.is_empty() {
++            return Ok(None);
++        }
++        serde_json::from_value(Value::Object(fields))
++            .map(Some)
++            .map_err(ParseQueryError::Options)
++    }
++}
++
++fn decode(value: &str) -> Result<String, ParseQueryError> {
++    let mut decoded = Vec::new();
++    let mut bytes = value.bytes();
++    while let Some(byte) = bytes.next() {
++        match byte {
++            b'+' => decoded.push(b' '),
++            b'%' => {
++                let high = bytes.next().and_then(hex).ok_or(ParseQueryError::Escape)?;
++                let low = bytes.next().and_then(hex).ok_or(ParseQueryError::Escape)?;
++                decoded.push(high * 16 + low);
++            }
++            other => decoded.push(other),
++        }
++    }
++    String::from_utf8(decoded).map_err(|_| ParseQueryError::Escape)
++}
++
++const fn hex(byte: u8) -> Option<u8> {
++    match byte {
++        b'0'..=b'9' => Some(byte - b'0'),
++        b'a'..=b'f' => Some(byte - b'a' + 10),
++        b'A'..=b'F' => Some(byte - b'A' + 10),
++        _ => None,
++    }
++}
++
++/// Authored query options could not be parsed into a transformation request.
++#[derive(Debug, thiserror::Error)]
++pub enum ParseQueryError {
++    /// A query escape or UTF-8 sequence is malformed.
++    #[error("decode query percent escape or text")]
++    Escape,
++    /// A numeric option is not a positive integer.
++    #[error("parse positive integer query field {field}")]
++    Number {
++        /// The authored query key.
++        field: String,
++    },
++    /// The same recognised option appears more than once.
++    #[error("duplicate query field {field}")]
++    Duplicate {
++        /// The authored query key.
++        field: String,
++    },
++    /// An option is outside its supported set or range.
++    #[error("parse image query fields")]
++    Options(#[source] serde_json::Error),
++}
+diff --git a/src/web.rs b/src/web.rs
+index 66924e8..0876d80 100644
+--- a/src/web.rs
++++ b/src/web.rs
+@@ -1,50 +1,103 @@
+-//! Resolves domain aliases and serves files contained by the selected domain root.
++//! Owns domain lookup, safe path resolution and content-addressed output storage.
+ 
+-use std::{fs, path::Component};
++use std::{
++    fs,
++    io::{Read, Write},
++    path::Component,
++    sync::atomic::{AtomicU64, Ordering},
++};
+ 
+ use camino::Utf8PathBuf;
+ 
+-use crate::config::Config;
++use crate::{config::Config, image::Raster, query::ImageParams};
++pub use crate::{image::TransformError, query::ParseQueryError};
+ 
+-/// File bytes and media type ready for an HTTP adapter.
++static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
++
++/// Bytes and media type ready for an HTTP adapter.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub struct Response {
+-    /// Original file bytes.
++    /// Original or transformed file bytes.
+     pub body: Vec<u8>,
+-    /// Media type of the returned file.
++    /// Media type of the returned representation.
+     pub content_type: &'static str,
+ }
+ 
+-/// Static file handler for one node.
++/// Static file serving and image transformation policy for one node.
+ #[derive(Clone, Debug)]
+ pub struct WebServer {
+     config: Config,
+ }
+ 
+ impl WebServer {
+-    /// Construct a server from parsed configuration.
++    /// Construct a server from already parsed configuration.
+     #[must_use]
+     pub const fn new(config: Config) -> Self {
+         Self { config }
+     }
+ 
+-    /// Resolve a domain and read the requested file; directories use `index.html`.
++    /// Resolve a domain and return the requested static file or image representation.
+     ///
+-    /// Query parameters do not affect static file serving.
++    /// Recognised image parameters apply only to PNG sources when processing is enabled.
++    /// Other files, unrelated queries and disabled processing return the original bytes.
+     ///
+     /// # Errors
+-    /// Returns [`ServeError`] for unsafe paths or unavailable files.
+-    pub fn serve(&self, host: &str, path: &str, _query: &str) -> Result<Response, ServeError> {
++    /// Returns [`ServeError`] for unsafe or missing paths, invalid image options, policy limits,
++    /// unsupported source data, or filesystem failures.
++    pub fn serve(&self, host: &str, path: &str, query: &str) -> Result<Response, ServeError> {
+         let file = self.resolve(host, path)?;
+-        let body = fs::read(&file).map_err(|source| file_error(&file, source))?;
+-        let content_type = match file.extension() {
+-            Some(extension) if extension.eq_ignore_ascii_case("png") => "image/png",
+-            Some("html") => "text/html",
+-            Some("css") => "text/css",
+-            Some("txt") => "text/plain",
+-            _ => "application/octet-stream",
++        let png = file
++            .extension()
++            .is_some_and(|extension| extension.eq_ignore_ascii_case("png"));
++        if !self.config.images.enabled || !png {
++            return original(&file);
++        }
++        let Some(params) = ImageParams::parse(query).map_err(ServeError::Query)? else {
++            return original(&file);
++        };
++        for (requested, maximum) in [
++            (params.width, self.config.images.max_width),
++            (params.height, self.config.images.max_height),
++        ] {
++            if requested.is_some_and(|requested| requested > maximum) {
++                return Err(ServeError::Transform(TransformError::Dimensions));
++            }
++        }
++        let limit = self.config.images.max_file_size.get();
++        let source_file = fs::File::open(&file).map_err(|source| file_error(&file, source))?;
++        if source_file
++            .metadata()
++            .map_err(|source| file_error(&file, source))?
++            .len()
++            > limit
++        {
++            return Err(ServeError::SourceLimit);
++        }
++        let mut source = Vec::new();
++        source_file
++            .take(limit.saturating_add(1))
++            .read_to_end(&mut source)
++            .map_err(|source| file_error(&file, source))?;
++        if u64::try_from(source.len()).map_err(|_| ServeError::SourceLimit)? > limit {
++            return Err(ServeError::SourceLimit);
++        }
++        let raster = Raster::decode(&source)?;
++        let recipe = raster.plan(&params, &self.config.images)?;
++        let key = recipe.key(&source)?;
++        let cache = self.config.images.cache_dir.join(format!("{key}.bin"));
++        let body = match fs::read(&cache) {
++            Ok(bytes) => bytes,
++            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
++                let bytes = raster.transform(&recipe)?;
++                self.store(&cache, &bytes)?;
++                bytes
++            }
++            Err(source) => return Err(file_error(&cache, source)),
+         };
+-        Ok(Response { body, content_type })
++        Ok(Response {
++            body,
++            content_type: recipe.content_type(),
++        })
+     }
+ 
+     fn resolve(&self, host: &str, path: &str) -> Result<Utf8PathBuf, ServeError> {
+@@ -81,6 +134,41 @@ impl WebServer {
+         }
+         Utf8PathBuf::from_path_buf(canonical).map_err(|_| ServeError::UnsafePath)
+     }
++
++    fn store(&self, cache: &Utf8PathBuf, bytes: &[u8]) -> Result<(), ServeError> {
++        let directory = &self.config.images.cache_dir;
++        fs::create_dir_all(directory).map_err(|source| file_error(directory, source))?;
++        let temporary = directory.join(format!(
++            ".{}-{}.tmp",
++            std::process::id(),
++            NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
++        ));
++        let mut file = fs::OpenOptions::new()
++            .write(true)
++            .create_new(true)
++            .open(&temporary)
++            .map_err(|source| file_error(&temporary, source))?;
++        let result = file.write_all(bytes).and_then(|()| {
++            drop(file);
++            fs::rename(&temporary, cache)
++        });
++        if result.is_err() {
++            let _ = fs::remove_file(&temporary);
++        }
++        result.map_err(|source| file_error(cache, source))
++    }
++}
++
++fn original(file: &Utf8PathBuf) -> Result<Response, ServeError> {
++    let body = fs::read(file).map_err(|source| file_error(file, source))?;
++    let content_type = match file.extension() {
++        Some(extension) if extension.eq_ignore_ascii_case("png") => "image/png",
++        Some("html") => "text/html",
++        Some("css") => "text/css",
++        Some("txt") => "text/plain",
++        _ => "application/octet-stream",
++    };
++    Ok(Response { body, content_type })
+ }
+ 
+ fn file_error(path: &Utf8PathBuf, source: std::io::Error) -> ServeError {
+@@ -90,13 +178,13 @@ fn file_error(path: &Utf8PathBuf, source: std::io::Error) -> ServeError {
+     }
+ }
+ 
+-/// A request could not be safely served.
++/// A request could not be safely served under node policy.
+ #[derive(Debug, thiserror::Error)]
+ pub enum ServeError {
+     /// The request escapes the selected domain root.
+     #[error("resolve path inside the selected domain")]
+     UnsafePath,
+-    /// A source file is unavailable.
++    /// A source or cache file is unavailable.
+     #[error("access file {path}")]
+     File {
+         /// File involved in the operation.
+@@ -105,4 +193,13 @@ pub enum ServeError {
+         #[source]
+         source: std::io::Error,
+     },
++    /// The transformation query is malformed.
++    #[error("parse image request query")]
++    Query(#[source] ParseQueryError),
++    /// The encoded source is too large.
++    #[error("source image exceeds configured byte limit")]
++    SourceLimit,
++    /// Decoding, geometry or encoding failed.
++    #[error(transparent)]
++    Transform(#[from] TransformError),
+ }
+diff --git a/tests/scenarios.rs b/tests/scenarios.rs
+index 68a6c4d..e678f72 100644
+--- a/tests/scenarios.rs
++++ b/tests/scenarios.rs
+@@ -1,20 +1,275 @@
+-//! Common static-serving scenario through the public boundary.
++//! Uses, most common first: serve original files; resize PNGs; crop or stretch images;
++//! reuse cached outputs; invalidate changed sources; refuse invalid requests and configuration.
+ 
+-use std::{error::Error, fs};
++use std::{
++    fs,
++    io::Cursor,
++    sync::atomic::{AtomicU64, Ordering},
++};
+ 
+-use makiatto::{config::Config, web::WebServer};
++use camino::Utf8PathBuf;
++use makiatto::{
++    config::Config,
++    web::{Response, ServeError, WebServer},
++};
++
++static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
++
++struct Fixture {
++    root: Utf8PathBuf,
++}
++
++impl Fixture {
++    fn new() -> Self {
++        let root = Utf8PathBuf::from(format!(
++            ".cache/scenarios-{}-{}",
++            std::process::id(),
++            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
++        ));
++        fs::create_dir_all(root.join("static/example.test")).expect("create fixture");
++        let fixture = Self { root };
++        fixture.write_source(false);
++        fixture
++    }
++
++    fn write_source(&self, reversed: bool) {
++        let row = if reversed {
++            [
++                255, 255, 255, 255, 0, 0, 255, 255, 0, 255, 0, 255, 255, 0, 0, 255,
++            ]
++        } else {
++            [
++                255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
++            ]
++        };
++        let mut bytes = Vec::new();
++        {
++            let mut encoder = png::Encoder::new(&mut bytes, 4, 2);
++            encoder.set_color(png::ColorType::Rgba);
++            encoder.set_depth(png::BitDepth::Eight);
++            encoder
++                .write_header()
++                .expect("write header")
++                .write_image_data(&row.repeat(2))
++                .expect("write pixels");
++        }
++        fs::write(self.root.join("static/example.test/photo.png"), bytes).expect("write source");
++    }
++
++    fn server(&self, settings: &str) -> WebServer {
++        let config = Config::from_toml(&format!(
++            "[web]\nstatic_dir = {:?}\n[domains]\n'alias.test' = 'example.test'\n\
++             [images]\ncache_dir = {:?}\n{settings}",
++            self.root.join("static").as_str(),
++            self.root.join("cache").as_str()
++        ))
++        .expect("load config");
++        WebServer::new(config)
++    }
++
++    fn cached(&self) -> Vec<Utf8PathBuf> {
++        let mut entries = fs::read_dir(self.root.join("cache"))
++            .expect("read cache")
++            .map(|entry| {
++                Utf8PathBuf::from_path_buf(entry.expect("cache entry").path()).expect("utf8 cache")
++            })
++            .collect::<Vec<_>>();
++        entries.sort();
++        entries
++    }
++}
++
++impl Drop for Fixture {
++    fn drop(&mut self) {
++        let _ = fs::remove_dir_all(&self.root);
++    }
++}
++
++fn decoded(response: &Response) -> (u32, u32, Vec<u8>) {
++    assert_eq!(response.content_type, "image/png");
++    let mut reader = png::Decoder::new(Cursor::new(&response.body))
++        .read_info()
++        .expect("decode result");
++    let mut bytes = vec![0; reader.output_buffer_size().expect("output size")];
++    let info = reader.next_frame(&mut bytes).expect("read frame");
++    bytes.truncate(info.buffer_size());
++    (info.width, info.height, bytes)
++}
++
++#[test]
++fn original_files_aliases_and_disabled_processing_preserve_bytes() {
++    let fixture = Fixture::new();
++    let original =
++        fs::read(fixture.root.join("static/example.test/photo.png")).expect("read source");
++    let server = fixture.server("");
++    assert_eq!(
++        server
++            .serve("alias.test:8080", "/photo.png", "")
++            .expect("original")
++            .body,
++        original
++    );
++    assert_eq!(
++        server
++            .serve("example.test", "/photo.png", "new=1")
++            .expect("unrelated")
++            .body,
++        original
++    );
++    assert_eq!(
++        fixture
++            .server("enabled = false")
++            .serve("example.test", "/photo.png", "w=0&fit=bad")
++            .expect("disabled")
++            .body,
++        original
++    );
++    assert!(matches!(
++        server.serve("example.test", "/../photo.png", ""),
++        Err(ServeError::UnsafePath)
++    ));
++}
++
++#[test]
++fn contain_and_single_axis_requests_preserve_aspect_ratio() {
++    let fixture = Fixture::new();
++    let server = fixture.server("");
++    let contain = decoded(
++        &server
++            .serve("example.test", "/photo.png", "w=2&h=2")
++            .expect("contain"),
++    );
++    assert_eq!((contain.0, contain.1), (2, 1));
++    assert_eq!(contain.2, [255, 0, 0, 255, 0, 0, 255, 255]);
++    for query in ["width=2", "height=1"] {
++        let response = decoded(
++            &server
++                .serve("example.test", "/photo.png", query)
++                .expect("single axis"),
++        );
++        assert_eq!((response.0, response.1), (2, 1), "{query}");
++    }
++}
++
++#[test]
++fn cover_centre_crops_and_fill_stretches() {
++    let fixture = Fixture::new();
++    let server = fixture.server("");
++    let cover = decoded(
++        &server
++            .serve("example.test", "/photo.png", "w=2&h=2&fit=cover")
++            .expect("cover"),
++    );
++    assert_eq!((cover.0, cover.1), (2, 2));
++    assert_eq!(cover.2, [0, 255, 0, 255, 0, 0, 255, 255].repeat(2));
++    let fill = decoded(
++        &server
++            .serve("example.test", "/photo.png", "w=2&h=2&fit=fill")
++            .expect("fill"),
++    );
++    assert_eq!((fill.0, fill.1), (2, 2));
++    assert_eq!(fill.2, [255, 0, 0, 255, 0, 0, 255, 255].repeat(2));
++}
++
++#[test]
++fn scale_down_never_enlarges_and_raw_output_contains_rgba_pixels() {
++    let fixture = Fixture::new();
++    let server = fixture.server("");
++    let response = decoded(
++        &server
++            .serve("example.test", "/photo.png", "w=8&h=8&fit=scale-down")
++            .expect("scale down"),
++    );
++    assert_eq!((response.0, response.1), (4, 2));
++    let raw = server
++        .serve("example.test", "/photo.png", "w=2&format=raw_rgba")
++        .expect("raw output");
++    assert_eq!(raw.content_type, "application/octet-stream");
++    assert_eq!(raw.body, [255, 0, 0, 255, 0, 0, 255, 255]);
++}
++
++#[test]
++fn cache_reuses_outputs_and_tracks_source_content_and_quality() {
++    let fixture = Fixture::new();
++    let server = fixture.server("");
++    let initial = server
++        .serve("example.test", "/photo.png", "w=2&q=85")
++        .expect("first request");
++    let entries = fixture.cached();
++    assert_eq!(entries.len(), 1);
++    let modified = fs::metadata(&entries[0])
++        .expect("cache metadata")
++        .modified()
++        .expect("cache timestamp");
++    assert_eq!(
++        server
++            .serve("example.test", "/photo.png", "width=2&quality=85")
++            .expect("repeat"),
++        initial
++    );
++    assert_eq!(fixture.cached(), entries);
++    assert_eq!(
++        fs::metadata(&entries[0])
++            .expect("cache metadata")
++            .modified()
++            .expect("cache timestamp"),
++        modified
++    );
++    server
++        .serve("example.test", "/photo.png", "w=2&q=90")
++        .expect("other quality");
++    assert_eq!(fixture.cached().len(), 2);
++    fixture.write_source(true);
++    let changed = server
++        .serve("example.test", "/photo.png", "w=2&q=85")
++        .expect("changed source");
++    assert_eq!(decoded(&changed).2, [255, 255, 255, 255, 0, 255, 0, 255]);
++    assert_ne!(changed.body, initial.body);
++    assert_eq!(fixture.cached().len(), 3);
++}
+ 
+ #[test]
+-fn alias_request_serves_a_domain_index() -> Result<(), Box<dyn Error>> {
+-    let root = format!(".cache/static-scenario-{}", std::process::id());
+-    fs::create_dir_all(format!("{root}/example.test"))?;
+-    fs::write(format!("{root}/example.test/index.html"), b"site home")?;
+-    let config = Config::from_toml(&format!(
+-        "[web]\nstatic_dir = {root:?}\n[domains]\n'alias.test' = 'example.test'\n"
+-    ))?;
+-    let response = WebServer::new(config).serve("alias.test:80", "/", "")?;
+-    assert_eq!(response.body, b"site home");
+-    assert_eq!(response.content_type, "text/html");
+-    fs::remove_dir_all(root)?;
+-    Ok(())
++fn invalid_parameters_and_limits_return_structured_refusals() {
++    let fixture = Fixture::new();
++    let server = fixture.server("max_width = 4\nmax_height = 4");
++    for query in [
++        "w=0",
++        "q=0",
++        "quality=101",
++        "fit=crop",
++        "format=jpeg",
++        "w=2&w=3",
++    ] {
++        assert!(
++            matches!(
++                server.serve("example.test", "/photo.png", query),
++                Err(ServeError::Query(_))
++            ),
++            "{query}"
++        );
++    }
++    assert!(matches!(
++        server.serve("example.test", "/photo.png", "w=5"),
++        Err(ServeError::Transform(_))
++    ));
++    assert!(matches!(
++        fixture
++            .server("max_file_size = 1")
++            .serve("example.test", "/photo.png", "w=2"),
++        Err(ServeError::SourceLimit)
++    ));
++    for settings in [
++        "max_width = 0",
++        "max_height = 0",
++        "default_quality = 0",
++        "default_quality = 101",
++        "max_file_size = 0",
++        "typo = 1",
++    ] {
++        assert!(
++            Config::from_toml(&format!("[web]\nstatic_dir='static'\n[images]\n{settings}"))
++                .is_err(),
++            "{settings}"
++        );
++    }
+ }

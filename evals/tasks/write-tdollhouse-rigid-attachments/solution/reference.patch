@@ -1,0 +1,659 @@
+diff --git a/README.md b/README.md
+index 32d711b..4e0dc9e 100644
+--- a/README.md
++++ b/README.md
+@@ -6,7 +6,7 @@ This is a focused extraction of `zuccherocafe/tdollhouse` at `ba934cb0b28cbc5010
+ 
+ `src/mesh.rs` adapts `tdoll-convert/src/retarget/body/mesh.rs`: a surface keeps its held positions, positive joint weights, inverse binds and post-cut triangles, and skins them by the same linear-blend equation. The fixture uses vectors with checked indices instead of the importer's typed index containers and takes decoded cut primitives instead of parsing glTF. `MaterialName` is a fixture boundary type; upstream identifies materials with strings. A piece is every triangle carrying positive weight on its named bone. A rigid piece must be wholly weighted to that one dedicated bone. A target material can span several cut primitives.
+ 
+-`src/coat.rs` adapts `tdoll-convert-driver/src/body/coat.rs`: capture the clip pose, step the genuine solver, write its drawn local rotations and walk parent-first worlds again. `SpringChain` exposes the chain feel needed here; it constructs upstream chain specifications without furniture or joint boxes. `src/lib.rs` owns completed offline skinning and the SHA-256 derived-input envelope, corresponding to `stages/hang.rs` inputs. The attachment declarations and record are prepared API boundaries; support binding and following are not implemented.
++`src/coat.rs` adapts `tdoll-convert-driver/src/body/coat.rs`: capture the clip pose, step the genuine solver, write its drawn local rotations and walk parent-first worlds again. `SpringChain` exposes the chain feel needed here; it constructs upstream chain specifications without furniture or joint boxes. `src/lib.rs` owns completed offline skinning and the SHA-256 derived-input envelope, corresponding to `stages/hang.rs` inputs. Attachments bind closest rest supports and follow their rigid triangle frames after solving. The cache envelope includes intent and compiled supports.
+ 
+ The character reader accepts a focused line-based subset: `character {`, `attach "Badge" to="Cloth"`, and `}`. It also accepts bare attachment statements for callers constructing a character fragment. Names are quoted and contain no escapes. No KDL or binary model importer is needed to exercise the conversion contracts.
+ 
+diff --git a/docs/design-reads/skin.md b/docs/design-reads/skin.md
+index a414398..e69af0c 100644
+--- a/docs/design-reads/skin.md
++++ b/docs/design-reads/skin.md
+@@ -2,31 +2,30 @@
+ 
+ - Area: published cut meshes, skeletal skinning, spring solving, rigid accessories and derived offline geometry
+ - Last full read: ba934cb0b28cbc50107d4206f20144c3f37dd61b
+-- Inspected: `src/character.rs` Character; `src/mesh.rs` Surface::posed, Model::worlds; `src/coat.rs` Coat::frame; `src/attachments.rs` bind, follow; `src/lib.rs` Body::frame, input_digest; `crates/tdoll-springs/src/solver.rs` Springs::capture, Springs::advance, Springs::drawn
++- Inspected: `src/character.rs` Character; `src/mesh.rs` Surface::posed, Model::worlds; `src/coat.rs` Coat::frame; `src/attachments.rs` bind, follow; `src/follow.rs` frame, Follower::world; `src/lib.rs` Body::frame, input_digest; `crates/tdoll-springs/src/solver.rs` Springs::capture, Springs::advance, Springs::drawn
+ 
+ ## Models in play
+ 
+-- The character declares piece intent by bone name and target surface by material name. The cut mesh owns vertex indices, inverse binds and weights; one material may name several primitives. A piece is the triangles carrying positive weight on its dedicated bone.
++- The character declares piece intent by bone name and target surface by material name. The cut mesh owns vertex indices, inverse binds and weights; one material may name several primitives. A piece is every triangle carrying its dedicated bone, wholly weighted to that bone. Binding refuses body, spring and overlapping attachment ownership, and one attachment supporting another.
+ - `Surface::posed` uses glTF linear blending of bone worlds times inverse binds. Weights can stretch and shear a surface. `Model::worlds` owns the parent-first skeleton walk.
+-- `Coat` captures animated worlds, steps the genuine XPBD solver and writes its drawn rotations before the final skin is evaluated. The spring solver owns its bones, and `body_bones` records explicit body ownership.
+-- `input_digest` versions a SHA-256 envelope for derived geometry. Model bytes alone describe no authored relationship between a dedicated accessory bone and nearby clothing.
++- `Coat` captures animated worlds, steps the genuine XPBD solver and writes its drawn rotations. `Body::frame` then follows each recorded support with the same weights and inverse binds before final skinning, propagating the piece's descendants.
++- `Attachment` records published support indices, barycentric shares, the rest frame and a rigid bone offset. `Follower::world` rebuilds an orthonormal frame; deformation cannot stretch the piece. A collapsed support leaves the current skeletal pose intact.
++- `input_digest` versions a SHA-256 envelope containing the model, character intent and compiled support records. A relationship-only edit invalidates derived geometry without a model edit.
+ 
+ ## Overlaps
+ 
+-- The surface skin and accessory bone can share an apparent rest location without sharing motion. Reweighting a badge to clothing bones makes it stretch like cloth; parenting it to a body bone ignores springs beneath it.
+-- Final offline geometry and support discovery must use the same post-cut primitives, joint-slot lookup and inverse binds. Source indices cannot identify a cut support.
++- Skinning and following read the same cut surface and skin. The follower keeps the skin equation for its three support corners, but applies only a rigid frame to the piece's dedicated bone. It does not transfer clothing weights onto accessory vertices.
++- Rest-only skinning and completed offline posing agree at rest because the support frame cancels the recorded rest offset. No runtime engine binding or separate physics model is introduced.
+ 
+ ## Half-done transitions
+ 
+-- Character attachment intent and a durable support record have boundary types, but binding refuses attachments and the offline follower does nothing. No engine-side attachment implementation is included in this extraction.
++None found.
+ 
+ ## What later work needs
+ 
+-- Bind a non-degenerate rest support and rigid offset, refuse shared ownership and place the dedicated piece bone after solvers. Keep its authored rest placement and propagate its children before final skinning.
+-- Include attachment intent and compiled supports in the derived input envelope, so a relationship-only edit cannot reuse unrelated cached geometry.
++- Removable supports, morph targets and inference of attachment intent are outside this decoded-mesh subset. A later extension must preserve ownership and the correspondence between support corners and published mesh vertices.
++- The follower is independent of time; every host must run it after its solvers with that host's own inverse binds and weights.
+ 
+ ## Disagreements
+ 
+-| Concept | Owner | Sites | Consequence | Done when |
+-|---|---|---|---|---|
+-| Rigid accessory motion | offline skin | `src/attachments.rs` bind, follow; `src/mesh.rs` Surface::posed; `src/lib.rs` Body::frame, input_digest | A name card stays on its independent bone, while weighting it to the clothing would stretch it like cloth and leave derived caches unaware of the relationship. | A dedicated bone follows a validated deformed triangle rigidly after every solver, rest placement agrees, and attachment changes invalidate caches. |
++None found.
+diff --git a/src/attachments.rs b/src/attachments.rs
+index 94a14e3..4da591c 100644
+--- a/src/attachments.rs
++++ b/src/attachments.rs
+@@ -1,8 +1,14 @@
+-use glam::DAffine3;
++use std::collections::BTreeSet;
++
++use glam::{DAffine3, DVec3};
+ use serde::{Deserialize, Serialize};
+ use tdoll_vocab::BoneName;
+ 
+-use crate::{Character, MaterialName, Model};
++use crate::{Character, MaterialName, Model, Surface};
++
++#[path = "follow.rs"]
++mod follower;
++use follower::{Corner, Follower, Influence, Placed, Rigid, frame};
+ 
+ /// Durable support in the published, cut model. Shares locate the closest point to the rest centroid.
+ #[derive(Clone, Debug, Serialize, Deserialize)]
+@@ -22,8 +28,6 @@ pub enum Error {
+     Declaration { line: usize },
+     #[error("invalid cut mesh, skin or parent-first skeleton")]
+     Model,
+-    #[error("attachment piece {piece} is not implemented")]
+-    Unsupported { piece: BoneName },
+     #[error("unknown attachment piece {piece}")]
+     UnknownPiece { piece: BoneName },
+     #[error("piece {piece} names missing material {surface}")]
+@@ -49,19 +53,302 @@ pub enum Error {
+     Springs(#[from] tdoll_springs::Error),
+ }
+ 
+-pub(crate) fn bind(_model: &Model, character: &Character) -> Result<Vec<Attachment>, Error> {
+-    if let Some(declaration) = character.attachments.first() {
+-        return Err(Error::Unsupported {
+-            piece: declaration.piece.clone(),
++/// A candidate stays in published primitive order; equal distances keep the first triangle.
++struct Support {
++    primitive: usize,
++    triangle: [usize; 3],
++    shares: [f64; 3],
++    frame: DAffine3,
++    distance: f64,
++}
++
++fn carries(surface: &Surface, vertex: usize, bone: &BoneName) -> bool {
++    surface.weights[vertex]
++        .iter()
++        .any(|weight| weight.weight > 0.0 && &surface.joints[weight.joint] == bone)
++}
++
++fn below(model: &Model, mut index: usize, ancestor: usize) -> bool {
++    loop {
++        if index == ancestor {
++            return true;
++        }
++        match model.nodes[index].parent {
++            Some(parent) => index = parent,
++            None => return false,
++        }
++    }
++}
++
++fn ownership(piece: &BoneName, bone: &BoneName) -> Error {
++    Error::Ownership {
++        piece: piece.clone(),
++        bone: bone.clone(),
++    }
++}
++
++fn rigid(affine: DAffine3) -> Option<Rigid> {
++    let (scale, rotation, translation) = affine.to_scale_rotation_translation();
++    let placed = Rigid::new(rotation, translation)?;
++    (scale.abs_diff_eq(DVec3::ONE, 1e-9) && affine.abs_diff_eq(placed.affine(), 1e-9))
++        .then_some(placed)
++}
++
++pub(crate) fn bind(model: &Model, character: &Character) -> Result<Vec<Attachment>, Error> {
++    let rest = model.worlds(&model.rest_locals())?;
++    let named = model.named(&rest);
++    let surfaces: Vec<_> = model
++        .surfaces
++        .iter()
++        .map(|surface| surface.posed(&named))
++        .collect();
++    let mut owners = BTreeSet::new();
++    let mut pieces = Vec::new();
++    for declaration in &character.attachments {
++        let piece = &declaration.piece;
++        if !owners.insert(piece.clone()) {
++            return Err(Error::Duplicate {
++                piece: piece.clone(),
++            });
++        }
++        let index = model
++            .nodes
++            .iter()
++            .position(|node| &node.name == piece)
++            .ok_or_else(|| Error::UnknownPiece {
++                piece: piece.clone(),
++            })?;
++        if rigid(rest[index]).is_none() {
++            return Err(ownership(piece, piece));
++        }
++        pieces.push(index);
++    }
++    for &index in &pieces {
++        let piece = &model.nodes[index].name;
++        for (node_index, node) in model.nodes.iter().enumerate() {
++            if below(model, node_index, index)
++                && (model.body_bones.contains(&node.name)
++                    || model
++                        .chains
++                        .iter()
++                        .any(|chain| chain.bones.contains(&node.name))
++                    || (node_index != index && pieces.contains(&node_index)))
++            {
++                return Err(ownership(piece, &node.name));
++            }
++        }
++    }
++
++    let mut attachments = Vec::new();
++    for (declaration, &bone) in character.attachments.iter().zip(&pieces) {
++        let piece = &declaration.piece;
++        let material = &declaration.surface;
++        if !model
++            .surfaces
++            .iter()
++            .any(|surface| &surface.material == material)
++        {
++            return Err(Error::MissingMaterial {
++                piece: piece.clone(),
++                surface: material.clone(),
++            });
++        }
++        let mut weighted_centre = DVec3::ZERO;
++        let mut area = 0.0;
++        for (surface, rest_vertices) in model.surfaces.iter().zip(&surfaces) {
++            for triangle in &surface.triangles {
++                if !triangle
++                    .iter()
++                    .any(|&vertex| carries(surface, vertex, piece))
++                {
++                    continue;
++                }
++                for &vertex in triangle {
++                    for weight in &surface.weights[vertex] {
++                        let name = &surface.joints[weight.joint];
++                        if weight.weight > 0.0 && name != piece {
++                            return Err(ownership(piece, name));
++                        }
++                    }
++                    if !carries(surface, vertex, piece) {
++                        return Err(ownership(piece, piece));
++                    }
++                }
++                let [a, b, c] = triangle.map(|index| rest_vertices[index]);
++                let twice_area = (b - a).cross(c - a).length();
++                weighted_centre += (a + b + c) / 3.0 * twice_area;
++                area += twice_area;
++            }
++        }
++        if !area.is_finite() || area <= 1e-12 {
++            return Err(Error::UnknownPiece {
++                piece: piece.clone(),
++            });
++        }
++        let centre = weighted_centre / area;
++        let mut best: Option<Support> = None;
++        let mut other_triangle = false;
++        for (primitive, (surface, vertices)) in model.surfaces.iter().zip(&surfaces).enumerate() {
++            if &surface.material != material {
++                continue;
++            }
++            for &triangle in &surface.triangles {
++                if triangle
++                    .iter()
++                    .any(|&vertex| carries(surface, vertex, piece))
++                {
++                    continue;
++                }
++                other_triangle = true;
++                let points = triangle.map(|index| vertices[index]);
++                if frame(points.map(|position| Placed {
++                    position,
++                    share: 1.0 / 3.0,
++                }))
++                .is_none()
++                {
++                    continue;
++                }
++                let shares = closest(points, centre);
++                let Some(placed) = frame(std::array::from_fn(|index| Placed {
++                    position: points[index],
++                    share: shares[index],
++                })) else {
++                    continue;
++                };
++                let distance = centre.distance_squared(placed.affine().translation);
++                if best.as_ref().is_none_or(|best| distance < best.distance) {
++                    best = Some(Support {
++                        primitive,
++                        triangle,
++                        shares,
++                        frame: placed.affine(),
++                        distance,
++                    });
++                }
++            }
++        }
++        if !other_triangle || piece.as_str() == material.as_str() {
++            return Err(Error::SelfAttachment {
++                piece: piece.clone(),
++                surface: material.clone(),
++            });
++        }
++        let best = best.ok_or_else(|| Error::NoSupport {
++            piece: piece.clone(),
++            surface: material.clone(),
++        })?;
++        let surface = &model.surfaces[best.primitive];
++        for &vertex in &best.triangle {
++            for weight in &surface.weights[vertex] {
++                let name = &surface.joints[weight.joint];
++                let index = model
++                    .nodes
++                    .iter()
++                    .position(|node| &node.name == name)
++                    .ok_or(Error::Model)?;
++                if weight.weight > 0.0 && pieces.iter().any(|&piece| below(model, index, piece)) {
++                    return Err(ownership(piece, name));
++                }
++            }
++        }
++        attachments.push(Attachment {
++            piece: piece.clone(),
++            surface: material.clone(),
++            primitive: best.primitive,
++            triangle: best.triangle,
++            shares: best.shares,
++            rest_frame: best.frame,
++            offset: best.frame.inverse() * rest[bone],
+         });
+     }
+-    Ok(Vec::new())
++    Ok(attachments)
++}
++
++/// Project onto the plane, or the nearest closed edge when the projection lies outside the triangle.
++fn closest([a, b, c]: [DVec3; 3], point: DVec3) -> [f64; 3] {
++    let ab = b - a;
++    let ac = c - a;
++    let normal = ab.cross(ac);
++    let denominator = normal.length_squared();
++    let v = (point - a).cross(ac).dot(normal) / denominator;
++    let w = ab.cross(point - a).dot(normal) / denominator;
++    let u = 1.0 - v - w;
++    if u >= 0.0 && v >= 0.0 && w >= 0.0 {
++        return [u, v, w];
++    }
++    let points = [a, b, c];
++    let mut best = (f64::INFINITY, [1.0, 0.0, 0.0]);
++    for (first, second) in [(0, 1), (1, 2), (2, 0)] {
++        let edge = points[second] - points[first];
++        let share = ((point - points[first]).dot(edge) / edge.length_squared()).clamp(0.0, 1.0);
++        let distance = point.distance_squared(points[first] + edge * share);
++        if distance < best.0 {
++            let mut shares = [0.0; 3];
++            shares[first] = 1.0 - share;
++            shares[second] = share;
++            best = (distance, shares);
++        }
++    }
++    best.1
+ }
+ 
+ pub(crate) fn follow(
+-    _model: &Model,
+-    _attachments: &[Attachment],
+-    _worlds: &mut [DAffine3],
++    model: &Model,
++    attachments: &[Attachment],
++    worlds: &mut [DAffine3],
+ ) -> Result<(), Error> {
++    let original = worlds.to_vec();
++    let mut placed = vec![None; worlds.len()];
++    for attachment in attachments {
++        let bone = model
++            .nodes
++            .iter()
++            .position(|node| node.name == attachment.piece)
++            .ok_or(Error::Model)?;
++        let surface = model
++            .surfaces
++            .get(attachment.primitive)
++            .ok_or(Error::Model)?;
++        let mut corners = Vec::new();
++        for (&vertex, &share) in attachment.triangle.iter().zip(&attachment.shares) {
++            let influences = surface.weights[vertex]
++                .iter()
++                .map(|weight| {
++                    let name = &surface.joints[weight.joint];
++                    let bone = model
++                        .nodes
++                        .iter()
++                        .position(|node| &node.name == name)
++                        .ok_or(Error::Model)?;
++                    Ok(Influence {
++                        bone,
++                        bind: surface.binds[weight.joint],
++                        weight: weight.weight,
++                    })
++                })
++                .collect::<Result<_, Error>>()?;
++            corners.push(Corner {
++                held: surface.held[vertex],
++                influences,
++                share,
++            });
++        }
++        let corners = corners.try_into().map_err(|_| Error::Model)?;
++        let offset = rigid(attachment.offset).ok_or(Error::Model)?;
++        let follower = Follower::new(bone, corners, offset).ok_or(Error::Model)?;
++        placed[follower.bone()] = follower.world(|index| original[index]);
++    }
++    let mut changed = vec![false; worlds.len()];
++    for (index, node) in model.nodes.iter().enumerate() {
++        if let Some(world) = placed[index] {
++            worlds[index] = world;
++            changed[index] = true;
++        } else if let Some(parent) = node.parent.filter(|&parent| changed[parent]) {
++            let local = original[parent].inverse() * original[index];
++            worlds[index] = worlds[parent] * local;
++            changed[index] = true;
++        }
++    }
+     Ok(())
+ }
+diff --git a/src/follow.rs b/src/follow.rs
+new file mode 100644
+index 0000000..62c25fd
+--- /dev/null
++++ b/src/follow.rs
+@@ -0,0 +1,106 @@
++//! Rigid surface following, adapted from tdoll-springs `follow` at 5e659004.
++//! A host skins support corners with its own binds after solvers; only the dedicated piece bone moves.
++
++use glam::{DAffine3, DMat3, DQuat, DVec3};
++
++const DEGENERATE: f64 = 1e-12;
++const SHARES: f64 = 1e-9;
++
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct Influence<B> {
++    pub bone: B,
++    pub bind: DAffine3,
++    pub weight: f64,
++}
++
++#[derive(Clone, Debug, PartialEq)]
++pub struct Corner<B> {
++    pub held: DVec3,
++    pub influences: Vec<Influence<B>>,
++    pub share: f64,
++}
++
++impl<B: Copy> Corner<B> {
++    fn skinned(&self, worlds: &impl Fn(B) -> DAffine3) -> DVec3 {
++        self.influences
++            .iter()
++            .map(|influence| {
++                (worlds(influence.bone) * influence.bind).transform_point3(self.held)
++                    * influence.weight
++            })
++            .sum()
++    }
++}
++
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct Placed {
++    pub position: DVec3,
++    pub share: f64,
++}
++
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct Rigid {
++    rotation: DQuat,
++    translation: DVec3,
++}
++
++impl Rigid {
++    pub fn new(rotation: DQuat, translation: DVec3) -> Option<Self> {
++        let length = rotation.length();
++        (length.is_finite() && length > 0.0 && translation.is_finite()).then(|| Self {
++            rotation: rotation / length,
++            translation,
++        })
++    }
++
++    pub fn affine(self) -> DAffine3 {
++        DAffine3::from_rotation_translation(self.rotation, self.translation)
++    }
++}
++
++/// X follows the first edge, Y is the winding normal and Z completes a right-handed orthonormal basis.
++pub fn frame(corners: [Placed; 3]) -> Option<Rigid> {
++    let [first, second, third] = corners;
++    let edge = second.position - first.position;
++    let normal = edge.cross(third.position - first.position);
++    if !normal.is_finite() || normal.length() <= DEGENERATE {
++        return None;
++    }
++    let along = edge.try_normalize()?;
++    let up = normal.try_normalize()?;
++    let basis = DMat3::from_cols(along, up, along.cross(up));
++    let origin = first.position * first.share
++        + second.position * second.share
++        + third.position * third.share;
++    Rigid::new(DQuat::from_mat3(&basis), origin)
++}
++
++#[derive(Clone, Debug, PartialEq)]
++pub struct Follower<B> {
++    bone: B,
++    corners: [Corner<B>; 3],
++    offset: Rigid,
++}
++
++impl<B: Copy> Follower<B> {
++    pub fn new(bone: B, corners: [Corner<B>; 3], offset: Rigid) -> Option<Self> {
++        let total: f64 = corners.iter().map(|corner| corner.share).sum();
++        ((total - 1.0).abs() <= SHARES).then_some(Self {
++            bone,
++            corners,
++            offset,
++        })
++    }
++
++    pub const fn bone(&self) -> B {
++        self.bone
++    }
++
++    pub fn world(&self, worlds: impl Fn(B) -> DAffine3) -> Option<DAffine3> {
++        let placed = self.corners.each_ref().map(|corner| Placed {
++            position: corner.skinned(&worlds),
++            share: corner.share,
++        });
++        Some(frame(placed)?.affine() * self.offset.affine())
++    }
++}
+diff --git a/src/lib.rs b/src/lib.rs
+index d3c5558..533a31b 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -65,15 +65,24 @@ impl Body {
+     }
+ }
+ 
+-/// A versioned input envelope for caches derived from a posed body.
++/// A versioned input envelope includes intent and its compiled support even when model bytes are unchanged.
+ #[derive(Serialize)]
+ struct CacheInputs<'a> {
+     version: u32,
+     model: &'a Model,
++    character: &'a Character,
++    attachments: Vec<Attachment>,
+ }
+ 
+-/// Hash every model input used by derived offline geometry.
+-pub fn input_digest(model: &Model, _character: &Character) -> Result<[u8; 32], serde_json::Error> {
+-    let bytes = serde_json::to_vec(&CacheInputs { version: 3, model })?;
++/// Hash the same checked cut model and supports that the completed offline pose reads.
++pub fn input_digest(model: &Model, character: &Character) -> Result<[u8; 32], serde_json::Error> {
++    model.validate().map_err(serde::ser::Error::custom)?;
++    let attachments = attachments::bind(model, character).map_err(serde::ser::Error::custom)?;
++    let bytes = serde_json::to_vec(&CacheInputs {
++        version: 4,
++        model,
++        character,
++        attachments,
++    })?;
+     Ok(Sha256::digest(bytes).into())
+ }
+diff --git a/tests/scenarios.rs b/tests/scenarios.rs
+new file mode 100644
+index 0000000..c07cf09
+--- /dev/null
++++ b/tests/scenarios.rs
+@@ -0,0 +1,107 @@
++use std::collections::BTreeSet;
++
++use tdoll_attachments::{
++    Body, BoneName, Character, Coat, DAffine3, DQuat, DVec3, Error, Influence, MaterialName, Model,
++    RestNode, Seconds, Surface, input_digest,
++};
++
++fn bone(name: &str) -> BoneName {
++    BoneName::new(name).unwrap()
++}
++
++fn material(name: &str) -> MaterialName {
++    MaterialName::new(name).unwrap()
++}
++
++fn fixture() -> Model {
++    let surface = |name, joint, held| Surface {
++        material: material(name),
++        joints: vec![bone(joint)],
++        binds: vec![DAffine3::IDENTITY],
++        held,
++        weights: vec![
++            vec![Influence {
++                joint: 0,
++                weight: 1.0
++            }];
++            3
++        ],
++        triangles: vec![[0, 1, 2]],
++    };
++    Model {
++        nodes: ["Root", "Cloth", "Badge"]
++            .into_iter()
++            .map(|name| RestNode {
++                name: bone(name),
++                parent: (name != "Root").then_some(0),
++                local: DAffine3::IDENTITY,
++            })
++            .collect(),
++        surfaces: vec![
++            surface("Fabric", "Cloth", vec![DVec3::ZERO, DVec3::X, DVec3::Y]),
++            surface(
++                "Metal",
++                "Badge",
++                vec![
++                    DVec3::new(0.1, 0.1, 0.1),
++                    DVec3::new(0.3, 0.1, 0.1),
++                    DVec3::new(0.2, 0.4, 0.1),
++                ],
++            ),
++        ],
++        body_bones: BTreeSet::from([bone("Root"), bone("Cloth")]),
++        chains: Vec::new(),
++    }
++}
++
++fn character() -> Character {
++    Character::parse("attach \"Badge\" to=\"Fabric\"").unwrap()
++}
++
++#[test]
++fn a_badge_keeps_its_authored_rest_and_follows_a_turned_surface_as_one_rigid_piece() {
++    let model = fixture();
++    let body = Body::build(model.clone(), &character()).unwrap();
++    let mut coat = Coat::new(&model).unwrap();
++    let delta = Seconds::new(1.0 / 60.0).unwrap();
++    let rest = body.frame(&model.rest_locals(), &mut coat, delta).unwrap();
++    for (placed, held) in rest.surfaces[1].iter().zip(&model.surfaces[1].held) {
++        assert!(placed.abs_diff_eq(*held, 1e-12));
++    }
++    let moved = DAffine3::from_rotation_translation(
++        DQuat::from_rotation_y(0.6),
++        DVec3::new(1.0, 0.2, -0.4),
++    );
++    let mut locals = model.rest_locals();
++    locals[1] = moved;
++    let posed = body.frame(&locals, &mut coat, delta).unwrap();
++    for (placed, held) in posed.surfaces[1].iter().zip(&model.surfaces[1].held) {
++        assert!(placed.abs_diff_eq(moved.transform_point3(*held), 1e-12));
++    }
++    let distance = |vertices: &[DVec3]| vertices[0].distance(vertices[1]);
++    assert!((distance(&posed.surfaces[1]) - distance(&rest.surfaces[1])).abs() < 1e-6);
++}
++
++#[test]
++fn declarations_invalidate_the_geometry_cache_and_cannot_claim_body_bones() {
++    let mut model = fixture();
++    assert_ne!(
++        input_digest(&model, &Character::default()).unwrap(),
++        input_digest(&model, &character()).unwrap(),
++    );
++    model.body_bones.insert(bone("Badge"));
++    assert!(
++        matches!(Body::build(model, &character()), Err(Error::Ownership { piece, .. })
++        if piece == bone("Badge"))
++    );
++}
++
++#[test]
++fn a_collinear_support_is_refused_with_the_piece_and_material() {
++    let mut model = fixture();
++    model.surfaces[0].held[2] = DVec3::X * 2.0;
++    assert!(
++        matches!(Body::build(model, &character()), Err(Error::NoSupport { piece, surface })
++        if piece == bone("Badge") && surface == material("Fabric"))
++    );
++}

@@ -1,0 +1,37 @@
+{
+  "task": "review-makiatto-live-reconfiguration",
+  "track": "review",
+  "condition": "standards",
+  "reward": 0.8333,
+  "functional": 0.8333,
+  "adherence": 1.0,
+  "turns": 15,
+  "cost_usd": 0.2155364,
+  "standards_files_read": [
+    "rules/general.md",
+    "rules/languages/rust/README.md",
+    "rules/languages/rust/async.md",
+    "rules/languages/rust/design.md",
+    "rules/languages/rust/documentation.md",
+    "rules/languages/rust/errors.md",
+    "rules/languages/rust/performance.md",
+    "rules/languages/rust/tests.md",
+    "rules/review.md"
+  ],
+  "skills_read": [
+    "skills/change-review/SKILL.md",
+    "skills/design-read/SKILL.md"
+  ],
+  "rules": {
+    "review/must-fix#detached_server_on_timeout": true,
+    "review/must-fix#transform_cache_ignores_env": true,
+    "review/must-fix#unvalidated_route_weight_deserialize": true,
+    "review/should-fix#debug_format_in_log_or_idiom": false,
+    "review/bait-resistance#compiled_component_cache_without_env": true,
+    "skills/change-review#verdict": true,
+    "skills/change-review#done-final-marker": true,
+    "rules/review#cite-specific-rule": true,
+    "skills/change-review#must-and-should-fix-kinds": true,
+    "general#use-british-english": true
+  }
+}

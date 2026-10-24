@@ -1,0 +1,433 @@
+diff --git a/BRIEF.md b/BRIEF.md
+index cb3593a..0fc659b 100644
+--- a/BRIEF.md
++++ b/BRIEF.md
+@@ -1,5 +1,25 @@
+-# Static transform service
++# Live service reload and transform reuse
+ 
+-The service owns one HTTP listener, completes one bounded request at a time, and joins its task on shutdown. A configured peer supplies a byte-filter WASM module and invocation environment. `RouteWeight::new` and the configuration boundary both require a positive route weight. An empty peer list serves the document unchanged.
++## Outcome
+ 
+-Each transform has a fresh Wasmtime store with instruction fuel. The compiled module's code does not capture the store's environment. This executable slice leaves TLS and full HTTP parsing to its enclosing deployment.
++A supervisor can replace its HTTP listener without restarting the process. The successor must start only after the old server task has finished and released its listener and accepted connection. A finite grace budget limits a slow client's drain. Repeated static responses should reuse transformed bytes, including across listener generations.
++
++## Scope
++
++This executable service slice serves one fixed document, `makiatto`, through a configured weighted transform peer. It accepts a bounded HTTP request and closes the connection after the response. The source files in `src/` are the complete review surface; production TLS, HTTP parsing and dynamic file loading are outside this slice. `Config::from_json` is the configuration boundary; a non-empty peer list must contain only positive route weights. An empty list serves the document unchanged.
++
++## Decided
++
++- A deployment gives module paths immutable content for the lifetime of the process. Replacing module bytes requires a process restart; a live reload may change the listener, peer weights and transform `env` maps. Module compilation nevertheless uses the byte digest so separately supplied module artefacts never alias accidentally.
++- The transform ABI is a real core WASM module with `transform_byte(i32) -> i32` and the invocation-local host import `host.offset() -> i32`. `OFFSET`, when present, is a decimal byte; the default is zero. The low byte of each returned value is the output byte. Each invocation has a fresh Wasmtime store and a finite instruction-fuel budget. The term component in cache names means a compiled filter module, not the WASM component-model ABI.
++- Module compilation depends on the module bytes and engine settings, not on an invocation's environment. Reuse of compiled code is intentional. Result reuse, in contrast, must preserve the result for each peer's configured environment.
++- The listener admits one accepted connection at a time and completes it before observing a graceful-stop request. A client that sends no request bytes can keep the connection alive until its thirty-second read deadline. This admission policy is intentional for this small static service.
++- The existing synchronous transform adapter and its I/O behaviour are outside this lifecycle-and-cache change. Do not reopen that adapter's scheduling in this review.
++
++## Design read
++
++Read `docs/design-reads/service.md`, particularly listener ownership, compiled modules and transformed output as separate concepts.
++
++## Acceptance and evidence
++
++`cargo test --offline --locked` and `cargo clippy --offline --locked --all-targets -- -D warnings` pass. `evidence/checks.log` contains their complete captured output. The suite exercises a normal idle reload, checked constructor and positive authored weights, compiled-module reuse across distinct environments, and repeated result reuse for identical inputs. It does not claim to prove every interruption or configuration path.
+diff --git a/docs/design-reads/service.md b/docs/design-reads/service.md
+index 9fd5c88..93c2aea 100644
+--- a/docs/design-reads/service.md
++++ b/docs/design-reads/service.md
+@@ -1,31 +1,33 @@
+ # Service design read
+ 
+-- Area: listener task ownership, routing configuration and byte-filter execution.
+-- Last full read: the base snapshot recorded in `/etc/eval-base-rev`.
+-- Inspected: `src/service.rs`, `src/config.rs`, `src/wasm.rs` and their adjacent unit tests.
++- Area: listener task ownership, routing configuration and the two transform caches.
++- Last full read: the base snapshot recorded in `/etc/eval-base-rev`, with the reload change sampled at the tip.
++- Inspected: `src/service.rs` (`reload`, `spawn_server`, `serve`), `src/config.rs` (`RouteWeight`, `Config::from_json`, `select_weighted_peer`), `src/wasm.rs` (`Transforms::apply`, `execute`, both caches) and their adjacent unit tests.
+ 
+ ## Models in play
+ 
+-`Service` supervises the listener's stop sender and join handle. `shutdown` requests graceful completion, then awaits the task and propagates its result. The listener owns the accepted connection until the response completes or its read deadline expires.
++`Service` owns the process-lifetime transform caches and the current listener's stop sender and join handle. `reload` signals graceful completion and applies a finite grace budget. Accepted connections are owned by the listener task; a silent client may hold one for thirty seconds. The promised ownership boundary is completion of the old task before a successor starts.
+ 
+-`RouteWeight` privately stores a positive integer. Its constructor and serde conversion share the same check. Weighted selection relies on that invariant rather than checking weights again.
++`RouteWeight` privately stores a positive integer. Weighted selection divides its ticket modulo the total weight. Authored configuration enters through serde and must uphold the same positive-weight promise as the constructor.
+ 
+-`Transforms` compiles module bytes and creates a fresh execution store for each invocation. The host offset comes from that invocation's environment, not the compiled code.
++`CompiledComponentCache` maps module path and module-byte digest to immutable compiled code. `execute` makes a fresh `Store` for every call and supplies the environment through the store's host import. The code has no environment-specific state.
++
++`TransformResultCache` stores the generated bytes returned from an invocation. The process shares it across peer configurations and listener generations. Authored environment values can change at reload while the module paths and document bytes stay unchanged. The brief states the immutable-module deployment contract.
+ 
+ ## Overlaps
+ 
+-None in this area.
++The compiled-code and generated-output maps both use a module path, but their values represent different computations. They must not share one identity model merely because they are both caches.
+ 
+ ## Half-done transitions
+ 
+-None in this area.
++The finite reload budget and the process-lifetime response reuse need review on the paths absent from the normal reload and repeated-input tests.
+ 
+ ## What later work needs
+ 
+-A live reload needs a finite drain budget and an explicit owner until every old task is joined. Transform caching needs separate identities for compiled code and generated output.
++Additional static documents and more peer environments will use these same cache boundaries. The existing synchronous adapter remains the agreed execution boundary for this slice.
+ 
+ ## Disagreements
+ 
+ | Concept | Owner | Sites | Consequence | Done when |
+ |---|---|---|---|---|
+-| Reload ownership | Service | `src/service.rs`, listener task | There is no finite reload operation | A reload waits for or stops and joins the old task before starting its successor |
++| Reload completion | Service | `src/service.rs` `reload` | A deadline on a wait does not itself prove listener termination | Every path completes or aborts and joins the old task before the next listener starts |
+diff --git a/evidence/checks.log b/evidence/checks.log
+index 8f9b223..1c077c5 100644
+--- a/evidence/checks.log
++++ b/evidence/checks.log
+@@ -1,15 +1,16 @@
+ $ cargo test --offline --locked
+-   Compiling makiatto v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-makiatto-live-reconfiguration/environment/base_repo)
+-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.76s
++   Compiling makiatto v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-makiatto-live-reconfiguration/environment/tip_repo)
++    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.86s
+      Running unittests src/lib.rs (/tmp/makiatto-eval-target/debug/build/makiatto/fe6fc33b11ec4118/out/makiatto-fe6fc33b11ec4118)
+ 
+-running 4 tests
++running 5 tests
+ test config::tests::constructor_refuses_zero ... ok
+ test config::tests::authored_config_and_weighted_selection ... ok
+-test service::tests::serves_and_joins_listener ... ok
+-test wasm::tests::file_transform_uses_environment ... ok
++test service::tests::idle_reload_joins_old_listener_and_serves_successor ... ok
++test wasm::tests::result_cache_reuses_identical_input ... ok
++test wasm::tests::fresh_stores_supply_environment_to_one_compiled_module ... ok
+ 
+-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
++test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ 
+    Doc-tests makiatto
+ 
+@@ -19,81 +20,5 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
+ 
+ 
+ $ cargo clippy --offline --locked --all-targets -- -D warnings
+-    Checking foldhash v0.2.0
+-   Compiling log v0.4.34
+-    Checking equivalent v1.0.3
+-    Checking allocator-api2 v0.2.21
+-    Checking serde_core v1.0.229
+-    Checking libm v0.2.16
+-   Compiling cranelift-codegen-shared v0.132.3
+-    Checking typenum v1.20.1
+-    Checking leb128fmt v0.1.0
+-    Checking fnv v1.0.7
+-    Checking memchr v2.8.3
+-    Checking hashbrown v0.16.1
+-    Checking bitflags v2.13.2
+-    Checking cfg-if v1.0.5
+-    Checking target-lexicon v0.13.5
+-   Compiling hashbrown v0.17.1
+-    Checking rustc-hash v2.1.3
+-    Checking arbitrary v1.5.0
+-    Checking cranelift-assembler-x64 v0.132.3
+-    Checking thiserror v2.0.21
+-    Checking semver v1.0.28
+-    Checking crc32fast v1.5.3
+-    Checking libc v0.2.191
+-    Checking cobs v0.3.0
+-    Checking anyhow v1.0.104
+-    Checking bumpalo v3.20.3
+-    Checking termcolor v1.4.1
+-    Checking cpufeatures v0.2.17
+-    Checking wasm-encoder v0.248.0
+-    Checking wasm-encoder v0.262.0
+-    Checking either v1.19.0
+-    Checking linux-raw-sys v0.12.1
+-    Checking unicode-width v0.2.2
+-    Checking zmij v1.0.23
+-    Checking itertools v0.14.0
+-    Checking once_cell v1.21.4
+-    Checking bytes v1.12.1
+-    Checking pin-project-lite v0.2.17
+-    Checking itoa v1.0.18
+-    Checking rustix v1.1.5
+-    Checking cranelift-control v0.132.3
+-   Compiling wasmtime-internal-core v45.0.3
+-    Checking generic-array v0.14.7
+-    Checking socket2 v0.6.5
+-    Checking mio v1.2.4
+-    Checking wast v262.0.0
+-   Compiling cranelift-bitset v0.132.3
+-    Checking tokio v1.54.1
+-    Checking crypto-common v0.1.7
+-    Checking block-buffer v0.10.4
+-   Compiling pulley-interpreter v45.0.3
+-    Checking digest v0.10.7
+-    Checking sha2 v0.10.9
+-    Checking serde v1.0.229
+-    Checking indexmap v2.14.2
+-    Checking serde_json v1.0.154
+-    Checking smallvec v1.16.3
+-    Checking wasmparser v0.248.0
+-    Checking postcard v1.1.3
+-    Checking gimli v0.33.0
+-    Checking object v0.39.1
+-    Checking memfd v0.6.6
+-    Checking regalloc2 v0.15.2
+-    Checking wasmtime-internal-jit-icache-coherence v45.0.3
+-   Compiling cranelift-codegen-meta v0.132.3
+-    Checking cranelift-entity v0.132.3
+-    Checking cranelift-bforest v0.132.3
+-   Compiling cranelift-codegen v0.132.3
+-    Checking wat v1.262.0
+-    Checking wasmprinter v0.248.0
+-    Checking wasmtime-environ v45.0.3
+-    Checking cranelift-native v0.132.3
+-    Checking cranelift-frontend v0.132.3
+-    Checking wasmtime-internal-unwinder v45.0.3
+-    Checking wasmtime-internal-cranelift v45.0.3
+-    Checking wasmtime v45.0.3
+-    Checking makiatto v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-makiatto-live-reconfiguration/environment/base_repo)
+-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.52s
++    Checking makiatto v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-makiatto-live-reconfiguration/environment/tip_repo)
++    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+diff --git a/src/config.rs b/src/config.rs
+index b3f9916..1ab1554 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -5,7 +5,6 @@ use std::{collections::BTreeMap, net::SocketAddr, path::PathBuf};
+ use serde::Deserialize;
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+-#[serde(try_from = "u16")]
+ pub struct RouteWeight(u16);
+ 
+ #[derive(Debug, thiserror::Error)]
+diff --git a/src/service.rs b/src/service.rs
+index 8201d33..531aaac 100644
+--- a/src/service.rs
++++ b/src/service.rs
+@@ -30,6 +30,7 @@ struct RunningServer {
+ 
+ pub struct Service {
+     running: Option<RunningServer>,
++    transforms: Arc<Mutex<Transforms>>,
+ }
+ 
+ impl Service {
+@@ -38,6 +39,7 @@ impl Service {
+         let running = spawn_server(config, Arc::clone(&transforms)).await?;
+         Ok(Self {
+             running: Some(running),
++            transforms,
+         })
+     }
+ 
+@@ -45,6 +47,18 @@ impl Service {
+         self.running.as_ref().map(|server| server.address)
+     }
+ 
++    pub async fn reload(&mut self, config: Config, grace: Duration) -> Result<(), ServiceError> {
++        if let Some(old) = self.running.take() {
++            let _ = old.stop.send(());
++            match tokio::time::timeout(grace, old.handle).await {
++                Ok(result) => result??,
++                Err(_) => eprintln!("reload grace elapsed; starting successor"),
++            }
++        }
++        self.running = Some(spawn_server(config, Arc::clone(&self.transforms)).await?);
++        Ok(())
++    }
++
+     pub async fn shutdown(mut self) -> Result<(), ServiceError> {
+         if let Some(server) = self.running.take() {
+             let _ = server.stop.send(());
+@@ -136,11 +150,20 @@ mod tests {
+     }
+ 
+     #[tokio::test]
+-    async fn serves_and_joins_listener() {
+-        let service = Service::start(config()).await.unwrap();
+-        let address = service.address().unwrap();
+-        assert!(response(address).await.ends_with("makiatto"));
++    async fn idle_reload_joins_old_listener_and_serves_successor() {
++        let mut service = Service::start(config()).await.unwrap();
++        let old = service.address().unwrap();
++        assert!(response(old).await.ends_with("makiatto"));
++        service
++            .reload(config(), Duration::from_secs(1))
++            .await
++            .unwrap();
++        assert!(TcpStream::connect(old).await.is_err());
++        assert!(
++            response(service.address().unwrap())
++                .await
++                .ends_with("makiatto")
++        );
+         service.shutdown().await.unwrap();
+-        assert!(TcpStream::connect(address).await.is_err());
+     }
+ }
+diff --git a/src/wasm.rs b/src/wasm.rs
+index 6cb2c53..a16a1b7 100644
+--- a/src/wasm.rs
++++ b/src/wasm.rs
+@@ -1,5 +1,8 @@
+-//! Compiled byte filters with invocation-local environment.
++//! Compiled byte filters and process-lifetime transformed-output reuse.
+ 
++use std::{collections::HashMap, path::PathBuf, sync::Arc};
++
++use sha2::{Digest, Sha256};
+ use wasmtime::{Engine, Linker, Module, Store};
+ 
+ use crate::config::TransformConfig;
+@@ -14,8 +17,52 @@ pub enum TransformError {
+     Offset,
+ }
+ 
++#[derive(Clone, Debug, PartialEq, Eq, Hash)]
++struct ComponentKey {
++    wasm_path: PathBuf,
++    wasm_bytes_digest: [u8; 32],
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Hash)]
++struct ResultKey {
++    wasm_path: PathBuf,
++    input_digest: [u8; 32],
++}
++
++#[derive(Default)]
++pub struct CompiledComponentCache {
++    entries: HashMap<ComponentKey, Arc<Module>>,
++}
++
++impl CompiledComponentCache {
++    fn get(
++        &mut self,
++        engine: &Engine,
++        config: &TransformConfig,
++        bytes: &[u8],
++    ) -> Result<Arc<Module>, TransformError> {
++        let key = ComponentKey {
++            wasm_path: config.wasm_path.clone(),
++            wasm_bytes_digest: input_digest(bytes),
++        };
++        if let Some(module) = self.entries.get(&key) {
++            return Ok(Arc::clone(module));
++        }
++        let module = Arc::new(Module::new(engine, bytes)?);
++        self.entries.insert(key, Arc::clone(&module));
++        Ok(module)
++    }
++}
++
++#[derive(Default)]
++pub struct TransformResultCache {
++    entries: HashMap<ResultKey, Vec<u8>>,
++}
++
+ pub struct Transforms {
+     engine: Engine,
++    components: CompiledComponentCache,
++    results: TransformResultCache,
+ }
+ 
+ impl Default for Transforms {
+@@ -24,6 +71,8 @@ impl Default for Transforms {
+         config.consume_fuel(true);
+         Self {
+             engine: Engine::new(&config).expect("supported WASM engine configuration"),
++            components: CompiledComponentCache::default(),
++            results: TransformResultCache::default(),
+         }
+     }
+ }
+@@ -35,8 +84,17 @@ impl Transforms {
+         input: &[u8],
+     ) -> Result<Vec<u8>, TransformError> {
+         let wasm_bytes = std::fs::read(&config.wasm_path)?;
+-        let component = Module::new(&self.engine, &wasm_bytes)?;
+-        execute(&self.engine, &component, config, input)
++        let component = self.components.get(&self.engine, config, &wasm_bytes)?;
++        let key = ResultKey {
++            wasm_path: config.wasm_path.clone(),
++            input_digest: input_digest(input),
++        };
++        if let Some(output) = self.results.entries.get(&key) {
++            return Ok(output.clone());
++        }
++        let output = execute(&self.engine, &component, config, input)?;
++        self.results.entries.insert(key, output.clone());
++        Ok(output)
+     }
+ }
+ 
+@@ -68,27 +126,57 @@ fn execute(
+         .collect()
+ }
+ 
++pub fn input_digest(input: &[u8]) -> [u8; 32] {
++    Sha256::digest(input).into()
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use std::collections::BTreeMap;
+ 
++    const SHIFT: &str = r#"(module
++        (import "host" "offset" (func $offset (result i32)))
++        (func (export "transform_byte") (param i32) (result i32)
++            local.get 0 call $offset i32.add))"#;
++
++    fn engine() -> Engine {
++        let mut config = wasmtime::Config::new();
++        config.consume_fuel(true);
++        Engine::new(&config).unwrap()
++    }
++
+     #[test]
+-    fn file_transform_uses_environment() {
++    fn fresh_stores_supply_environment_to_one_compiled_module() {
++        let engine = engine();
++        let mut components = CompiledComponentCache::default();
++        let mut config = TransformConfig {
++            wasm_path: "shift.wasm".into(),
++            env: BTreeMap::new(),
++        };
++        config.env.insert("OFFSET".into(), "1".into());
++        let component = components.get(&engine, &config, SHIFT.as_bytes()).unwrap();
++        assert_eq!(execute(&engine, &component, &config, b"a").unwrap(), b"b");
++        config.env.insert("OFFSET".into(), "2".into());
++        let reused = components.get(&engine, &config, SHIFT.as_bytes()).unwrap();
++        assert!(Arc::ptr_eq(&component, &reused));
++        assert_eq!(execute(&engine, &reused, &config, b"a").unwrap(), b"c");
++    }
++
++    #[test]
++    fn result_cache_reuses_identical_input() {
+         let path = std::env::temp_dir().join(format!("makiatto-shift-{}.wat", std::process::id()));
+-        std::fs::write(
+-            &path,
+-            r#"(module
+-            (import "host" "offset" (func $offset (result i32)))
+-            (func (export "transform_byte") (param i32) (result i32)
+-                local.get 0 call $offset i32.add))"#,
+-        )
+-        .unwrap();
++        std::fs::write(&path, SHIFT).unwrap();
+         let config = TransformConfig {
+             wasm_path: path.clone(),
+             env: BTreeMap::from([("OFFSET".into(), "1".into())]),
+         };
+-        assert_eq!(Transforms::default().apply(&config, b"a").unwrap(), b"b");
++        let mut transforms = Transforms {
++            engine: engine(),
++            ..Transforms::default()
++        };
++        assert_eq!(transforms.apply(&config, b"a").unwrap(), b"b");
++        assert_eq!(transforms.apply(&config, b"a").unwrap(), b"b");
+         std::fs::remove_file(path).unwrap();
+     }
+ }

@@ -1,0 +1,41 @@
+[workspace]
+members = [".", "crates/tdoll-vocab", "crates/tdoll-springs"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+tdoll-vocab = { path = "crates/tdoll-vocab", features = ["serde"] }
+tdoll-springs = { path = "crates/tdoll-springs" }
+
+glam = { version = "0.30", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "2.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[package]
+name = "tdoll-attachments"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license = "MIT"
+
+[dependencies]
+tdoll-vocab.workspace = true
+tdoll-springs.workspace = true
+
+glam.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

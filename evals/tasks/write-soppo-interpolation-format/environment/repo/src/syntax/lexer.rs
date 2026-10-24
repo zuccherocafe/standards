@@ -1,0 +1,693 @@
+use logos::Logos;
+
+use super::ast::{IntFormat, IntLit};
+use super::source::{FileId, LineColumn, Span};
+
+#[derive(Logos, Debug, Clone, PartialEq)]
+#[logos(skip r"[ \t\f]+")]
+pub enum Token {
+    // Single-line comment: // ...
+    #[regex(r"//[^\n]*", allow_greedy = true, callback = |lex| lex.slice().to_string())]
+    LineComment(String),
+
+    // Multi-line comment: /* ... */
+    #[regex(r"/\*([^*]|\*[^/])*\*/", allow_greedy = true, callback = |lex| lex.slice().to_string())]
+    BlockComment(String),
+
+    #[regex(r"\n+")]
+    Newline,
+
+    // Keywords
+    #[token("package")]
+    Package,
+    #[token("func")]
+    Func,
+    #[token("const")]
+    Const,
+    #[token("type")]
+    Type,
+    #[token("match")]
+    Match,
+    #[token("case")]
+    Case,
+    #[token("for")]
+    For,
+    #[token("if")]
+    If,
+    #[token("else")]
+    Else,
+    #[token("return")]
+    Return,
+    #[token("import")]
+    Import,
+    #[token("true")]
+    True,
+    #[token("false")]
+    False,
+    #[token("nil")]
+    Nil,
+    #[token("enum")]
+    Enum,
+    #[token("struct")]
+    Struct,
+    #[token("interface")]
+    Interface,
+    #[token("var")]
+    Var,
+    #[token("go")]
+    Go,
+    #[token("defer")]
+    Defer,
+    #[token("break")]
+    Break,
+    #[token("continue")]
+    Continue,
+    #[token("range")]
+    Range,
+    #[token("select")]
+    Select,
+
+    // Identifiers and literals
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", priority = 1, callback = |lex| lex.slice().to_string())]
+    Ident(String),
+
+    // Float literals: 3.14, 1e-9, 1.5e10, etc.
+    #[regex(r"[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+", priority = 2, callback = |lex| lex.slice().parse::<f64>().ok())]
+    Float(f64),
+
+    // Integer literals: decimal, hex (0x), binary (0b), octal (0o or leading 0)
+    #[regex(r"0[xX][0-9a-fA-F]+|0[bB][01]+|0[oO][0-7]+|0[0-7]+|[0-9]+", priority = 3, callback = parse_integer)]
+    Integer(IntLit),
+
+    // String literals with escape sequences: \n, \t, \033 (octal), \x1b (hex), \uXXXX, \UXXXXXXXX
+    #[regex(r#""([^"\\]|\\["\\bnfrt]|\\[0-7]{1,3}|\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8})*""#, |lex| {
+        let s = lex.slice();
+        s[1..s.len()-1].to_string()
+    })]
+    String(String),
+
+    // Raw string (backtick): `...` - no escape processing, can span lines
+    #[regex(r"`[^`]*`", allow_greedy = true, callback = |lex| {
+        let s = lex.slice();
+        s[1..s.len()-1].to_string()
+    })]
+    RawString(String),
+
+    // Rune literal (character): 'a', '\n', '\t', etc.
+    #[regex(r"'([^'\\]|\\['\\bnfrt0])'", |lex| {
+        let s = lex.slice();
+        s[1..s.len()-1].to_string()
+    })]
+    Rune(String),
+
+    // Operators
+    #[token("+")]
+    Plus,
+    #[token("-")]
+    Minus,
+    #[token("*")]
+    Star,
+    #[token("/")]
+    Slash,
+    #[token("%")]
+    Percent,
+    #[token("==")]
+    Eq,
+    #[token("!=")]
+    Ne,
+    #[token("<")]
+    Lt,
+    #[token("<-")]
+    Arrow,
+    #[token("<=")]
+    Le,
+    #[token(">")]
+    Gt,
+    #[token(">=")]
+    Ge,
+    #[token("&&")]
+    And,
+    #[token("||")]
+    Or,
+    #[token("!")]
+    Not,
+    #[token("&")]
+    Ampersand,
+    #[token("^")]
+    Caret,
+    #[token("<<")]
+    Shl,
+    #[token(">>")]
+    Shr,
+
+    // Compound assignment operators
+    #[token("+=")]
+    PlusAssign,
+    #[token("-=")]
+    MinusAssign,
+    #[token("*=")]
+    StarAssign,
+    #[token("/=")]
+    SlashAssign,
+    #[token("%=")]
+    PercentAssign,
+    #[token("&=")]
+    AmpersandAssign,
+    #[token("|=")]
+    PipeAssign,
+    #[token("^=")]
+    CaretAssign,
+    #[token("<<=")]
+    ShlAssign,
+    #[token(">>=")]
+    ShrAssign,
+
+    // Increment/decrement
+    #[token("++")]
+    PlusPlus,
+    #[token("--")]
+    MinusMinus,
+
+    // Delimiters
+    #[token("(")]
+    LParen,
+    #[token(")")]
+    RParen,
+    #[token("{")]
+    LBrace,
+    #[token("}")]
+    RBrace,
+    #[token("[")]
+    LBracket,
+    #[token("]")]
+    RBracket,
+
+    // Punctuation
+    #[token(",")]
+    Comma,
+    #[token(":")]
+    Colon,
+    #[token("=")]
+    Assign,
+    #[token(":=")]
+    ColonAssign,
+    #[token("...")]
+    DotDotDot,
+    #[token(".")]
+    Dot,
+    #[token("|")]
+    Pipe,
+    #[token("_", priority = 2)]
+    Underscore,
+    #[token(";")]
+    Semicolon,
+    #[token("?")]
+    Question,
+}
+
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::LineComment(_) => write!(f, "comment"),
+            Token::BlockComment(_) => write!(f, "comment"),
+            Token::Newline => write!(f, "'\\n'"),
+            Token::Package => write!(f, "'package'"),
+            Token::Func => write!(f, "'func'"),
+            Token::Const => write!(f, "'const'"),
+            Token::Type => write!(f, "'type'"),
+            Token::Match => write!(f, "'match'"),
+            Token::Case => write!(f, "'case'"),
+            Token::For => write!(f, "'for'"),
+            Token::If => write!(f, "'if'"),
+            Token::Else => write!(f, "'else'"),
+            Token::Return => write!(f, "'return'"),
+            Token::Import => write!(f, "'import'"),
+            Token::True => write!(f, "'true'"),
+            Token::False => write!(f, "'false'"),
+            Token::Nil => write!(f, "'nil'"),
+            Token::Enum => write!(f, "'enum'"),
+            Token::Struct => write!(f, "'struct'"),
+            Token::Interface => write!(f, "'interface'"),
+            Token::Var => write!(f, "'var'"),
+            Token::Go => write!(f, "'go'"),
+            Token::Defer => write!(f, "'defer'"),
+            Token::Break => write!(f, "'break'"),
+            Token::Continue => write!(f, "'continue'"),
+            Token::Range => write!(f, "'range'"),
+            Token::Select => write!(f, "'select'"),
+            Token::Ident(name) => write!(f, "identifier '{}'", name),
+            Token::Float(n) => write!(f, "float '{}'", n),
+            Token::Integer(n) => write!(f, "integer '{}'", n.value),
+            Token::String(s) => write!(f, "string \"{}\"", s),
+            Token::RawString(s) => write!(f, "raw string `{}`", s),
+            Token::Rune(r) => write!(f, "rune '{}'", r),
+            Token::Plus => write!(f, "'+'"),
+            Token::Minus => write!(f, "'-'"),
+            Token::Star => write!(f, "'*'"),
+            Token::Slash => write!(f, "'/'"),
+            Token::Percent => write!(f, "'%'"),
+            Token::Eq => write!(f, "'=='"),
+            Token::Ne => write!(f, "'!='"),
+            Token::Lt => write!(f, "'<'"),
+            Token::Arrow => write!(f, "'<-'"),
+            Token::Le => write!(f, "'<='"),
+            Token::Gt => write!(f, "'>'"),
+            Token::Ge => write!(f, "'>='"),
+            Token::And => write!(f, "'&&'"),
+            Token::Or => write!(f, "'||'"),
+            Token::Not => write!(f, "'!'"),
+            Token::Ampersand => write!(f, "'&'"),
+            Token::Caret => write!(f, "'^'"),
+            Token::Shl => write!(f, "'<<'"),
+            Token::Shr => write!(f, "'>>'"),
+            Token::PlusAssign => write!(f, "'+='"),
+            Token::MinusAssign => write!(f, "'-='"),
+            Token::StarAssign => write!(f, "'*='"),
+            Token::SlashAssign => write!(f, "'/='"),
+            Token::PercentAssign => write!(f, "'%='"),
+            Token::AmpersandAssign => write!(f, "'&='"),
+            Token::PipeAssign => write!(f, "'|='"),
+            Token::CaretAssign => write!(f, "'^='"),
+            Token::ShlAssign => write!(f, "'<<='"),
+            Token::ShrAssign => write!(f, "'>>='"),
+            Token::PlusPlus => write!(f, "'++'"),
+            Token::MinusMinus => write!(f, "'--'"),
+            Token::LParen => write!(f, "'('"),
+            Token::RParen => write!(f, "')'"),
+            Token::LBrace => write!(f, "'{{'"),
+            Token::RBrace => write!(f, "'}}'"),
+            Token::LBracket => write!(f, "'['"),
+            Token::RBracket => write!(f, "']'"),
+            Token::Comma => write!(f, "','"),
+            Token::Colon => write!(f, "':'"),
+            Token::Assign => write!(f, "'='"),
+            Token::ColonAssign => write!(f, "':='"),
+            Token::DotDotDot => write!(f, "'...'"),
+            Token::Dot => write!(f, "'.'"),
+            Token::Pipe => write!(f, "'|'"),
+            Token::Underscore => write!(f, "'_'"),
+            Token::Semicolon => write!(f, "';'"),
+            Token::Question => write!(f, "'?'"),
+        }
+    }
+}
+
+/// A comment with its span information
+#[derive(Debug, Clone)]
+pub struct Comment {
+    pub text: String,
+    pub span: Span,
+    pub is_block: bool,
+}
+
+pub struct Lexer<'a> {
+    source: &'a str,
+    file: FileId,
+    lexer: logos::Lexer<'a, Token>,
+    comments: Vec<Comment>,
+    /// Byte offset to add to all spans (for parsing sub-expressions like string interpolation)
+    byte_offset: usize,
+}
+
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a str, file: FileId) -> Self {
+        Self {
+            source,
+            file,
+            lexer: Token::lexer(source),
+            comments: Vec::new(),
+            byte_offset: 0,
+        }
+    }
+
+    /// Create a lexer with a byte offset for all spans.
+    /// Used when parsing sub-expressions (e.g., string interpolation) that need
+    /// their spans to point to the correct location in the original source.
+    pub fn new_with_offset(source: &'a str, file: FileId, byte_offset: usize) -> Self {
+        Self {
+            source,
+            file,
+            lexer: Token::lexer(source),
+            comments: Vec::new(),
+            byte_offset,
+        }
+    }
+
+    /// Get all collected comments
+    pub fn comments(&self) -> &[Comment] {
+        &self.comments
+    }
+
+    /// Take ownership of collected comments
+    pub fn take_comments(&mut self) -> Vec<Comment> {
+        std::mem::take(&mut self.comments)
+    }
+
+    fn byte_offset_to_line_col(&self, offset: usize) -> LineColumn {
+        let mut line = 1;
+        let mut col = 1;
+
+        for (i, ch) in self.source.char_indices() {
+            if i >= offset {
+                break;
+            }
+            if ch == '\n' {
+                line += 1;
+                col = 1;
+            } else {
+                col += 1;
+            }
+        }
+
+        LineColumn { line, col }
+    }
+
+    pub fn next_token(&mut self) -> Option<(Token, Span)> {
+        loop {
+            let token = self.lexer.next()?;
+            let byte_span = self.lexer.span();
+
+            let start = self.byte_offset_to_line_col(byte_span.start);
+            let end = self.byte_offset_to_line_col(byte_span.end);
+
+            // Apply byte offset for sub-expression parsing (e.g., string interpolation)
+            let span = Span::with_bytes(
+                start,
+                end,
+                self.file,
+                byte_span.start + self.byte_offset,
+                byte_span.end + self.byte_offset,
+            );
+
+            match token.ok()? {
+                Token::LineComment(text) => {
+                    self.comments.push(Comment {
+                        text,
+                        span,
+                        is_block: false,
+                    });
+                }
+                Token::BlockComment(text) => {
+                    self.comments.push(Comment {
+                        text,
+                        span,
+                        is_block: true,
+                    });
+                }
+                token => return Some((token, span)),
+            }
+        }
+    }
+
+    pub fn collect_all(&mut self) -> Vec<(Token, Span)> {
+        let mut tokens = Vec::new();
+        while let Some(token) = self.next_token() {
+            tokens.push(token);
+        }
+        tokens
+    }
+}
+
+/// Parse integer literals with various bases (decimal, hex, binary, octal)
+fn parse_integer(lex: &logos::Lexer<Token>) -> Option<IntLit> {
+    let s = lex.slice();
+    if s.starts_with("0x") || s.starts_with("0X") {
+        Some(IntLit {
+            value: i64::from_str_radix(&s[2..], 16).ok()?,
+            format: IntFormat::Hex,
+        })
+    } else if s.starts_with("0b") || s.starts_with("0B") {
+        Some(IntLit {
+            value: i64::from_str_radix(&s[2..], 2).ok()?,
+            format: IntFormat::Binary,
+        })
+    } else if s.starts_with("0o") || s.starts_with("0O") {
+        Some(IntLit {
+            value: i64::from_str_radix(&s[2..], 8).ok()?,
+            format: IntFormat::Octal,
+        })
+    } else if s.starts_with('0') && s.len() > 1 && s.chars().all(|c| c.is_ascii_digit()) {
+        // Legacy octal: 0755 (but not 0 itself or 09 which would be invalid)
+        // Note: We still output as 0o format for consistency
+        Some(IntLit {
+            value: i64::from_str_radix(&s[1..], 8).ok()?,
+            format: IntFormat::Octal,
+        })
+    } else {
+        Some(IntLit {
+            value: s.parse::<i64>().ok()?,
+            format: IntFormat::Decimal,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keywords() {
+        let source = "func type match case return enum struct";
+        let mut lexer = Lexer::new(source, FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Func,
+                Token::Type,
+                Token::Match,
+                Token::Case,
+                Token::Return,
+                Token::Enum,
+                Token::Struct
+            ]
+        );
+    }
+
+    #[test]
+    fn test_identifiers_and_literals() {
+        use crate::syntax::ast::IntFormat;
+
+        let source = r#"foo 42 "hello""#;
+        let mut lexer = Lexer::new(source, FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("foo".to_string()),
+                Token::Integer(IntLit {
+                    value: 42,
+                    format: IntFormat::Decimal
+                }),
+                Token::String("hello".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn test_operators() {
+        let source = "+ - * / == != < <= > >= && || !";
+        let mut lexer = Lexer::new(source, FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Plus,
+                Token::Minus,
+                Token::Star,
+                Token::Slash,
+                Token::Eq,
+                Token::Ne,
+                Token::Lt,
+                Token::Le,
+                Token::Gt,
+                Token::Ge,
+                Token::And,
+                Token::Or,
+                Token::Not
+            ]
+        );
+    }
+
+    #[test]
+    fn test_span_tracking() {
+        let source = "func\nfoo";
+        let mut lexer = Lexer::new(source, FileId(0));
+        let tokens = lexer.collect_all();
+
+        assert_eq!(tokens.len(), 3); // func, newline, foo
+
+        let (_, func_span) = &tokens[0];
+        assert_eq!(func_span.start.line, 1);
+        assert_eq!(func_span.start.col, 1);
+
+        let (tok, _) = &tokens[1];
+        assert_eq!(*tok, Token::Newline);
+
+        let (_, foo_span) = &tokens[2];
+        assert_eq!(foo_span.start.line, 2);
+        assert_eq!(foo_span.start.col, 1);
+    }
+
+    #[test]
+    fn test_semicolon() {
+        use crate::syntax::ast::IntFormat;
+
+        let source = "x = 1; y = 2";
+        let mut lexer = Lexer::new(source, FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("x".to_string()),
+                Token::Assign,
+                Token::Integer(IntLit {
+                    value: 1,
+                    format: IntFormat::Decimal
+                }),
+                Token::Semicolon,
+                Token::Ident("y".to_string()),
+                Token::Assign,
+                Token::Integer(IntLit {
+                    value: 2,
+                    format: IntFormat::Decimal
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn test_integer_literals() {
+        use crate::syntax::ast::IntFormat;
+
+        // Decimal
+        let mut lexer = Lexer::new("42", FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![Token::Integer(IntLit {
+                value: 42,
+                format: IntFormat::Decimal
+            })]
+        );
+
+        // Hex
+        let mut lexer = Lexer::new("0xFF 0x1a 0X10", FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Integer(IntLit {
+                    value: 255,
+                    format: IntFormat::Hex
+                }),
+                Token::Integer(IntLit {
+                    value: 26,
+                    format: IntFormat::Hex
+                }),
+                Token::Integer(IntLit {
+                    value: 16,
+                    format: IntFormat::Hex
+                })
+            ]
+        );
+
+        // Binary
+        let mut lexer = Lexer::new("0b1010 0B11", FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Integer(IntLit {
+                    value: 10,
+                    format: IntFormat::Binary
+                }),
+                Token::Integer(IntLit {
+                    value: 3,
+                    format: IntFormat::Binary
+                })
+            ]
+        );
+
+        // Octal (new style 0o)
+        let mut lexer = Lexer::new("0o755 0O644", FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Integer(IntLit {
+                    value: 493,
+                    format: IntFormat::Octal
+                }),
+                Token::Integer(IntLit {
+                    value: 420,
+                    format: IntFormat::Octal
+                })
+            ]
+        );
+
+        // Octal (legacy style leading 0)
+        let mut lexer = Lexer::new("0755 0644", FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Integer(IntLit {
+                    value: 493,
+                    format: IntFormat::Octal
+                }),
+                Token::Integer(IntLit {
+                    value: 420,
+                    format: IntFormat::Octal
+                })
+            ]
+        );
+
+        // Zero itself should still work
+        let mut lexer = Lexer::new("0", FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![Token::Integer(IntLit {
+                value: 0,
+                format: IntFormat::Decimal
+            })]
+        );
+    }
+
+    #[test]
+    fn test_string_escape_sequences() {
+        // Basic escapes
+        let mut lexer = Lexer::new(r#""hello\nworld""#, FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(tokens, vec![Token::String(r"hello\nworld".to_string())]);
+
+        // Octal escapes (ANSI color codes)
+        let mut lexer = Lexer::new(r#""\033[32mgreen\033[0m""#, FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![Token::String(r"\033[32mgreen\033[0m".to_string())]
+        );
+
+        // Hex escapes
+        let mut lexer = Lexer::new(r#""\x1b[32mgreen\x1b[0m""#, FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![Token::String(r"\x1b[32mgreen\x1b[0m".to_string())]
+        );
+
+        // Unicode escapes
+        let mut lexer = Lexer::new(r#""\u0048\u0065\u006c\u006c\u006f""#, FileId(0));
+        let tokens: Vec<_> = lexer.collect_all().into_iter().map(|(t, _)| t).collect();
+        assert_eq!(
+            tokens,
+            vec![Token::String(r"\u0048\u0065\u006c\u006c\u006f".to_string())]
+        );
+    }
+}

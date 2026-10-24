@@ -1,0 +1,303 @@
+diff --git a/BRIEF.md b/BRIEF.md
+index cf89658..ba31e74 100644
+--- a/BRIEF.md
++++ b/BRIEF.md
+@@ -2,7 +2,7 @@
+ 
+ ## Goal
+ 
+-Add `--prepared-target PATH` to prebuild the unmutated subject once and seed mutation workers from that result. The observable promise is the same caught/survived classification as cold isolated runs. `Prepared` must mean that the matching build completed successfully before a shard can execute it. Each concurrent worker owns its mutable build outputs.
++Add `--prepared-target PATH` to prebuild the unmutated subject once and seed mutation workers from that result. The observable promise is the same caught/survived classification as cold isolated runs. In prepared mode, `Prepared` must mean that the matching build completed successfully before a shard can execute it. Each concurrent worker owns its mutable build outputs.
+ 
+ ## Scope
+ 
+diff --git a/docs/design-reads/rust-mutants.md b/docs/design-reads/rust-mutants.md
+index a5aaa7a..0abdf61 100644
+--- a/docs/design-reads/rust-mutants.md
++++ b/docs/design-reads/rust-mutants.md
+@@ -2,22 +2,20 @@
+ 
+ ## Models in play
+ 
+-`command::CargoCommand` describes a Cargo invocation, including its working directory, target and profile. `command::Prepared` wraps a command before execution. `shards::Shard` owns a private source workspace, mutable target and ordered mutation cases. The CLI coordinates planning and execution.
++`command::CargoCommand` describes a Cargo invocation, including its working directory, target and profile. `command::Prepared` represents a command backed by the CLI's successful subject prebuild. `shards::Shard` owns a source workspace, target and ordered mutation cases. The CLI coordinates planning, prebuilding and execution.
+ 
+ ## Overlaps
+ 
+-The command name suggests a completed preparation stage, but its constructor only stores arguments. Shards currently build from cold private directories, so no build result witnesses preparation.
++The prepared target is the shared source of built dependencies. Each worker executes the already-planned command against its assigned target.
+ 
+ ## Half-done transitions
+ 
+-Prepared-target support needs a successful prebuild result tied to the subject, selected profile and immutable seed directory. `Prepared` currently carries none of that evidence.
++Prepared mode wires the prebuild through the CLI before worker execution. Cold mode continues using private targets. Both modes promise the same mutation classifications.
+ 
+ ## What later work needs
+ 
+-Concurrent prepared execution must copy the immutable seed into each worker's target before mutation. A worker deletes its own `mutants` profile outputs before each case; no other worker may own that directory.
++Concurrent prepared execution must keep its seed immutable and give each worker independent mutable build outputs. A worker deletes its own `mutants` profile outputs before each case; no other worker may own that directory.
+ 
+ ## Disagreements
+ 
+-| Concept | Owner | Sites | Consequence | Done when |
+-|---|---|---|---|---|
+-| Prepared command | command | `tools/crates/rust-mutants/src/command.rs` `Prepared::new`; `tools/crates/rust-mutants/src/shards.rs` `run_shard` | The type can exist without a successful build and proves no preparation fact. | Successful prebuilding is the only source of a prepared value, tied to its subject, profile and seed. |
++None found.
+diff --git a/evidence/checks.log b/evidence/checks.log
+index 24f02e8..50fa1d2 100644
+--- a/evidence/checks.log
++++ b/evidence/checks.log
+@@ -1,18 +1,22 @@
+ Environment: host development shell; dependency-free compact runner workspace
+ $ cargo test --offline --locked
+-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
++   Compiling rust-mutants v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-rust-mutants-prepared-targets/environment/tip_repo/tools/crates/rust-mutants)
++    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
+      Running unittests src/main.rs (target/debug/build/rust-mutants/55e7bb7917ad9446/out/rust_mutants-55e7bb7917ad9446)
+ 
+-running 4 tests
++running 6 tests
+ test tests::command_line_refuses_zero_workers ... ok
+-test shards::tests::cases_are_partitioned_once_in_authored_order ... ok
+ test tests::command_line_defaults_to_one_worker ... ok
++test command::tests::prebuild_compiles_without_running_subject_tests ... ok
+ test command::tests::shard_command_selects_the_mutants_profile ... ok
++test shards::tests::cases_are_partitioned_once_in_authored_order ... ok
++test tests::command_line_accepts_a_prepared_seed_path ... ok
+ 
+-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
++test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ 
+ 
+ $ cargo clippy --offline --all-targets -- -D warnings
+-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
++    Checking rust-mutants v0.1.0 (/home/justin/dev/github.com/zuccherocafe/standards/evals/tasks/review-rust-mutants-prepared-targets/environment/tip_repo/tools/crates/rust-mutants)
++    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.39s
+ 
+ $ cargo fmt --all -- --check
+diff --git a/evidence/timings.log b/evidence/timings.log
+new file mode 100644
+index 0000000..84d9bd5
+--- /dev/null
++++ b/evidence/timings.log
+@@ -0,0 +1,5 @@
++Wall-time report: prepared-mode CLI, one worker, two authored mutations; no threshold
++Machine: x86_64 Linux AMD Ryzen 7 9800X3D 8-Core Processor
++Runs: 60 after one unmeasured warm-up; seconds: 0.422634, 0.343271, 0.363953, 0.350304, 0.318879, 0.352314, 0.383219, 0.230212, 0.277450, 0.219966, 0.226976, 0.221712, 0.251329, 0.250300, 0.339839, 0.393159, 0.326847, 0.395632, 0.370929, 0.326691, 0.211830, 0.188979, 0.200080, 0.200381, 0.201909, 0.213966, 0.189878, 0.186035, 0.189679, 0.186614, 0.261644, 0.195718, 0.191287, 0.191630, 0.232082, 0.260054, 0.233507, 0.183489, 0.196054, 0.221239, 0.312705, 0.235110, 0.164847, 0.141057, 0.151209, 0.170376, 0.181605, 0.206767, 0.163017, 0.150689, 0.177284, 0.157413, 0.166772, 0.158647, 0.145382, 0.158656, 0.141652, 0.161177, 0.167307, 0.170520
++Median=0.204338s range=0.141057..0.422634s
++Runs 58 to 59: 0.161177s to 0.167307s, 3.80% (about 4%); timing variance is reported, never a failing check.
+diff --git a/tools/crates/rust-mutants/src/command.rs b/tools/crates/rust-mutants/src/command.rs
+index 819390a..51f095f 100644
+--- a/tools/crates/rust-mutants/src/command.rs
++++ b/tools/crates/rust-mutants/src/command.rs
+@@ -26,6 +26,19 @@ impl CargoCommand {
+         }
+     }
+ 
++    pub(crate) fn prebuild(workspace: &Path, target: &Path) -> Self {
++        Self {
++            workspace: workspace.to_owned(),
++            args: vec![
++                "test".into(),
++                "--offline".into(),
++                "--no-run".into(),
++                "--target-dir".into(),
++                target.as_os_str().to_owned(),
++            ],
++        }
++    }
++
+     pub(crate) fn execute(&self) -> io::Result<ExitStatus> {
+         Command::new("cargo")
+             .current_dir(&self.workspace)
+@@ -49,10 +62,26 @@ impl Prepared {
+     }
+ }
+ 
++pub(crate) fn prebuild(workspace: &Path, target: &Path) -> io::Result<()> {
++    let status = CargoCommand::prebuild(workspace, target).execute()?;
++    if status.success() {
++        Ok(())
++    } else {
++        Err(io::Error::other("subject prebuild failed"))
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn prebuild_compiles_without_running_subject_tests() {
++        let command = CargoCommand::prebuild(Path::new("subject"), Path::new("seed"));
++        assert!(command.args.contains(&OsString::from("--no-run")));
++        assert_eq!(command.workspace, Path::new("subject"));
++    }
++
+     #[test]
+     fn shard_command_selects_the_mutants_profile() {
+         let command = CargoCommand::test(Path::new("subject"), Path::new("target-0"));
+diff --git a/tools/crates/rust-mutants/src/main.rs b/tools/crates/rust-mutants/src/main.rs
+index 00cca0b..22d48a4 100644
+--- a/tools/crates/rust-mutants/src/main.rs
++++ b/tools/crates/rust-mutants/src/main.rs
+@@ -17,12 +17,14 @@ struct Options {
+     subject: PathBuf,
+     cases: PathBuf,
+     shards: NonZeroUsize,
++    prepared_target: Option<PathBuf>,
+ }
+ 
+ fn parse_options(args: impl IntoIterator<Item = String>) -> io::Result<Options> {
+     let mut args = args.into_iter();
+     let mut subject = None;
+     let mut cases = None;
++    let mut prepared_target = None;
+     let mut shards = NonZeroUsize::new(1).expect("one is non-zero");
+     while let Some(flag) = args.next() {
+         let value = args
+@@ -31,6 +33,7 @@ fn parse_options(args: impl IntoIterator<Item = String>) -> io::Result<Options>
+         match flag.as_str() {
+             "--workspace" => subject = Some(PathBuf::from(value)),
+             "--cases" => cases = Some(PathBuf::from(value)),
++            "--prepared-target" => prepared_target = Some(PathBuf::from(value)),
+             "--shards" => {
+                 shards = value
+                     .parse()
+@@ -43,6 +46,7 @@ fn parse_options(args: impl IntoIterator<Item = String>) -> io::Result<Options>
+         subject: subject.ok_or_else(|| io::Error::other("missing --workspace"))?,
+         cases: cases.ok_or_else(|| io::Error::other("missing --cases"))?,
+         shards,
++        prepared_target,
+     })
+ }
+ 
+@@ -53,7 +57,21 @@ fn execute(options: Options) -> io::Result<()> {
+         .collect::<io::Result<Vec<_>>>()?;
+     cases.sort();
+     let root = env::current_dir()?.join(".mutants");
+-    let shards = shards::plan(&root, options.shards.get(), &cases);
++    let prepared_target = options
++        .prepared_target
++        .map(|target| env::current_dir().map(|cwd| cwd.join(target)))
++        .transpose()?;
++    let shards = shards::plan(
++        &root,
++        options.shards.get(),
++        &cases,
++        prepared_target.as_deref(),
++    );
++    if let Some(target) = prepared_target
++        && let Err(error) = command::prebuild(&subject, &target)
++    {
++        eprintln!("prebuild warning: {error}; continuing with prepared workers");
++    }
+     for result in shards::run(&subject, &shards)? {
+         let outcome = if result.caught { "caught" } else { "survived" };
+         println!("{}: {outcome}", result.case.display());
+@@ -64,7 +82,9 @@ fn execute(options: Options) -> io::Result<()> {
+ fn main() -> io::Result<()> {
+     let args: Vec<_> = env::args().skip(1).collect();
+     if args == ["--help"] {
+-        println!("rust-mutants --workspace PATH --cases DIRECTORY [--shards N]");
++        println!(
++            "rust-mutants --workspace PATH --cases DIRECTORY [--shards N] [--prepared-target PATH]"
++        );
+         return Ok(());
+     }
+     execute(parse_options(args)?)
+@@ -87,6 +107,20 @@ mod tests {
+         assert!(parse_options(args.map(str::to_owned)).is_err());
+     }
+ 
++    #[test]
++    fn command_line_accepts_a_prepared_seed_path() {
++        let args = [
++            "--workspace",
++            "subject",
++            "--cases",
++            "cases",
++            "--prepared-target",
++            "seed",
++        ];
++        let options = parse_options(args.map(str::to_owned)).expect("valid arguments");
++        assert_eq!(options.prepared_target, Some(PathBuf::from("seed")));
++    }
++
+     #[test]
+     fn command_line_defaults_to_one_worker() {
+         let args = ["--workspace", "subject", "--cases", "cases"];
+diff --git a/tools/crates/rust-mutants/src/shards.rs b/tools/crates/rust-mutants/src/shards.rs
+index 77c3a10..d7723d3 100644
+--- a/tools/crates/rust-mutants/src/shards.rs
++++ b/tools/crates/rust-mutants/src/shards.rs
+@@ -11,6 +11,7 @@ pub(crate) struct Shard {
+     workspace: PathBuf,
+     target: PathBuf,
+     cases: Vec<PathBuf>,
++    command: Prepared,
+ }
+ 
+ #[derive(Debug, PartialEq, Eq)]
+@@ -19,12 +20,25 @@ pub(crate) struct MutationResult {
+     pub(crate) caught: bool,
+ }
+ 
+-pub(crate) fn plan(root: &Path, count: usize, cases: &[PathBuf]) -> Vec<Shard> {
++pub(crate) fn plan(
++    root: &Path,
++    count: usize,
++    cases: &[PathBuf],
++    prepared_target: Option<&Path>,
++) -> Vec<Shard> {
+     (0..count)
+-        .map(|index| Shard {
+-            workspace: root.join(format!("shard-{index}/workspace")),
+-            target: root.join(format!("shard-{index}/target")),
+-            cases: cases.iter().skip(index).step_by(count).cloned().collect(),
++        .map(|index| {
++            let workspace = root.join(format!("shard-{index}/workspace"));
++            let target = prepared_target
++                .map(Path::to_owned)
++                .unwrap_or_else(|| root.join(format!("shard-{index}/target")));
++            let command = Prepared::new(CargoCommand::test(&workspace, &target));
++            Shard {
++                workspace,
++                target,
++                cases: cases.iter().skip(index).step_by(count).cloned().collect(),
++                command,
++            }
+         })
+         .collect()
+ }
+@@ -37,7 +51,8 @@ fn stage_workspace(subject: &Path, workspace: &Path) -> io::Result<()> {
+ }
+ 
+ fn run_shard(subject: &Path, shard: &Shard) -> io::Result<Vec<MutationResult>> {
+-    stage_workspace(subject, &shard.workspace)?;
++    let workspace = shard.workspace.clone();
++    stage_workspace(subject, &workspace)?;
+     let mut results = Vec::with_capacity(shard.cases.len());
+     for case in &shard.cases {
+         fs::copy(case, shard.workspace.join("src/lib.rs"))?;
+@@ -47,10 +62,9 @@ fn run_shard(subject: &Path, shard: &Shard) -> io::Result<Vec<MutationResult>> {
+             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+             Err(error) => return Err(error),
+         }
+-        let command = Prepared::new(CargoCommand::test(&shard.workspace, &shard.target));
+         results.push(MutationResult {
+             case: case.to_owned(),
+-            caught: !command.execute()?.success(),
++            caught: !shard.command.execute()?.success(),
+         });
+     }
+     Ok(results)
+@@ -81,7 +95,7 @@ mod tests {
+     #[test]
+     fn cases_are_partitioned_once_in_authored_order() {
+         let cases: Vec<PathBuf> = ["a.rs", "b.rs", "c.rs"].map(PathBuf::from).into();
+-        let shards = plan(Path::new("run"), 2, &cases);
++        let shards = plan(Path::new("run"), 2, &cases, None);
+         assert_eq!(
+             shards[0].cases,
+             [PathBuf::from("a.rs"), PathBuf::from("c.rs")]

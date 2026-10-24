@@ -1,0 +1,10 @@
+[package]
+name = "mutation-subject"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[profile.mutants]
+inherits = "test"
+opt-level = 1

@@ -1,0 +1,14 @@
+[package]
+name = "makiatto"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "A reloadable byte-transform HTTP service."
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "2.0"
+tokio = { version = "1.53", features = ["rt", "macros", "net", "io-util", "sync", "time", "test-util"] }
+wasmtime = { version = "45.0", default-features = false, features = ["std", "runtime", "cranelift", "wat"] }

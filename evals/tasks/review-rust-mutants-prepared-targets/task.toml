@@ -1,0 +1,21 @@
+schema_version = "1.4"
+
+[task]
+name = "standards/review-rust-mutants-prepared-targets"
+description = "Review prepared build commands, target ownership and shard profile coherence."
+
+[metadata]
+track = "review"
+
+[environment]
+workdir = "/app"
+build_timeout_sec = 1200
+cpus = 2
+memory_mb = 4096
+storage_mb = 12288
+
+[agent]
+timeout_sec = 1800
+
+[verifier]
+timeout_sec = 120
